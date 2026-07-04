@@ -1,0 +1,1528 @@
+{
+  "fuente": "Base unificada Viv_Hog_Pers.sav",
+  "n_filas": 3285877,
+  "n_variables": 145,
+  "variables": [
+    {
+      "nombre": "ID_VIVIENDA",
+      "etiqueta": "",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "DPTO",
+      "etiqueta": "Departamento",
+      "tipo": "string",
+      "value_labels": {
+        "1": "MONTEVIDEO",
+        "2": "ARTIGAS",
+        "3": "CANELONES",
+        "4": "CERRO LARGO",
+        "5": "COLONIA",
+        "6": "DURAZNO",
+        "7": "FLORES",
+        "8": "FLORIDA",
+        "9": "LAVALLEJA",
+        "10": "MALDONADO",
+        "11": "PAYSANDÚ",
+        "12": "RÍO NEGRO",
+        "13": "RIVERA",
+        "14": "ROCHA",
+        "15": "SALTO",
+        "16": "SAN JOSE",
+        "17": "SORIANO",
+        "18": "TACUAREMBÓ",
+        "19": "TREINTA Y TRES"
+      }
+    },
+    {
+      "nombre": "LOC",
+      "etiqueta": "Localidad",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "SECC",
+      "etiqueta": "Sección censal",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "SEGM",
+      "etiqueta": "Segmento censal",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "VIVID",
+      "etiqueta": "Número de vivienda",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "CCZ",
+      "etiqueta": "",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "BARRIO85",
+      "etiqueta": "Area aproximada a barrio (Montevideo)",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "sp_2010",
+      "etiqueta": "Seccional Policial",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "TIPO_VIVIENDA",
+      "etiqueta": "Tipo de vivienda resumido",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Particular",
+        "2": "Colectiva"
+      }
+    },
+    {
+      "nombre": "PLANILLA",
+      "etiqueta": "Vivienda particular relevada en planilla",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No",
+        "1": "Sí"
+      }
+    },
+    {
+      "nombre": "MA",
+      "etiqueta": "Vivienda particular con moradores ausentes",
+      "tipo": "double",
+      "value_labels": {
+        "0": "Población censada",
+        "1": "Población imputada en una vivienda particular con moradores"
+      }
+    },
+    {
+      "nombre": "VIVVO01",
+      "etiqueta": "Tipo de vivienda",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Casa",
+        "2": "Apartamento en edificio en altura con ascensor",
+        "3": "Apartamento en edificio en altura sin ascensor",
+        "4": "Apartamento en edificio de una planta",
+        "5": "Apartamento o cuarto en local o vivienda colectiva",
+        "6": "Local no construido para vivienda",
+        "7": "Vivienda móvil (carpa, casa rodante, etc.)",
+        "8": "Otra particular",
+        "9": "Hotel, pensión u otra casa de hospedaje",
+        "10": "Hospital, sanatorio (con internación)",
+        "11": "Residencial de ancianos",
+        "12": "Residencial de estudiantes",
+        "13": "Casa de peones",
+        "14": "Internado religioso",
+        "15": "Establecimiento de reclusión",
+        "16": "Hogar de guarda o similar",
+        "17": "Cuartel militar o policial",
+        "18": "Otra colectiva",
+        "19": "Refugios",
+        "20": "Ignorado Particular"
+      }
+    },
+    {
+      "nombre": "VIVVO03",
+      "etiqueta": "Condición de ocupación de la vivienda",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Ocupada con residentes presentes",
+        "2": "Ocupada con residentes ausentes",
+        "3": "Desocupada de uso temporal",
+        "4": "Para alquilar o vender",
+        "5": "En construcción o reparación",
+        "6": "Ruinosa, destruida o inhabitable",
+        "7": "Desocupada vacante",
+        "8": "Sin dato"
+      }
+    },
+    {
+      "nombre": "VIVVO04",
+      "etiqueta": "Hogar particular en vivienda colectiva",
+      "tipo": "double",
+      "value_labels": {
+        "0": "NC",
+        "1": "Sí",
+        "2": "No"
+      }
+    },
+    {
+      "nombre": "VIVDV01",
+      "etiqueta": "Material paredes exteriores",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Ladrillos, ticholos, piedras o bloques con terminación",
+        "2": "Ladrillos, ticholos, piedras o bloques sin terminación",
+        "3": "Mat. livianos (madera o chapa con revestimiento)",
+        "4": "Mat. livianos (madera o chapa sin revestimiento)",
+        "5": "Barro (terrón, adobe o fajina)",
+        "6": "Materiales de desecho",
+        "7": "Otro",
+        "8": "No Relevado"
+      }
+    },
+    {
+      "nombre": "VIVDV02",
+      "etiqueta": "Material techos",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Planchada de hormigón o bovedilla con o sin tejas",
+        "2": "Liviano con cielo raso",
+        "3": "Liviano sin cielo raso",
+        "4": "Quincha",
+        "5": "Materiales de desecho",
+        "6": "Otro",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "VIVDV03",
+      "etiqueta": "Material pisos",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Cerámica, baldosas, laja, madera, moqueta, linóleo, etc.",
+        "2": "Arena y portland",
+        "3": "Sólo contrapiso sin piso",
+        "4": "Tierra sin piso ni contrapiso",
+        "5": "Otro",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "VIVDV05",
+      "etiqueta": "Origen del agua",
+      "tipo": "double",
+      "value_labels": {
+        "1": "OSE o red general",
+        "2": "Pozo surgente protegido",
+        "3": "Pozo surgente no protegido",
+        "4": "Aljibe",
+        "5": "Cachimba",
+        "6": "Arroyo, río",
+        "7": "Otro",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "VIVDV06",
+      "etiqueta": "Cómo llega el agua a la vivienda",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Por cañería dentro de la vivienda",
+        "2": "Por cañería fuera a menos de 100 m de distancia",
+        "3": "Por cañería fuera a más de 100 m de distancia",
+        "4": "Por otros medios",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "VIVDV07",
+      "etiqueta": "Principal medio de alumbrado eléctrico",
+      "tipo": "double",
+      "value_labels": {
+        "1": "UTE o red general",
+        "2": "Cargador eólico de batería",
+        "3": "Cargador solar de batería",
+        "4": "Grupo electrógeno propio",
+        "5": "Otro eléctrico",
+        "6": "No tiene",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "VIVHV01",
+      "etiqueta": "Identificación cantidad de hogares",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí (hogar único)",
+        "2": "No (más de un hogar)"
+      }
+    },
+    {
+      "nombre": "VIVHV01_1",
+      "etiqueta": "Cantidad de hogares",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "CATEVIV",
+      "etiqueta": "Categoría vivienda por materiales",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Materiales pesados en paredes y techos y piso resistente",
+        "2": "Materiales pesados en paredes, techo liviano y piso resisten",
+        "3": "Materiales pesados en paredes y techos y piso no resistente",
+        "4": "Materiales pesados en paredes, techos livianos y piso no res",
+        "5": "Materiales livianos en paredes y techos y piso resistente",
+        "6": "Materiales livianos en paredes y techos y piso no resistente",
+        "7": "Paredes de barro o adobe, techo liviano y piso resistente",
+        "8": "Paredes de barro o adobe, techo liviano y piso no resistente",
+        "9": "Materiales de desecho en paredes o techos",
+        "10": "Otras combinaciones de materiales",
+        "11": "Sin Dato"
+      }
+    },
+    {
+      "nombre": "HOGID",
+      "etiqueta": "Número de hogar",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "HOGTE01",
+      "etiqueta": "Tenencia de la vivienda",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Propietario",
+        "2": "Integrante de una cooperativa de vivienda",
+        "3": "Inquilino o arrendatario",
+        "4": "Usufructuario u ocupante",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGTE02",
+      "etiqueta": "Propietarios",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Vivienda y terreno y la está pagando",
+        "2": "Vivienda y terreno y ya la pagó",
+        "3": "Solo vivienda y la está pagando",
+        "4": "Solo vivienda y ya la pagó",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGTE03",
+      "etiqueta": "Usufructuarios",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Relación de dependencia (trabajo)",
+        "2": "Gratuito, otorgada por el BPS",
+        "3": "Gratuito (se la prestaron)",
+        "4": "Sin permiso del propietario",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGHD00",
+      "etiqueta": "Habitaciones totales",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "HOGHD01",
+      "etiqueta": "Habitaciones para dormir",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "HOGSH01",
+      "etiqueta": "Baño en la vivienda",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí, con cisterna",
+        "2": "Sí, sin cisterna",
+        "3": "No",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGSH02",
+      "etiqueta": "El baño es:",
+      "tipo": "double",
+      "value_labels": {
+        "1": "De uso exclusivo del hogar",
+        "2": "Compartido con otros hogares",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGSH03",
+      "etiqueta": "Evacuación sanitaria",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Red general",
+        "2": "Fosa séptica, pozo negro",
+        "3": "Entubado hacia el arroyo",
+        "4": "Otro (superficie, hueco en el suelo)",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGSC01",
+      "etiqueta": "Servicio de cocina",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí, privado de este hogar",
+        "2": "Sí, compartido con otros hogares",
+        "3": "No",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGSC02",
+      "etiqueta": "Principal fuente energía para cocinar",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Electricidad",
+        "2": "Gas por cañería",
+        "3": "Supergás",
+        "4": "Queroseno",
+        "5": "Leña o carbón",
+        "6": "Otra",
+        "7": "Ninguna, no cocina",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGCA01",
+      "etiqueta": "Principal fuente energía para calefaccionar",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Electricidad",
+        "2": "Leña",
+        "3": "Gas por cañería",
+        "4": "Supergás",
+        "5": "Queroseno",
+        "6": "Gas oil",
+        "7": "Fuel-oil",
+        "8": "Otra",
+        "9": "Ninguna",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGCE01",
+      "etiqueta": "Calefón, termofón o caldereta",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGCE02",
+      "etiqueta": "Calentador instantáneo",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGCE03",
+      "etiqueta": "Refrigerador o freezer",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGCE04",
+      "etiqueta": "Secadora de ropa",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGCE05",
+      "etiqueta": "Radio",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGCE06",
+      "etiqueta": "Cantidad TV color",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "HOGCE07",
+      "etiqueta": "Teléfono fijo",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGCE08",
+      "etiqueta": "Teléfono celular",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGCE09",
+      "etiqueta": "Cantidad XO Plan Ceibal",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "HOGCE10",
+      "etiqueta": "Cantidad PC o laptops",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "HOGCE11",
+      "etiqueta": "Acceso a Internet",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "88": "Sin dato"
+      }
+    },
+    {
+      "nombre": "HOGCE12",
+      "etiqueta": "Cantidad ciclomotores o motocicletas",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "HOGCE13",
+      "etiqueta": "Cantidad automóviles o camionetas",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "HOGPR01",
+      "etiqueta": "Cantidad personas en el hogar",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "HOGPR02",
+      "etiqueta": "Cantidad hombres en el hogar",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "HOGPR03",
+      "etiqueta": "Cantidad mujeres en el hogar",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERID",
+      "etiqueta": "Número de persona",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERPH02",
+      "etiqueta": "Sexo",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Hombre",
+        "2": "Mujer"
+      }
+    },
+    {
+      "nombre": "PERNA01",
+      "etiqueta": "Edad",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERNA02",
+      "etiqueta": "Mes y año de nacimiento",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERPA01",
+      "etiqueta": "Relación de parentesco",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Jefe/a o persona de referencia",
+        "2": "Esposo/a o compañero/a",
+        "3": "Hijo/a de ambos",
+        "4": "Hijo/a sólo del jefe/a",
+        "5": "Hijo/a del esposo/a o compañero/a",
+        "6": "Yerno/nuera",
+        "7": "Padre/madre",
+        "8": "Suegro/a",
+        "9": "Hermano/a",
+        "10": "Cuñado/a",
+        "11": "Nieto/a",
+        "12": "Otro pariente",
+        "13": "Otro no pariente",
+        "14": "Servicio doméstico o familiar del mismo",
+        "15": "Miembro de hogar colectivo",
+        "88": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERPA02",
+      "etiqueta": "Madre del nieto/a u otro pariente/no pariente (< 18años) integra el hogar",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERPA03",
+      "etiqueta": "Padre del nieto/a u otro pariente/no pariente (< 18años) integra el hogar",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERER01_1",
+      "etiqueta": "Ascendencia afro o negra",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERER01_2",
+      "etiqueta": "Ascendencia asiática o amarilla",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERER01_3",
+      "etiqueta": "Ascendencia blanca",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERER01_4",
+      "etiqueta": "Ascendencia indígena",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERER01_5",
+      "etiqueta": "Otra ascendencia",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERER02",
+      "etiqueta": "Ascendencia principal",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Afro o Negra",
+        "2": "Asiática o Amarilla",
+        "3": "Blanca",
+        "4": "Indígena",
+        "5": "Otra",
+        "6": "Ninguna (no hay una principal)",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PEREC01",
+      "etiqueta": "Cónyuge o pareja en el hogar",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PEREC02",
+      "etiqueta": "(si perec=1) Número de persona",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PEREC03",
+      "etiqueta": "Tipo de unión",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Casamiento civil",
+        "2": "Unión libre con pareja de otro sexo",
+        "3": "Unión libre con pareja del mismo sexo",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PEREC04",
+      "etiqueta": "Estado actual",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Separado/a de unión libre",
+        "2": "Divorciado/a",
+        "3": "Casado/a (incluye separado y aun no se divorció)",
+        "4": "Viudo/a de casamiento",
+        "5": "Viudo/a de unión libre",
+        "6": "Soltero/a (nunca se casó ni vivió en unión libre)",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERMI01",
+      "etiqueta": "Lugar de nacimiento",
+      "tipo": "double",
+      "value_labels": {
+        "1": "En esta localidad o paraje",
+        "2": "En otra localidad o paraje de este departamento",
+        "3": "En otro departamento",
+        "4": "En otro país",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERMI01_1",
+      "etiqueta": "Código de localidad asociada a permi01 = 2",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERMI01_2",
+      "etiqueta": "Código de departamento asociado a permi01 = 3",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERMI01_3",
+      "etiqueta": "Código de localidad asociado a permi01 = 3",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERMI01_4",
+      "etiqueta": "Código de país asociado a permi01 = 4",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERMI02",
+      "etiqueta": "Año de llegada a uruguay",
+      "tipo": "double",
+      "value_labels": {
+        "8888": "No relevado",
+        "9999": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERMI02_1",
+      "etiqueta": "Período de llegada a uruguay",
+      "tipo": "double",
+      "value_labels": {
+        "1": "2010-2011",
+        "2": "2005-2009",
+        "3": "2000-2004",
+        "4": "1995-1999",
+        "5": "1990-1994",
+        "6": "1985-1989",
+        "7": "1980-1984",
+        "8": "1975-1979",
+        "9": "1970-1974",
+        "10": "Antes de 1970",
+        "88": "No relevado",
+        "99": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERMI05",
+      "etiqueta": "Tiempo de residencia sin interrupciones en esta ciudad o localidad",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Siempre residió aquí",
+        "2": "No siempre residió aquí",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERMI05_1",
+      "etiqueta": "Cantidad de años que hace que reside aquí",
+      "tipo": "double",
+      "value_labels": {
+        "88": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERMI06",
+      "etiqueta": "Lugar de residencia anterior",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "En esta localidad o paraje",
+        "2": "En otra localidad o paraje de este departamento",
+        "3": "En otro departamento",
+        "4": "En otro país",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERMI06_1",
+      "etiqueta": "Código de localidad asociada a permi06 = 2",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERMI06_2",
+      "etiqueta": "Código de departamento asociado a permi06 = 3",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERMI06_3",
+      "etiqueta": "Código de localidad asociado a permi06 = 3",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERMI06_4",
+      "etiqueta": "Código de país asociado a permi06 = 4",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERMI07",
+      "etiqueta": "Lugar de residencia cinco años antes",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "En esta localidad o paraje",
+        "2": "En otra localidad o paraje de este departamento",
+        "3": "En otro departamento",
+        "4": "En otro país",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERMI07_1",
+      "etiqueta": "Código de localidad asociada a permi07 = 2",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERMI07_2",
+      "etiqueta": "Código de departamento asociado a permi07 = 3",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERMI07_3",
+      "etiqueta": "Código de localidad asociado a permi07 = 3",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERMI07_4",
+      "etiqueta": "Código de país asociado a permi07 = 4",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERED00",
+      "etiqueta": "Asistencia actual a centro de educación inicial o preescolar",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí, asiste a un centro público",
+        "2": "Sí, asiste a un CAIF",
+        "3": "Sí, asiste a un centro privado",
+        "4": "No asiste",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERED01",
+      "etiqueta": "Asistencia actual a establecimiento de enseñanza",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí, a un establecimiento público",
+        "2": "Sí, a un establecimiento privado",
+        "3": "No asiste pero asistió",
+        "4": "Nunca asistió",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERED02",
+      "etiqueta": "Ubicacion del centro educativo",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "En esta localidad o paraje",
+        "2": "En otra localidad de este departamento",
+        "3": "En otro departamento",
+        "4": "En otro país",
+        "5": "No corresponde (educación a distancia)",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERED02_1",
+      "etiqueta": "Código de localidad asociada a pered02 = 2",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERED02_2",
+      "etiqueta": "Código de departamento asociado a pered02 = 3",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERED02_3",
+      "etiqueta": "Código de localidad asociado a pered02 = 3",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERED02_4",
+      "etiqueta": "Código de país asociado a pered02 = 4",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERED03_r",
+      "etiqueta": "Nivel que cursa actualmente",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Preescolar",
+        "2": "Primaria común",
+        "3": "Primaria especial",
+        "4": "Ciclo Básico Liceo (1ero a 3ro)",
+        "5": "Ciclo Básico UTU (1ero a 3ro)",
+        "6": "Bachillerato Secundario (4to a 6to)",
+        "7": "Bachillerato UTU (4to a 6to)",
+        "8": "Enseñanza Técnica/Formación Profesional UTU",
+        "9": "Magisterio o Profesorado",
+        "10": "Terciario no universitario",
+        "11": "Universidad o Instituto Universitario (Carrera de grado o Li",
+        "12": "Posgrado (Diploma/Maestría/Doctorado)",
+        "88": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERED03_1_r",
+      "etiqueta": "Nivel más alto que cursó",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Preescolar",
+        "2": "Primaria común",
+        "3": "Primaria especial",
+        "4": "Ciclo Básico Liceo (1ero a 3ro)",
+        "5": "Ciclo Básico UTU (1ero a 3ro)",
+        "6": "Bachillerato Secundario (4to a 6to)",
+        "7": "Bachillerato UTU (4to a 6to)",
+        "8": "Enseñanza Técnica/Formación Profesional UTU",
+        "9": "Magisterio o Profesorado",
+        "10": "Terciario no universitario",
+        "11": "Universidad o Instituto Universitario (Carrera de grado o Li",
+        "12": "Posgrado (Diploma/Maestría/Doctorado)",
+        "88": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERED03_2_r",
+      "etiqueta": "Nivel más alto alcanzado (Planillas)",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Preescolar",
+        "2": "Primaria común",
+        "3": "Primaria especial",
+        "4": "Ciclo Básico",
+        "5": "Bachillerato",
+        "6": "Educacion Tecnica",
+        "11": "Terciario sin especificar",
+        "13": "Ignorado",
+        "88": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERED04_r",
+      "etiqueta": "Finalizó ese nivel",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERED05_r",
+      "etiqueta": "Años aprobados en ese nivel",
+      "tipo": "double",
+      "value_labels": {
+        "88": "No corresponde"
+      }
+    },
+    {
+      "nombre": "PERED06_r",
+      "etiqueta": "Para hacer ese curso se exige/exigía",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Maestría completa",
+        "2": "Grado universitario",
+        "3": "Magisterio o profesorado",
+        "4": "Bachillerato",
+        "5": "Cuarto Secundaria",
+        "6": "Ciclo Básico",
+        "7": "Primaria",
+        "8": "Ninguna"
+      }
+    },
+    {
+      "nombre": "CODIGO_CARRERA",
+      "etiqueta": "Código área, orientación, curso o carrera",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERED08",
+      "etiqueta": "Sabe leer y escribir",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "Niveledu_r",
+      "etiqueta": "Máximo nivel educativo alcanzado",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Preescolar",
+        "2": "Primaria común",
+        "3": "Primaria especial",
+        "4": "Ciclo Básico",
+        "5": "Bachillerato",
+        "6": "Enseñanza Técnica/Formación Profesional UTU",
+        "7": "Magisterio o Profesorado",
+        "8": "Terciario no universitario",
+        "9": "Universidad o similar",
+        "10": "Posgrado (Diploma/Maestría/Doctorado)",
+        "11": "Terciario sin especificar",
+        "12": "Nunca asistió",
+        "13": "Ignorado",
+        "88": "No relevado"
+      }
+    },
+    {
+      "nombre": "Años_estudio",
+      "etiqueta": "Cantidad de años aprobados",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERAL01",
+      "etiqueta": "Trabajó por lo menos 1 hora",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERAL02",
+      "etiqueta": "Trabajó en casa o ayudó en negocio, cuidado de animales, cultivos o huerta",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERAL03",
+      "etiqueta": "Trabajo al que volverá",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERAL04",
+      "etiqueta": "Las últimas cuatro semanas buscó trabajo",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERAL05",
+      "etiqueta": "Ha trabajado antes",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERAL09",
+      "etiqueta": "Lugar dónde realiza el trabajo",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "En esta localidad, en esta vivienda",
+        "2": "Esta localidad, fuera de esta vivienda",
+        "3": "En otra localidad o paraje de este departamento",
+        "4": "En otro departamento",
+        "5": "En otro país",
+        "6": "Trabajo itinerante (en más de una localidad)",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERAL09_1",
+      "etiqueta": "Código de localidad asociada a peral09 = 3",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERAL09_2",
+      "etiqueta": "Código de departamento asociado a peral09 = 4",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERAL09_3",
+      "etiqueta": "Código de localidad asociado a peral09 = 4",
+      "tipo": "string",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERAL09_4",
+      "etiqueta": "Código de país asociado a peral09 = 4",
+      "tipo": "double",
+      "value_labels": {}
+    },
+    {
+      "nombre": "PERAL10",
+      "etiqueta": "Actividad laboral en la vivienda, ¿espacio exclusivo?",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERAL11",
+      "etiqueta": "Jubilado o pensionista",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERAL12",
+      "etiqueta": "Quehaceres del hogar",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "Sí",
+        "2": "No",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERFM01",
+      "etiqueta": "Hijos nacidos vivos",
+      "tipo": "double",
+      "value_labels": {
+        "77": "No corresponde",
+        "88": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERFM01_1",
+      "etiqueta": "Hijos nacidos vivos ignorados",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sì",
+        "2": "No",
+        "7": "No corresponde",
+        "8": "No relevado",
+        "77": "No corresponde",
+        "88": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERFM02",
+      "etiqueta": "Hijos vivos actualmente",
+      "tipo": "double",
+      "value_labels": {
+        "77": "No corresponde",
+        "88": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERFM02_1",
+      "etiqueta": "Hijos vivos actualmente ignorados",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Sì",
+        "2": "No",
+        "7": "No corresponde",
+        "8": "No relevado",
+        "77": "No corresponde",
+        "88": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERFM04_1",
+      "etiqueta": "Mes y año de nacimiento del último hijo/a",
+      "tipo": "double",
+      "value_labels": {
+        "7777": "No corresponde",
+        "8888": "No relevado",
+        "9999": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERFM04_2",
+      "etiqueta": "Mes de nacimiento de último hijo/a",
+      "tipo": "double",
+      "value_labels": {
+        "77": "No corresponde",
+        "88": "No relevado",
+        "99": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERFM05",
+      "etiqueta": "Año de nacimiento del primer hijo/a",
+      "tipo": "double",
+      "value_labels": {
+        "7777": "No corresponde",
+        "8888": "No relevado",
+        "9999": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERDI01",
+      "etiqueta": "Dificultad permanente para ver",
+      "tipo": "double",
+      "value_labels": {
+        "1": "No tiene dificultad",
+        "2": "Sí, alguna dificultad",
+        "3": "Sí, mucha dificultad",
+        "4": "Sí, no puede hacerlo",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERDI02",
+      "etiqueta": "Dificultad permanente para oír",
+      "tipo": "double",
+      "value_labels": {
+        "1": "No tiene dificultad",
+        "2": "Sí, alguna dificultad",
+        "3": "Sí, mucha dificultad",
+        "4": "Sí, no puede hacerlo",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERDI04",
+      "etiqueta": "Dificultad permanente para caminar o subir escalones",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "No tiene dificultad",
+        "2": "Sí, alguna dificultad",
+        "3": "Sí, mucha dificultad",
+        "4": "Sí, no puede hacerlo",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERDI05",
+      "etiqueta": "Dificultad permanente para entender y/o aprender",
+      "tipo": "double",
+      "value_labels": {
+        "0": "No corresponde",
+        "1": "No tiene dificultad",
+        "2": "Sí, alguna dificultad",
+        "3": "Sí, mucha dificultad",
+        "4": "Sí, no puede hacerlo",
+        "8": "No relevado",
+        "9": "Ignorado"
+      }
+    },
+    {
+      "nombre": "pobpcoac",
+      "etiqueta": "Condición de actividad económica",
+      "tipo": "double",
+      "value_labels": {
+        "1": "Menor de 12 años",
+        "2": "Ocupados",
+        "3": "Desocupados buscan trabajo por primera vez",
+        "4": "Desocupados propiamente dichos",
+        "5": "Inactivos, jubilados o pensionistas",
+        "6": "Inactivos, otra causas",
+        "8": "No relevado"
+      }
+    },
+    {
+      "nombre": "PERFM01_r",
+      "etiqueta": "Hijos nacidos vivos",
+      "tipo": "double",
+      "value_labels": {
+        "77": "No corresponde",
+        "88": "No relevado",
+        "99": "Ignorado"
+      }
+    },
+    {
+      "nombre": "PERFM02_r",
+      "etiqueta": "Hijos vivos actualmente",
+      "tipo": "double",
+      "value_labels": {
+        "77": "No corresponde",
+        "88": "No relevado",
+        "99": "Ignorado"
+      }
+    },
+    {
+      "nombre": "NBI_MAT",
+      "etiqueta": "NBI MATERIALIDAD",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_HAC",
+      "etiqueta": "NBI ESPACIO HABITABLE",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_COC",
+      "etiqueta": "NBI ESPACIO APROPIADO PARA COCINAR",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_VIV",
+      "etiqueta": "NBI VIVIENDA DECOROSA",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_AGUA",
+      "etiqueta": "NBI AGUA",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_SANEA",
+      "etiqueta": "NBI SANEAMIENTO",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_ELECT",
+      "etiqueta": "NBI ELECTRICIDAD",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_CALEF",
+      "etiqueta": "NBI CALEFACCIÓN DE AMBIENTES",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_REFRIG",
+      "etiqueta": "NBI REFRIGERACIÓN DE ALIMENTOS",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_CALENTADOR",
+      "etiqueta": "NBI AGUA CALIENTE PARA BAÑO",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_CONFORT",
+      "etiqueta": "NBI CONFORT",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_EDUCACIÓN",
+      "etiqueta": "NBI EDUCACIÓN",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    },
+    {
+      "nombre": "NBI_CANTIDAD",
+      "etiqueta": "CANTIDAD DE NBI",
+      "tipo": "double",
+      "value_labels": {
+        "0": "SIN NBI",
+        "1": "CON 1 NBI",
+        "2": "CON 2 NBI",
+        "3": "CON 3 O MÁS NBI",
+        "8": "NO RELEVADO",
+        "9": "NO CORRESPONDE (VIV COLECTIVAS)",
+        "5555": "SECRETO ESTADISTICO"
+      }
+    }
+  ]
+}

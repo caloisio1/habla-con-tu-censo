@@ -22,8 +22,11 @@ Rules enforced here:
 import re
 
 # Whitelist: the ONLY table/columns the LLM is allowed to touch.
+# hogar_key NO va acá: solo se permite dentro de COUNT(DISTINCT hogar_key)
+# (ver regla dedicada en validar()), nunca como columna libre.
 TABLAS_PERMITIDAS = {
-    "personas": {"departamento", "sexo", "edad"},
+    "personas": {"departamento", "sexo", "edad",
+                 "asc_afro", "asc_principal", "nbi"},
 }
 
 # Results with fewer persons than this are suppressed (disclosure control).
@@ -79,6 +82,19 @@ def validar(sql: str) -> str:
         if t.lower() not in TABLAS_PERMITIDAS:
             raise SQLNoSeguro(f"Tabla no permitida: {t}")
 
+    # 5b. hogar_key es un identificador de hogar (potencialmente reidentificante):
+    # solo se admite dentro de COUNT(DISTINCT hogar_key), nunca suelto en SELECT,
+    # GROUP BY, WHERE u ORDER BY.
+    apariciones = len(re.findall(r"\bhogar_key\b", limpio, re.IGNORECASE))
+    if apariciones:
+        permitidas = len(re.findall(
+            r"count\s*\(\s*distinct\s+hogar_key\s*\)", limpio, re.IGNORECASE
+        ))
+        if apariciones != permitidas:
+            raise SQLNoSeguro(
+                "hogar_key solo puede usarse dentro de COUNT(DISTINCT hogar_key)."
+            )
+
     # 6. Mandatory LIMIT
     if not re.search(r"\blimit\s+\d+\b", limpio, re.IGNORECASE):
         limpio = f"{limpio} LIMIT {LIMITE_MAXIMO}"
@@ -100,7 +116,7 @@ def suprimir_celdas_chicas(filas: list[dict]) -> tuple[list[dict], int]:
     for fila in filas:
         conteos = [
             v for k, v in fila.items()
-            if isinstance(v, int) and ("count" in k.lower() or k.lower() in ("personas", "n", "total"))
+            if isinstance(v, int) and ("count" in k.lower() or k.lower() in ("personas", "hogares", "n", "total"))
         ]
         if conteos and min(conteos) < UMBRAL_SUPRESION:
             suprimidas += 1

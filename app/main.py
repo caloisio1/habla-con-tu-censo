@@ -33,7 +33,9 @@ class Pregunta(BaseModel):
 
 
 ESQUEMA = """
-Tabla de MICRODATOS: personas(departamento TEXT, sexo TEXT, edad INTEGER)
+Tabla de MICRODATOS: personas(departamento TEXT, sexo TEXT, edad INTEGER,
+                              asc_afro TEXT, asc_principal TEXT, nbi INTEGER,
+                              hogar_key TEXT)
 - Una fila = una persona censada (Censo 2011, INE Uruguay).
 - departamento: uno de estos 19 valores exactos (siempre en mayúsculas y SIN tildes):
   'MONTEVIDEO','ARTIGAS','CANELONES','CERRO LARGO','COLONIA','DURAZNO',
@@ -42,6 +44,18 @@ Tabla de MICRODATOS: personas(departamento TEXT, sexo TEXT, edad INTEGER)
   'TREINTA Y TRES'
 - sexo: 'Hombres' | 'Mujeres'
 - edad: edad en años cumplidos (0 a 110)
+- asc_afro: 'Si' | 'No' | NULL. Es la MENCIÓN de ascendencia afro o negra.
+  NULL = no relevado o imputado. "Afrodescendiente"/"afro" a secas = asc_afro='Si'.
+- asc_principal: ascendencia principal declarada. Valores: 'Afro o Negra',
+  'Asiática o Amarilla','Blanca','Indígena','Otra','Ninguna', o NULL.
+  Solo la responden quienes declararon MÁS DE UNA ascendencia; es una pregunta
+  DISTINTA de la mención (asc_afro). No la uses para contar afrodescendientes.
+- nbi: cantidad de Necesidades Básicas Insatisfechas del HOGAR (se repite en
+  cada integrante del hogar). Valores 0,1,2,3 donde 3 = "3 o MÁS" (variable
+  topeada: NO existe 4 ni más). NULL = no relevado / vivienda colectiva /
+  secreto estadístico del INE. Preguntas por "más de 3 NBI" NO son respondibles.
+- hogar_key: identificador de hogar. SOLO puede aparecer dentro de
+  COUNT(DISTINCT hogar_key). No lo pongas en SELECT, WHERE, GROUP BY ni ORDER BY.
 """
 
 PROMPT_SQL = f"""Sos un traductor de preguntas en español a SQL (dialecto SQLite).
@@ -49,8 +63,18 @@ Esquema disponible:
 {ESQUEMA}
 Reglas estrictas:
 - Devolvé SOLO la consulta SQL, sin explicaciones ni markdown.
-- Solo SELECT, y SIEMPRE agregado: usá COUNT(*) AS personas. Nunca devuelvas filas individuales.
-- Podés usar WHERE sobre edad (ej: edad >= 75), GROUP BY y ORDER BY.
+- Solo SELECT, y SIEMPRE agregado. Nunca devuelvas filas individuales.
+- UNIDADES y ALIAS OBLIGATORIOS:
+  * Preguntas sobre PERSONAS -> COUNT(*) AS personas
+  * Preguntas sobre HOGARES  -> COUNT(DISTINCT hogar_key) AS hogares
+    (obligatorio para hogares porque nbi se repite en cada integrante del hogar).
+- PERDIDOS: los NULL se excluyen SIEMPRE de conteos, totales y denominadores.
+  Al calcular proporciones de una variable con perdidos, el denominador debe
+  filtrar sus NULL. Ej: % afro = personas con asc_afro='Si' sobre personas con
+  asc_afro IS NOT NULL. NUNCA uses la población total como denominador de una
+  variable que tiene perdidos.
+- Podés usar WHERE (edad, departamento, sexo, asc_afro, asc_principal, nbi),
+  GROUP BY y ORDER BY.
 - Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE
 """
 
@@ -101,6 +125,11 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int) ->
                     "Respondé la pregunta del usuario usando EXCLUSIVAMENTE los datos "
                     "provistos. Si los datos no alcanzan, decilo. Citá la fuente: "
                     "'Censo 2011, INE Uruguay'. Sé breve y preciso.\n"
+                    "Si el universo de la consulta excluye perdidos (valores NULL: "
+                    "no relevado, viviendas colectivas o secreto estadístico), aclaralo "
+                    "explícitamente (ej.: 'sobre N personas con respuesta válida'). "
+                    "Nunca presentes un porcentaje como si el denominador fuera toda la "
+                    "población cuando la variable tiene perdidos.\n"
                     "Contexto metodológico (usalo solo si es pertinente): el Censo 2011 "
                     "fue el primer censo de derecho de Uruguay (cuenta a las personas en "
                     "su residencia habitual), con fecha de referencia 4 de octubre de 2011. "

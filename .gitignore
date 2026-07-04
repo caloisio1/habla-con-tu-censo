@@ -8,3 +8,4 @@ venv/
 censo.log
 censo_test.log
 *.bak.*
+*.sav
