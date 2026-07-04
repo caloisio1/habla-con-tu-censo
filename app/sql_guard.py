@@ -24,9 +24,13 @@ import re
 # Whitelist: the ONLY table/columns the LLM is allowed to touch.
 # hogar_key NO va acá: solo se permite dentro de COUNT(DISTINCT hogar_key)
 # (ver regla dedicada en validar()), nunca como columna libre.
+# Las unidades geográficas (departamento, codsec, BARRIO85, CCZ, nombre de
+# localidad) SÍ pueden aparecer en la salida: son públicas, no datos personales.
 TABLAS_PERMITIDAS = {
     "personas": {"departamento", "sexo", "edad",
-                 "asc_afro", "asc_principal", "nbi"},
+                 "asc_afro", "asc_principal", "nbi",
+                 "secc", "loc", "barrio85", "ccz", "codsec", "codloc"},
+    "localidades": {"codloc", "nombre", "departamento"},
 }
 
 # Results with fewer persons than this are suppressed (disclosure control).

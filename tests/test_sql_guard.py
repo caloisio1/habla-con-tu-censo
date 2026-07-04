@@ -93,3 +93,42 @@ def test_supresion_aplica_a_hogares():
     assert n == 1
     assert len(seguras) == 1
     assert seguras[0]["nbi"] == 3
+
+
+# ---- Geografía (v3: localidades y mapas coropléticos) ----
+
+def test_join_localidades_pasa():
+    sql = validar(
+        "SELECT COUNT(*) AS personas FROM personas "
+        "JOIN localidades ON personas.codloc = localidades.codloc "
+        "WHERE localidades.nombre = 'PASO DE LOS TOROS'"
+    )
+    assert "localidades" in sql.lower()
+
+
+def test_group_by_codsec_con_clave_en_salida_pasa():
+    validar("SELECT codsec, COUNT(*) AS personas FROM personas GROUP BY codsec")
+
+
+def test_group_by_barrio_con_clave_en_salida_pasa():
+    validar(
+        "SELECT BARRIO85, COUNT(*) AS personas FROM personas "
+        "WHERE departamento='MONTEVIDEO' GROUP BY BARRIO85"
+    )
+
+
+def test_group_by_ccz_con_clave_en_salida_pasa():
+    validar(
+        "SELECT CCZ, COUNT(DISTINCT hogar_key) AS hogares FROM personas "
+        "WHERE departamento='MONTEVIDEO' GROUP BY CCZ"
+    )
+
+
+def test_hogar_key_en_salida_sigue_rechazado():
+    with pytest.raises(SQLNoSeguro):
+        validar("SELECT hogar_key, COUNT(*) AS personas FROM personas GROUP BY hogar_key")
+
+
+def test_tabla_fuera_de_whitelist_sigue_rechazada():
+    with pytest.raises(SQLNoSeguro):
+        validar("SELECT COUNT(*) FROM viviendas JOIN personas ON 1=1")

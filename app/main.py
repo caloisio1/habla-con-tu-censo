@@ -10,6 +10,7 @@ if a query fails validation or a cell is too small, the system says so.
 """
 
 import os
+import re
 import sqlite3
 
 from fastapi import FastAPI
@@ -35,7 +36,10 @@ class Pregunta(BaseModel):
 ESQUEMA = """
 Tabla de MICRODATOS: personas(departamento TEXT, sexo TEXT, edad INTEGER,
                               asc_afro TEXT, asc_principal TEXT, nbi INTEGER,
-                              hogar_key TEXT)
+                              hogar_key TEXT, SECC TEXT, LOC TEXT,
+                              BARRIO85 TEXT, CCZ INTEGER,
+                              codsec INTEGER, codloc INTEGER)
+Tabla de REFERENCIA: localidades(codloc INTEGER, nombre TEXT, departamento TEXT)
 - Una fila = una persona censada (Censo 2011, INE Uruguay).
 - departamento: uno de estos 19 valores exactos (siempre en mayúsculas y SIN tildes):
   'MONTEVIDEO','ARTIGAS','CANELONES','CERRO LARGO','COLONIA','DURAZNO',
@@ -56,6 +60,16 @@ Tabla de MICRODATOS: personas(departamento TEXT, sexo TEXT, edad INTEGER,
   secreto estadístico del INE. Preguntas por "más de 3 NBI" NO son respondibles.
 - hogar_key: identificador de hogar. SOLO puede aparecer dentro de
   COUNT(DISTINCT hogar_key). No lo pongas en SELECT, WHERE, GROUP BY ni ORDER BY.
+- codsec: código de sección censal (departamento*100 + sección). Válido en salida.
+- codloc: código de localidad (departamento*1000 + localidad). Se usa para el
+  JOIN con localidades: personas.codloc = localidades.codloc.
+- BARRIO85: nombre del barrio, SOLO Montevideo (capitalización tipo
+  'Ciudad Vieja'). Válido en salida.
+- CCZ: número de centro comunal zonal, SOLO Montevideo. Válido en salida.
+- localidades.nombre: nombre de la localidad en MAYÚSCULAS y SIN tilde
+  (ej: 'PASO DE LOS TOROS', 'BELLA UNION'). Preguntas por una localidad se
+  responden con JOIN localidades ON personas.codloc = localidades.codloc y
+  filtro por localidades.nombre.
 """
 
 PROMPT_SQL = f"""Sos un traductor de preguntas en español a SQL (dialecto SQLite).
@@ -73,8 +87,21 @@ Reglas estrictas:
   filtrar sus NULL. Ej: % afro = personas con asc_afro='Si' sobre personas con
   asc_afro IS NOT NULL. NUNCA uses la población total como denominador de una
   variable que tiene perdidos.
-- Podés usar WHERE (edad, departamento, sexo, asc_afro, asc_principal, nbi),
-  GROUP BY y ORDER BY.
+- Podés usar WHERE (edad, departamento, sexo, asc_afro, asc_principal, nbi,
+  codsec, BARRIO85, CCZ, codloc), GROUP BY y ORDER BY.
+- LOCALIDADES: preguntas por una localidad (ej. "Paso de los Toros", "Bella
+  Unión") -> JOIN localidades ON personas.codloc = localidades.codloc y filtrá
+  por localidades.nombre en MAYÚSCULAS y SIN tilde. Las localidades SÍ son
+  respondibles.
+- PATRONES DE MAPA (cuando la pregunta pida un desglose geográfico):
+  * "... por departamento"    -> GROUP BY departamento
+  * "... por sección censal"  -> GROUP BY codsec
+  * "... por barrio"          -> GROUP BY BARRIO85 con WHERE departamento='MONTEVIDEO'
+  * "... por CCZ"             -> GROUP BY CCZ con WHERE departamento='MONTEVIDEO'
+  En estos casos poné la clave geográfica (departamento / codsec / BARRIO85 / CCZ)
+  como PRIMERA columna del SELECT y la métrica (conteo o porcentaje) como segunda.
+- BARRIO85 y CCZ existen SOLO en Montevideo: preguntas de barrio o CCZ para otro
+  departamento -> devolvé exactamente NO_RESPONDIBLE.
 - Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE
 """
 
@@ -148,6 +175,59 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int) ->
     return r.choices[0].message.content.strip() + nota
 
 
+# Columna geográfica del GROUP BY -> nivel de mapa. Orden = prioridad.
+NIVELES_MAPA = [
+    ("departamento", "departamento"),
+    ("codsec", "seccion"),
+    ("barrio85", "barrio"),
+    ("ccz", "ccz"),
+]
+
+
+def _es_numero(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def construir_mapa(sql: str, filas: list) -> dict | None:
+    """Si el SQL agrupa por una unidad geográfica mapeable, devuelve
+    {"nivel", "datos": [{"clave", "valor"}]} a partir de las filas YA
+    suprimidas. 'valor' es la columna numérica principal (conteo o %)."""
+    if not filas:
+        return None
+    m = re.search(r"group\s+by\s+(.+?)(?:\s+order\s+by\b|\s+limit\b|$)",
+                  sql, re.IGNORECASE | re.DOTALL)
+    if not m:
+        return None
+    clausula = m.group(1).lower()
+    col = nivel = None
+    for c, n in NIVELES_MAPA:
+        if re.search(rf"\b{c}\b", clausula):
+            col, nivel = c, n
+            break
+    if not col:
+        return None
+
+    ejemplo = filas[0]
+    clave_key = next((k for k in ejemplo if k.lower() == col), None)
+    if clave_key is None:
+        return None
+    valor_key = None
+    for pref in ("personas", "hogares"):
+        if pref in ejemplo and _es_numero(ejemplo[pref]):
+            valor_key = pref
+            break
+    if valor_key is None:
+        valor_key = next(
+            (k for k, v in ejemplo.items() if k != clave_key and _es_numero(v)),
+            None,
+        )
+    if valor_key is None:
+        return None
+
+    datos = [{"clave": f[clave_key], "valor": f[valor_key]} for f in filas]
+    return {"nivel": nivel, "datos": datos}
+
+
 @app.post("/preguntar")
 def preguntar(p: Pregunta):
     sql_crudo = generar_sql(p.texto)
@@ -182,13 +262,20 @@ def preguntar(p: Pregunta):
             "sql": sql_seguro,
         }
 
-    return {
+    respuesta = {
         "ok": True,
         "respuesta": redactar_respuesta(p.texto, sql_seguro, filas, suprimidas),
         "sql": sql_seguro,   # transparency: the executed SQL is always shown
         "datos": filas,
         "celdas_suprimidas": suprimidas,
     }
+
+    mapa = construir_mapa(sql_seguro, filas)
+    if mapa:
+        mapa["suprimidas"] = suprimidas   # suprimidas ya no están en datos
+        respuesta["mapa"] = mapa
+
+    return respuesta
 
 
 @app.get("/")

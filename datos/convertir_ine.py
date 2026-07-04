@@ -34,6 +34,10 @@ COL_ASC_PRINCIPAL = "PERER02"    # ascendencia principal (solo si declaró >1)
 COL_NBI = "NBI_CANTIDAD"         # cantidad de NBI del hogar (topeada en 3)
 COL_ID_VIVIENDA = "ID_VIVIENDA"
 COL_HOGID = "HOGID"
+COL_SECC = "SECC"        # sección censal (dentro del departamento)
+COL_LOC = "LOC"          # localidad (dentro del departamento)
+COL_BARRIO = "BARRIO85"  # barrio (solo Montevideo)
+COL_CCZ = "CCZ"          # centro comunal zonal (solo Montevideo)
 # --------------------------------------------------------------------
 
 DEPARTAMENTOS = {
@@ -61,7 +65,20 @@ SALIDA = AQUI / "personas.csv"
 LOTE = 200_000  # rows per chunk when reading .sav
 
 CAMPOS = ["departamento", "sexo", "edad",
-          "asc_afro", "asc_principal", "nbi", "hogar_key"]
+          "asc_afro", "asc_principal", "nbi", "hogar_key",
+          "SECC", "LOC", "BARRIO85", "CCZ", "codsec", "codloc"]
+
+
+def _reparar_texto(s: str) -> str:
+    """Repara la corrupción de acentos del .sav (WINDOWS-1252 con el bit 0x40
+    perdido en el rango de letras Latin-1). Los bytes 0x80-0xBF son letras
+    acentuadas 0xC0-0xFF a las que les falta ese bit; se restaura con OR 0x40
+    (ñ 0xF1 llega como ± 0xB1 -> se recupera; á/é/í/ó/ú idem). Las letras ya
+    correctas (0xC0-0xFF) y el ASCII quedan intactos. Verificado contra el
+    geojson de barrios: el único caso real en la base es ± -> ñ."""
+    return "".join(
+        chr(o | 0x40) if 0x80 <= (o := ord(c)) <= 0xBF else c for c in s
+    )
 
 
 def _codigo(v):
@@ -94,7 +111,8 @@ def inspeccionar(ruta: Path) -> None:
         sys.exit("Formato no reconocido: usá un .sav o un .dbf")
 
     requeridas = (COL_DEPARTAMENTO, COL_SEXO, COL_EDAD, COL_ASC_AFRO,
-                  COL_ASC_PRINCIPAL, COL_NBI, COL_ID_VIVIENDA, COL_HOGID)
+                  COL_ASC_PRINCIPAL, COL_NBI, COL_ID_VIVIENDA, COL_HOGID,
+                  COL_SECC, COL_LOC, COL_BARRIO, COL_CCZ)
     faltan = [c for c in requeridas if c not in columnas]
     if faltan:
         print(f"\nATENCIÓN: no encuentro {faltan}. Ajustá el mapeo al inicio del script.")
@@ -114,7 +132,8 @@ def convertir(ruta: Path, solo_censadas: bool = False) -> None:
         def procesar(filas_iter):
             nonlocal total, descartadas, imputadas
             for (depto_v, sexo_v, edad_v, ma_v,
-                 afro_v, ascp_v, nbi_v, idv_v, hog_v) in filas_iter:
+                 afro_v, ascp_v, nbi_v, idv_v, hog_v,
+                 secc_v, loc_v, barrio_v, ccz_v) in filas_iter:
                 try:
                     es_imputada = ma_v is not None and int(float(ma_v)) == 1
                 except (ValueError, TypeError):
@@ -124,7 +143,8 @@ def convertir(ruta: Path, solo_censadas: bool = False) -> None:
                     if solo_censadas:
                         continue
                 try:
-                    depto = DEPARTAMENTOS[int(depto_v)]
+                    dpto_int = int(depto_v)
+                    depto = DEPARTAMENTOS[dpto_int]
                     sexo = SEXO[int(sexo_v)]
                     edad = int(edad_v)
                     if not 0 <= edad <= 115:
@@ -154,8 +174,20 @@ def convertir(ruta: Path, solo_censadas: bool = False) -> None:
                 cod_hog = _codigo(hog_v)
                 hogar_key = f"{idv}-{cod_hog}" if idv and cod_hog is not None else ""
 
+                # Geografía: SECC/LOC/BARRIO85/CCZ tal como vienen + derivadas.
+                secc = str(secc_v).strip() if secc_v is not None else ""
+                loc = str(loc_v).strip() if loc_v is not None else ""
+                barrio = _reparar_texto(str(barrio_v).strip()) if barrio_v is not None else ""
+                cod_secc = _codigo(secc_v)
+                cod_loc = _codigo(loc_v)
+                cod_ccz = _codigo(ccz_v)
+                codsec = dpto_int * 100 + cod_secc if cod_secc is not None else ""
+                codloc = dpto_int * 1000 + cod_loc if cod_loc is not None else ""
+                ccz = cod_ccz if cod_ccz is not None else ""
+
                 escritor.writerow([depto, sexo, edad,
-                                   asc_afro, asc_principal, nbi, hogar_key])
+                                   asc_afro, asc_principal, nbi, hogar_key,
+                                   secc, loc, barrio, ccz, codsec, codloc])
                 total += 1
 
         if ruta.suffix.lower() == ".sav":
@@ -163,7 +195,8 @@ def convertir(ruta: Path, solo_censadas: bool = False) -> None:
             _, meta = pyreadstat.read_sav(str(ruta), metadataonly=True)
             tiene_ma = COL_IMPUTADO in meta.column_names
             cols = [COL_DEPARTAMENTO, COL_SEXO, COL_EDAD, COL_ASC_AFRO,
-                    COL_ASC_PRINCIPAL, COL_NBI, COL_ID_VIVIENDA, COL_HOGID]
+                    COL_ASC_PRINCIPAL, COL_NBI, COL_ID_VIVIENDA, COL_HOGID,
+                    COL_SECC, COL_LOC, COL_BARRIO, COL_CCZ]
             if tiene_ma:
                 cols.append(COL_IMPUTADO)
             lector = pyreadstat.read_file_in_chunks(
@@ -175,6 +208,7 @@ def convertir(ruta: Path, solo_censadas: bool = False) -> None:
                     df[COL_DEPARTAMENTO], df[COL_SEXO], df[COL_EDAD], ma_serie,
                     df[COL_ASC_AFRO], df[COL_ASC_PRINCIPAL], df[COL_NBI],
                     df[COL_ID_VIVIENDA], df[COL_HOGID],
+                    df[COL_SECC], df[COL_LOC], df[COL_BARRIO], df[COL_CCZ],
                 ))
                 print(f"  … {total:,} personas procesadas", flush=True)
         elif ruta.suffix.lower() == ".dbf":
@@ -183,7 +217,8 @@ def convertir(ruta: Path, solo_censadas: bool = False) -> None:
             filas = (
                 (r.get(COL_DEPARTAMENTO), r.get(COL_SEXO), r.get(COL_EDAD),
                  r.get(COL_IMPUTADO), r.get(COL_ASC_AFRO), r.get(COL_ASC_PRINCIPAL),
-                 r.get(COL_NBI), r.get(COL_ID_VIVIENDA), r.get(COL_HOGID))
+                 r.get(COL_NBI), r.get(COL_ID_VIVIENDA), r.get(COL_HOGID),
+                 r.get(COL_SECC), r.get(COL_LOC), r.get(COL_BARRIO), r.get(COL_CCZ))
                 for r in registros
             )
             procesar(filas)
