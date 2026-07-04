@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+datos/censo.db
+datos/personas.csv
+.pytest_cache/
+venv/
+censo.log
+censo_test.log
+*.bak.*
