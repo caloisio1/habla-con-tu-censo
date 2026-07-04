@@ -14,7 +14,11 @@
   #respuesta { margin-top: 24px; padding: 16px; background: #f4f6f8; border-radius: 8px; white-space: pre-wrap; }
   #sql { margin-top: 12px; font-family: monospace; font-size: 0.85rem; color: #666; }
   .ejemplos span { display: inline-block; margin: 4px 6px 0 0; padding: 4px 10px; background: #e8eef4; border-radius: 12px; font-size: 0.85rem; cursor: pointer; }
+  #respuesta table { border-collapse: collapse; margin: 8px 0; }
+  #respuesta th, #respuesta td { padding: 8px; border: 1px solid #ddd; }
+  #respuesta th { background: #f0f0f0; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 </head>
 <body>
 <h1>Habla con tu Censo</h1>
@@ -50,7 +54,7 @@ f.onsubmit = async (e) => {
     body: JSON.stringify({texto: q.value})
   });
   const j = await res.json();
-  r.textContent = j.respuesta;
+  r.innerHTML = marked.parse(j.respuesta);
   if (j.sql) s.textContent = 'SQL: ' + j.sql;
 };
 </script>
