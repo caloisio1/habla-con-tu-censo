@@ -40,7 +40,7 @@ this to another country's census is a schema change, not a rewrite.
 ```bash
 pip install -r requirements.txt
 # 1. Download INE's anonymized public-use microdata (https://www.ine.gub.uy)
-# 2. Convert the .sav to datos/personas.csv (departamento, sexo, edad — one row per person)
+# 2. Convert the .sav to datos/personas.csv (one row per person)
 python datos/convertir_ine.py datos/ARCHIVO_INE.sav
 # 3. Build the database (datos/censo.db)
 python datos/cargar.py
@@ -49,6 +49,19 @@ export OPENAI_API_KEY=sk-...
 # 5. Launch
 uvicorn app.main:app --reload
 ```
+
+The `personas` table (one row per person) holds:
+
+| Column | Description |
+|---|---|
+| `departamento`, `sexo`, `edad` | Geography, sex and age |
+| `asc_afro` | Mention of Afro/Black ancestry (`Si`/`No`/NULL) |
+| `asc_principal` | Main declared ancestry (only for those declaring more than one) |
+| `nbi` | Count of the household's Unsatisfied Basic Needs (0–3, capped at "3 or more") |
+| `hogar_key` | Household id — only usable inside `COUNT(DISTINCT hogar_key)` |
+
+Missing values (not surveyed, collective dwellings, statistical secrecy) are
+stored as NULL and always excluded from counts and denominators.
 
 Then open http://localhost:8000 and ask: *"¿Cuántas mujeres mayores de 75 años
 hay en Rivera?"*
