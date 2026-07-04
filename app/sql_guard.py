@@ -42,7 +42,20 @@ PALABRAS_PROHIBIDAS = re.compile(
     re.IGNORECASE,
 )
 
-LIMITE_MAXIMO = 200
+# Techo de filas. 300 cubre el nivel geográfico más grande que se mapea
+# (232 secciones censales); por debajo, un mapa por sección se truncaba.
+LIMITE_MAXIMO = 300
+
+# Literal de texto SQL entre comillas simples (con '' escapado interno).
+_LITERAL = re.compile(r"'(?:[^']|'')*'")
+
+
+def _sin_literales(sql: str) -> str:
+    """Reemplaza cada literal de texto '...' por '' para que las validaciones
+    estructurales (keywords, tablas) no matcheen palabras dentro de nombres
+    geográficos: la localidad 'BELLA UNION' y el barrio 'Union' contienen la
+    keyword UNION, pero como dato, no como operador."""
+    return _LITERAL.sub("''", sql)
 
 
 class SQLNoSeguro(Exception):
@@ -63,14 +76,18 @@ def validar(sql: str) -> str:
     if not re.match(r"^\s*select\b", limpio, re.IGNORECASE):
         raise SQLNoSeguro("Solo se permiten consultas SELECT.")
 
+    # Las validaciones estructurales corren sobre el SQL SIN literales de texto,
+    # para no confundir un nombre geográfico (ej. 'BELLA UNION') con un operador.
+    analizable = _sin_literales(limpio)
+
     # 3. Forbidden keywords
-    if PALABRAS_PROHIBIDAS.search(limpio):
+    if PALABRAS_PROHIBIDAS.search(analizable):
         raise SQLNoSeguro("Palabra clave no permitida detectada.")
 
     # 4. Aggregate-only over microdata: never individual rows
-    if re.search(r"select\s+\*", limpio, re.IGNORECASE):
+    if re.search(r"select\s+\*", analizable, re.IGNORECASE):
         raise SQLNoSeguro("SELECT * prohibido: los microdatos solo se consultan agregados.")
-    if not re.search(r"\bcount\s*\(", limpio, re.IGNORECASE):
+    if not re.search(r"\bcount\s*\(", analizable, re.IGNORECASE):
         raise SQLNoSeguro(
             "Consulta no agregada: toda consulta debe contar personas (COUNT), "
             "nunca devolver registros individuales."
@@ -78,7 +95,7 @@ def validar(sql: str) -> str:
 
     # 5. Table whitelist: every FROM/JOIN target must be whitelisted
     tablas_usadas = re.findall(
-        r"\b(?:from|join)\s+([a-zA-Z_][a-zA-Z0-9_]*)", limpio, re.IGNORECASE
+        r"\b(?:from|join)\s+([a-zA-Z_][a-zA-Z0-9_]*)", analizable, re.IGNORECASE
     )
     if not tablas_usadas:
         raise SQLNoSeguro("No se detectó tabla de origen.")
@@ -89,10 +106,10 @@ def validar(sql: str) -> str:
     # 5b. hogar_key es un identificador de hogar (potencialmente reidentificante):
     # solo se admite dentro de COUNT(DISTINCT hogar_key), nunca suelto en SELECT,
     # GROUP BY, WHERE u ORDER BY.
-    apariciones = len(re.findall(r"\bhogar_key\b", limpio, re.IGNORECASE))
+    apariciones = len(re.findall(r"\bhogar_key\b", analizable, re.IGNORECASE))
     if apariciones:
         permitidas = len(re.findall(
-            r"count\s*\(\s*distinct\s+hogar_key\s*\)", limpio, re.IGNORECASE
+            r"count\s*\(\s*distinct\s+hogar_key\s*\)", analizable, re.IGNORECASE
         ))
         if apariciones != permitidas:
             raise SQLNoSeguro(

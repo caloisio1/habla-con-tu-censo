@@ -132,3 +132,17 @@ def test_hogar_key_en_salida_sigue_rechazado():
 def test_tabla_fuera_de_whitelist_sigue_rechazada():
     with pytest.raises(SQLNoSeguro):
         validar("SELECT COUNT(*) FROM viviendas JOIN personas ON 1=1")
+
+
+def test_keyword_dentro_de_literal_no_rechaza():
+    # 'BELLA UNION' / 'Union' contienen UNION como dato, no como operador.
+    validar("SELECT COUNT(*) AS personas FROM personas p JOIN localidades l "
+            "ON p.codloc=l.codloc WHERE l.nombre='BELLA UNION'")
+    validar("SELECT COUNT(*) AS personas FROM personas "
+            "WHERE BARRIO85='Union' AND departamento='MONTEVIDEO'")
+
+
+def test_union_real_sigue_rechazado():
+    # UNION como operador (fuera de literal) debe seguir rechazándose.
+    with pytest.raises(SQLNoSeguro):
+        validar("SELECT COUNT(*) FROM personas UNION SELECT clave FROM secretos")

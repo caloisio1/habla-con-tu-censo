@@ -57,13 +57,13 @@ const f = document.getElementById('f'), q = document.getElementById('q'),
 
 // nivel de mapa -> geojson servido desde static/ + propiedad de join + nombre + encuadre
 const MAPA_CFG = {
-  departamento: { archivo: 'departamentos.geojson', prop: 'departamento',
+  departamento: { archivo: 'static/departamentos.geojson', prop: 'departamento',
                   nombre: p => p.departamento, centro: null },
-  seccion:      { archivo: 'secciones_censales.geojson', prop: 'codsec',
+  seccion:      { archivo: 'static/secciones_censales.geojson', prop: 'codsec',
                   nombre: p => `Sección ${p.seccion} (${p.depto})`, centro: null },
-  barrio:       { archivo: 'barrios_montevideo.geojson', prop: 'barrio',
+  barrio:       { archivo: 'static/barrios_montevideo.geojson', prop: 'barrio',
                   nombre: p => p.barrio, centro: [-34.86, -56.17], zoom: 11 },
-  ccz:          { archivo: 'ccz_montevideo.geojson', prop: 'ccz',
+  ccz:          { archivo: 'static/ccz_montevideo.geojson', prop: 'ccz',
                   nombre: p => `CCZ ${p.ccz}`, centro: [-34.86, -56.17], zoom: 11 },
 };
 

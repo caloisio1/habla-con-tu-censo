@@ -15,6 +15,7 @@ import sqlite3
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from openai import OpenAI
 
@@ -27,6 +28,9 @@ MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
 
 client = OpenAI()  # requires OPENAI_API_KEY in environment
 app = FastAPI(title="Habla con tu Censo")
+
+# Sirve los geojson de mapas (relativo a la página, funciona tras nginx /censo/).
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 class Pregunta(BaseModel):
