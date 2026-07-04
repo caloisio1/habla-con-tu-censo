@@ -35,7 +35,11 @@ class Pregunta(BaseModel):
 ESQUEMA = """
 Tabla de MICRODATOS: personas(departamento TEXT, sexo TEXT, edad INTEGER)
 - Una fila = una persona censada (Censo 2011, INE Uruguay).
-- departamento: los 19 departamentos, en mayúsculas (ej: 'MONTEVIDEO', 'SALTO')
+- departamento: uno de estos 19 valores exactos (siempre en mayúsculas y SIN tildes):
+  'MONTEVIDEO','ARTIGAS','CANELONES','CERRO LARGO','COLONIA','DURAZNO',
+  'FLORES','FLORIDA','LAVALLEJA','MALDONADO','PAYSANDU','RIO NEGRO',
+  'RIVERA','ROCHA','SALTO','SAN JOSE','SORIANO','TACUAREMBO',
+  'TREINTA Y TRES'
 - sexo: 'Hombres' | 'Mujeres'
 - edad: edad en años cumplidos (0 a 110)
 """
@@ -49,6 +53,24 @@ Reglas estrictas:
 - Podés usar WHERE sobre edad (ej: edad >= 75), GROUP BY y ORDER BY.
 - Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE
 """
+
+
+_DEPTOS_CON_TILDE = {
+    "PAYSANDÚ": "PAYSANDU",
+    "RÍO NEGRO": "RIO NEGRO",
+    "SAN JOSÉ": "SAN JOSE",
+    "TACUAREMBÓ": "TACUAREMBO",
+}
+
+
+def normalizar_departamentos(sql: str) -> str:
+    """Reemplaza nombres de departamento con tilde por su forma sin tilde
+    (tal como estan en la base), en mayusculas y minusculas. Funcion pura:
+    no altera un SQL que ya venga sin tildes."""
+    for con_tilde, sin_tilde in _DEPTOS_CON_TILDE.items():
+        sql = sql.replace(con_tilde, sin_tilde)
+        sql = sql.replace(con_tilde.lower(), sin_tilde.lower())
+    return sql
 
 
 def generar_sql(pregunta: str) -> str:
@@ -106,6 +128,8 @@ def preguntar(p: Pregunta):
             "ok": False,
             "respuesta": "Esa pregunta no puede responderse con las variables disponibles.",
         }
+
+    sql_crudo = normalizar_departamentos(sql_crudo)
 
     try:
         sql_seguro = validar(sql_crudo)
