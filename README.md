@@ -1,4 +1,6 @@
-# Census Query UY
+# Habla con tu Censo
+
+*"Talk to your Census" — natural-language interface over Uruguay's 2011 census microdata*
 
 **Ask Uruguay's 2011 Census questions in plain Spanish. Get answers computed
 from official microdata — never from an LLM's memory.**
@@ -38,11 +40,13 @@ this to another country's census is a schema change, not a rewrite.
 ```bash
 pip install -r requirements.txt
 # 1. Download INE's anonymized public-use microdata (https://www.ine.gub.uy)
-#    and convert it to datos/personas.csv (departamento,sexo,edad — one row per person)
+# 2. Convert the .sav to datos/personas.csv (departamento, sexo, edad — one row per person)
+python datos/convertir_ine.py datos/ARCHIVO_INE.sav
+# 3. Build the database (datos/censo.db)
 python datos/cargar.py
-# 2. Set your LLM key
+# 4. Set your LLM key
 export OPENAI_API_KEY=sk-...
-# 3. Launch
+# 5. Launch
 uvicorn app.main:app --reload
 ```
 
