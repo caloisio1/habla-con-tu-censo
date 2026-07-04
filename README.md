@@ -5,6 +5,8 @@
 **Ask Uruguay's 2011 Census questions in plain Spanish. Get answers computed
 from official microdata — never from an LLM's memory.**
 
+**Live demo: https://srv1236510.hstgr.cloud/**
+
 A working prototype of a natural-language query layer for national statistical
 offices, built as a modern alternative to legacy dissemination tools (REDATAM).
 
