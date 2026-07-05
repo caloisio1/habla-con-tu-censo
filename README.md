@@ -1,14 +1,16 @@
 # Habla con tu Censo
 
-*"Talk to your Census" — natural-language interface over Uruguay's 2011 census microdata*
+*Talk to your Census — natural-language interface over Uruguay's 2011 census microdata*
 
-**Ask Uruguay's 2011 Census questions in plain Spanish. Get answers computed
-from official microdata — never from an LLM's memory.**
+**Ask Uruguay's 2011 Census questions in plain Spanish. Answers are computed
+from the official microdata — 3,285,824 person records — never from an LLM's
+memory, and the executed SQL is shown on every answer.**
 
 **Live demo: https://srv1236510.hstgr.cloud/**
 
 A working prototype of a natural-language query layer for national statistical
-offices, built as a modern alternative to legacy dissemination tools (REDATAM).
+offices, built as a modern, auditable alternative to legacy dissemination tools
+(REDATAM).
 
 <p align="center">
   <img src="docs/captura-inicio.png" width="820"
@@ -37,63 +39,138 @@ suppressed cells labelled, and the exact SQL one click away:
 <sub>Light/dark themes, responsive to mobile, and the executed SQL shown on
 every answer.</sub>
 
-## How it works
+## What it is
 
-```
-question (ES) → LLM writes SQL → validation gate → SQLite over microdata
-             → small-cell suppression → LLM writes answer from real numbers
-```
+A conversational interface over the **person-level microdata of Uruguay's 2011
+Census** (INE). The queryable table, `personas`, holds one row per person —
+**3,285,824 records** across **155 columns**: the **145 raw INE variables**
+(kept with their original codes) plus readable **derived columns**
+(`departamento`, `sexo`, `edad`, `asc_afro`, `asc_principal`, `nbi`, `codsec`,
+`codloc`) and structural keys (`hogar_key`, `vivienda_key`). A small
+`localidades` reference table (615 localities) resolves place names.
 
-The design principle is **attribution or refusal**: the LLM never answers from
-its own knowledge. If a query cannot be validated, it is not executed. If a
-result cell is too small to publish, it is suppressed. The executed SQL is
-always shown to the user.
+A question in Spanish is translated to SQL by an LLM, the SQL is validated by a
+real parser, executed over SQLite, disclosure-controlled, and only then turned
+back into prose that cites the actual numbers.
+
+## What you can ask
+
+- **Counts** of persons, households or dwellings —
+  `COUNT(*)`, `COUNT(DISTINCT hogar_key)`, `COUNT(DISTINCT vivienda_key)`
+  (household and dwelling variables repeat on every member, so distinct counts
+  are enforced).
+- **Frequencies** of any of the 145 variables (e.g. dwellings by type,
+  households by number of Unsatisfied Basic Needs).
+- **Percentages** with **automatic exclusion of missing values**: codes flagged
+  as not-surveyed / not-applicable / unknown / statistical-secrecy (and NULLs)
+  are always dropped from counts and denominators — a rate is never presented
+  over the total population when the variable has missing data.
+- **Hierarchical selection** — REDATAM-style subqueries expressing conditions on
+  *other* household members (e.g. "people in households where at least one member
+  is over 75").
+- **Four geographic levels** — department, locality (by name, via the
+  `localidades` table), Montevideo neighbourhood (`BARRIO85`) / CCZ, and census
+  tract (`codsec`) — with **choropleth Leaflet maps** rendered for the mappable
+  levels (department, census tract, Montevideo neighbourhood, CCZ).
 
 ## Statistical disclosure control
 
 Because the underlying table is microdata (one row per person), the validation
-gate (`app/sql_guard.py`) enforces:
+gate (`app/sql_guard.py`) is built on a **real SQL parser (`sqlglot`)** working
+on the parsed tree, not on text matching:
 
-1. **Aggregate-only queries** — `COUNT(*)` required, individual rows can never
-   be returned (`SELECT *` and bare column selection are rejected).
-2. **Small-cell suppression** — any result cell with fewer than 5 persons is
-   suppressed after execution, following standard NSO practice.
-3. **Defense-in-depth** — SELECT-only, single statement, table/column
-   whitelist, no comments, no UNION, mandatory LIMIT.
+1. **Aggregate-only output** — every column of the outer projection must be an
+   aggregate or a `GROUP BY` column; `SELECT *` and bare column selection are
+   rejected. Individual rows can never be returned.
+2. **Structural small-cell suppression** — the guard identifies *on the tree*
+   which output columns are counts and hands them to the suppressor; any result
+   cell with fewer than **5 persons** is dropped after execution (standard NSO
+   practice). Suppressed geographies render as grey ("sin dato publicable") on
+   the maps.
+3. **Fail-closed** — if the guard cannot prove a query safe (unparseable, counts
+   not identifiable, disallowed table/column/function), it is **not executed**
+   and no answer is improvised.
+4. **Defense-in-depth** — single `SELECT` statement only; table whitelist
+   (`personas`, `localidades`) with joins allowed only on `codloc`; column
+   whitelist from the dictionary; re-identifying keys (`hogar_key`,
+   `vivienda_key`) allowed in the outer projection only inside
+   `COUNT(DISTINCT …)`; dangerous SQLite functions blocked; mandatory, capped
+   `LIMIT`.
 
-The suppression threshold and whitelist are configuration, not code — adapting
-this to another country's census is a schema change, not a rewrite.
+The suppression threshold, whitelist and prompt are **configuration derived from
+the dictionary, not hand-written code**.
+
+## Architecture
+
+```
+question (ES) → LLM writes SQL → sqlglot validation gate → SQLite over microdata
+             → small-cell suppression → LLM writes the answer from real numbers
+             → choropleth map (Leaflet) when the query is geographic
+```
+
+**FastAPI + SQLite + OpenAI + Leaflet**, ~vanilla single-page front-end (no build
+step). The schema text the model sees, the column whitelist the guard enforces,
+and the missing-value rules are **all generated from `datos/diccionario.json`**
+(`app/dicc.py`) — the public INE metadata for the 145 variables. Pointing the
+pipeline at another census's `.sav` + dictionary adapts the system without
+touching the query logic. The model is configurable via the `CENSO_MODELO`
+environment variable.
 
 ## Run it
 
 ```bash
 pip install -r requirements.txt
-# 1. Download INE's anonymized public-use microdata (https://www.ine.gub.uy)
-# 2. Convert the .sav to datos/personas.csv (one row per person)
-python datos/convertir_ine.py datos/ARCHIVO_INE.sav
-# 3. Build the database (datos/censo.db)
-python datos/cargar.py
-# 4. Set your LLM key
+
+# The INE microdata file is NOT included in this repo (it is not ours to
+# redistribute). Download the Census 2011 persons microdata from
+# https://www.ine.gub.uy and place the .sav in datos/.
+# The expected file is "Base unificada Viv_Hog_Pers.sav".
+
+# 1. Generate the data dictionary — schema, whitelist and LLM prompt all derive
+#    from this file. Metadata only: it reads labels, not microdata.
+python datos/generar_diccionario.py "datos/Base unificada Viv_Hog_Pers.sav"
+
+# 2. Verify the column mapping against your file before loading (this is also
+#    the module cargar.py imports its derivation rules from).
+python datos/convertir_ine.py --inspeccionar "datos/Base unificada Viv_Hog_Pers.sav"
+
+# 3. Build the database (datos/censo.db). Reads the .sav in chunks — no
+#    intermediate CSV — loading the 145 raw variables + derived columns + the
+#    localidades reference table.
+python datos/cargar.py "datos/Base unificada Viv_Hog_Pers.sav"
+
+# 4. Set your OpenAI key
 export OPENAI_API_KEY=sk-...
+
 # 5. Launch
 uvicorn app.main:app --reload
 ```
 
-The `personas` table (one row per person) holds:
+Then open http://localhost:8000 and ask, for example:
+*"¿Cuántas mujeres mayores de 75 años hay en Rivera?"*
+
+Key columns of the `personas` table:
 
 | Column | Description |
 |---|---|
-| `departamento`, `sexo`, `edad` | Geography, sex and age |
+| `departamento`, `sexo`, `edad` | Department (19 values), sex, age in years |
 | `asc_afro` | Mention of Afro/Black ancestry (`Si`/`No`/NULL) |
 | `asc_principal` | Main declared ancestry (only for those declaring more than one) |
-| `nbi` | Count of the household's Unsatisfied Basic Needs (0–3, capped at "3 or more") |
-| `hogar_key` | Household id — only usable inside `COUNT(DISTINCT hogar_key)` |
+| `nbi` | Household's Unsatisfied Basic Needs (0–3, capped at "3 or more") |
+| `codsec`, `codloc`, `BARRIO85`, `CCZ` | Census tract, locality, Montevideo neighbourhood / CCZ |
+| `hogar_key`, `vivienda_key` | Household / dwelling id (only inside `COUNT(DISTINCT …)`) |
+| *145 raw INE variables* | Original codes (e.g. `VIVVO03`, `HOGPR01`), with the dictionary's value labels |
 
 Missing values (not surveyed, collective dwellings, statistical secrecy) are
 stored as NULL and always excluded from counts and denominators.
 
-Then open http://localhost:8000 and ask: *"¿Cuántas mujeres mayores de 75 años
-hay en Rivera?"*
+## Data quality & scope
+
+The persons microdata contains **occupied dwellings only**, so questions about
+**vacant / unoccupied dwellings** are out of scope and return a clear message
+(`NO_RESPONDIBLE_VIVIENDAS`) rather than a wrong answer. Loading counts, the
+household/`PERID` consistency note, and the full scope limitation are documented
+in [`datos/NOTAS_CALIDAD.md`](datos/NOTAS_CALIDAD.md).
 
 ## Tests
 
@@ -101,22 +178,27 @@ hay en Rivera?"*
 pytest
 ```
 
-The test suite covers the security gate: injection attempts, row-level
-extraction attempts, and disclosure-control suppression.
+The suite covers the security gate (`test_sql_guard.py`: injection attempts,
+row-level extraction attempts, table/column whitelisting, `COUNT(DISTINCT)`
+enforcement on keys, small-cell suppression), the map-level detection
+(`test_mapa.py`), department-name normalization (`test_normalizar.py`) and the
+`.sav` text repair (`test_reparar.py`).
 
 ## Why this exists
 
-Most statistical offices in Latin America still disseminate census data
-through tools designed in the 1990s. This prototype demonstrates that a safe,
-auditable, LLM-powered query layer over official microdata can be built with
-~300 lines of Python — with disclosure control enforced by code, not by trust
-in the model.
+Most statistical offices in Latin America still disseminate census data through
+tools designed in the 1990s. This prototype shows that a safe, auditable,
+LLM-powered query layer over official microdata — with disclosure control
+enforced by a parser, not by trust in the model — can be built in a few hundred
+lines of Python.
 
 ## Author
 
 Carlos Aloisio — sociologist, statistician and developer (Montevideo, UY).
 Builder of Uruguay's National Observatory on Sexual and Reproductive Health
 (AI-assisted evidence system, Ministry of Public Health / UNFPA, 2025–2026).
+
+Contact: caloisio@gmail.com
 
 ## License
 
