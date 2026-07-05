@@ -3,57 +3,363 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Habla con tu Censo — Censo 2011 en lenguaje natural</title>
+<title>Habla con tu Censo — El Censo 2011 de Uruguay en lenguaje natural</title>
+<meta name="description" content="Preguntale al Censo 2011 del INE Uruguay en español. Solo resultados agregados; el SQL ejecutado se muestra siempre.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; color: #1a1a1a; }
-  h1 { font-size: 1.4rem; }
-  .sub { color: #555; margin-bottom: 24px; }
-  form { display: flex; gap: 8px; }
-  input { flex: 1; padding: 10px; font-size: 1rem; border: 1px solid #bbb; border-radius: 6px; }
-  button { padding: 10px 18px; font-size: 1rem; border: 0; border-radius: 6px; background: #0b5394; color: white; cursor: pointer; }
-  #mapa { height: 440px; margin-top: 24px; border-radius: 8px; border: 1px solid #ddd; }
-  #leyenda { margin-top: 8px; font-size: 0.8rem; color: #555; display: flex; align-items: center; gap: 8px; }
-  #leyenda .barra { height: 12px; width: 160px; border-radius: 3px; background: linear-gradient(to right, rgb(222,235,247), rgb(8,48,107)); }
-  #leyenda .gris { display: inline-block; width: 12px; height: 12px; background: #e0e0e0; border: 1px solid #bbb; border-radius: 2px; }
-  #respuesta { margin-top: 24px; padding: 16px; background: #f4f6f8; border-radius: 8px; white-space: pre-wrap; }
-  #sql { margin-top: 12px; font-family: monospace; font-size: 0.85rem; color: #666; white-space: pre-wrap; }
-  .ejemplos span { display: inline-block; margin: 4px 6px 0 0; padding: 4px 10px; background: #e8eef4; border-radius: 12px; font-size: 0.85rem; cursor: pointer; }
-  #respuesta table { border-collapse: collapse; margin: 8px 0; }
-  #respuesta th, #respuesta td { padding: 8px; border: 1px solid #ddd; }
-  #respuesta th { background: #f0f0f0; }
+/* ---------- Tipografía self-host (sin CDN en runtime, sin build) ---------- */
+@font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:swap;src:url("static/Inter-Regular.woff2") format("woff2");}
+@font-face{font-family:Inter;font-style:normal;font-weight:500;font-display:swap;src:url("static/Inter-Medium.woff2") format("woff2");}
+@font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;src:url("static/Inter-SemiBold.woff2") format("woff2");}
+@font-face{font-family:Inter;font-style:normal;font-weight:700;font-display:swap;src:url("static/Inter-Bold.woff2") format("woff2");}
+
+/* ---------- Paleta: petróleo profundo + acento cálido, neutros con sesgo teal ---------- */
+:root{
+  --ground:#F5F4F0; --surface:#FFFFFF; --surface-2:#EEEEE8; --inset:#F3F2EC;
+  --ink:#16211F; --ink-2:#52605C; --ink-3:#7C8884;
+  --line:#E2E4DE; --line-strong:#D2D5CE;
+  --petroleo:#0E4E4B; --petroleo-700:#0A3A38; --petroleo-600:#0F5B57;
+  --petroleo-50:#E6EFEE;
+  --calido:#BE6636; --calido-700:#A0552B; --calido-tint:#F6E9DF;
+  --warn:#8A5E12; --warn-bg:#FAF0D9; --warn-line:#E8D4A2;
+  --map-lo:#DCEBEA; --map-hi:#0A3A38; --map-null:#D7DAD4;
+  --shadow:0 1px 2px rgba(20,40,38,.05), 0 6px 20px -8px rgba(20,40,38,.12);
+  --focus:#0F5B57;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --ground:#0E1514; --surface:#16201E; --surface-2:#1E2A28; --inset:#111917;
+    --ink:#EAEEEC; --ink-2:#A8B4B0; --ink-3:#7C8884;
+    --line:#273331; --line-strong:#33413E;
+    --petroleo:#3FA69E; --petroleo-700:#12615D; --petroleo-600:#2E938B;
+    --petroleo-50:#16302E;
+    --calido:#E0965F; --calido-700:#C97B43; --calido-tint:#2A1E12;
+    --warn:#E6C578; --warn-bg:#241D0F; --warn-line:#463916;
+    --map-lo:#123B39; --map-hi:#8FD9D1; --map-null:#2A3634;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -12px rgba(0,0,0,.55);
+    --focus:#3FA69E;
+  }
+}
+:root[data-theme="light"]{
+  --ground:#F5F4F0; --surface:#FFFFFF; --surface-2:#EEEEE8; --inset:#F3F2EC;
+  --ink:#16211F; --ink-2:#52605C; --ink-3:#7C8884;
+  --line:#E2E4DE; --line-strong:#D2D5CE;
+  --petroleo:#0E4E4B; --petroleo-700:#0A3A38; --petroleo-600:#0F5B57; --petroleo-50:#E6EFEE;
+  --calido:#BE6636; --calido-700:#A0552B; --calido-tint:#F6E9DF;
+  --warn:#8A5E12; --warn-bg:#FAF0D9; --warn-line:#E8D4A2;
+  --map-lo:#DCEBEA; --map-hi:#0A3A38; --map-null:#D7DAD4;
+  --shadow:0 1px 2px rgba(20,40,38,.05), 0 6px 20px -8px rgba(20,40,38,.12);
+  --focus:#0F5B57;
+}
+:root[data-theme="dark"]{
+  --ground:#0E1514; --surface:#16201E; --surface-2:#1E2A28; --inset:#111917;
+  --ink:#EAEEEC; --ink-2:#A8B4B0; --ink-3:#7C8884;
+  --line:#273331; --line-strong:#33413E;
+  --petroleo:#3FA69E; --petroleo-700:#12615D; --petroleo-600:#2E938B; --petroleo-50:#16302E;
+  --calido:#E0965F; --calido-700:#C97B43; --calido-tint:#2A1E12;
+  --warn:#E6C578; --warn-bg:#241D0F; --warn-line:#463916;
+  --map-lo:#123B39; --map-hi:#8FD9D1; --map-null:#2A3634;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -12px rgba(0,0,0,.55);
+  --focus:#3FA69E;
+}
+
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:Inter,-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;
+  font-size:16px; line-height:1.55; -webkit-font-smoothing:antialiased;
+  font-feature-settings:"cv05","ss01";
+}
+.wrap{max-width:780px; margin:0 auto; padding:0 20px;}
+
+a{color:var(--petroleo-600); text-decoration:none;}
+a:hover{color:var(--calido);}
+:focus-visible{outline:2.5px solid var(--focus); outline-offset:2px; border-radius:4px;}
+
+/* ---------- Header ---------- */
+header{border-bottom:1px solid var(--line); background:var(--surface);}
+.hd{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0;}
+.brand{display:flex; align-items:baseline; gap:10px; min-width:0;}
+.brand .mark{
+  font-weight:700; font-size:1.12rem; letter-spacing:-.02em; color:var(--ink);
+  white-space:nowrap;
+}
+.brand .mark .dot{color:var(--petroleo);}
+.brand .tag{
+  color:var(--ink-3); font-size:.82rem; white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis;
+}
+.hd nav{display:flex; gap:6px; flex-shrink:0;}
+.hd nav a,.hd nav button{
+  font:inherit; font-size:.85rem; color:var(--ink-2); background:none; border:0;
+  padding:6px 10px; border-radius:7px; cursor:pointer; display:inline-flex;
+  align-items:center; gap:6px;
+}
+.hd nav a:hover,.hd nav button:hover{background:var(--surface-2); color:var(--ink);}
+.hd nav svg{width:15px; height:15px;}
+
+/* ---------- Hero / buscador ---------- */
+.hero{padding:40px 0 26px; text-align:center; position:relative;}
+.hero::before{
+  content:""; position:absolute; inset:0 0 auto; height:220px; z-index:0; pointer-events:none;
+  background:radial-gradient(120% 90% at 50% -10%, var(--petroleo-50), transparent 62%);
+}
+.hero > *{position:relative; z-index:1;}
+.hero h1{
+  font-size:clamp(1.55rem,4.4vw,2.05rem); line-height:1.12; letter-spacing:-.028em;
+  margin:0 0 8px; text-wrap:balance;
+}
+.hero p.lead{color:var(--ink-2); margin:0 auto 24px; max-width:46ch; font-size:1rem;}
+form{
+  display:flex; gap:8px; background:var(--surface); border:1px solid var(--line-strong);
+  border-radius:14px; padding:7px 7px 7px 8px; box-shadow:var(--shadow);
+  max-width:640px; margin:0 auto; transition:border-color .15s, box-shadow .15s;
+}
+form:focus-within{border-color:var(--petroleo); box-shadow:0 0 0 3px var(--petroleo-50);}
+form .qi{display:flex; align-items:center; gap:9px; flex:1; min-width:0; padding-left:6px;}
+form .qi svg{width:18px; height:18px; color:var(--ink-3); flex-shrink:0;}
+input#q{
+  flex:1; min-width:0; border:0; background:none; color:var(--ink);
+  font:inherit; font-size:1.02rem; padding:9px 0;
+}
+input#q::placeholder{color:var(--ink-3);}
+input#q:focus{outline:none;}
+button.ask{
+  font:inherit; font-weight:600; font-size:.98rem; color:#fff; background:var(--petroleo);
+  border:0; border-radius:9px; padding:11px 20px; cursor:pointer; white-space:nowrap;
+  transition:background .15s;
+}
+button.ask:hover{background:var(--petroleo-700);}
+button.ask:disabled{opacity:.6; cursor:default;}
+
+.ejemplos{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:16px auto 0; max-width:640px;}
+.ejemplos .lbl{width:100%; color:var(--ink-3); font-size:.76rem; text-transform:uppercase; letter-spacing:.09em; margin-bottom:1px;}
+.chip{
+  font:inherit; font-size:.85rem; color:var(--ink-2); background:var(--surface);
+  border:1px solid var(--line); border-radius:999px; padding:7px 14px; cursor:pointer;
+  transition:all .13s;
+}
+.chip:hover{border-color:var(--petroleo); color:var(--petroleo-600); background:var(--petroleo-50);}
+
+/* ---------- Historial de tarjetas ---------- */
+#historial{display:flex; flex-direction:column; gap:20px; padding:14px 0 8px;}
+.card{
+  background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  box-shadow:var(--shadow); overflow:hidden; animation:rise .35s cubic-bezier(.2,.7,.3,1);
+}
+@keyframes rise{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;}}
+.card > .body{padding:18px 20px 4px;}
+.q-head{display:flex; align-items:flex-start; gap:12px; margin-bottom:12px;}
+.q-head .qmark{
+  flex-shrink:0; width:26px; height:26px; border-radius:8px; background:var(--petroleo-50);
+  color:var(--petroleo-600); display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:.9rem; margin-top:1px;
+}
+.q-head .qtext{font-weight:600; font-size:1.04rem; line-height:1.35; letter-spacing:-.01em;}
+.q-head .qtime{margin-left:auto; color:var(--ink-3); font-size:.74rem; font-variant-numeric:tabular-nums; white-space:nowrap; padding-top:4px;}
+
+/* respuesta markdown */
+.answer{color:var(--ink); font-size:.97rem;}
+.answer > :first-child{margin-top:0;} .answer > :last-child{margin-bottom:0;}
+.answer p{margin:.55em 0;}
+.answer strong{font-weight:600;}
+.answer h1,.answer h2,.answer h3{font-size:1.02rem; margin:1em 0 .4em;}
+.tablewrap{overflow-x:auto; margin:12px 0; border:1px solid var(--line); border-radius:10px;}
+.answer table{border-collapse:collapse; width:100%; font-size:.9rem;}
+.answer th,.answer td{padding:9px 13px; text-align:left; border-bottom:1px solid var(--line);}
+.answer thead th{
+  background:var(--inset); color:var(--ink-2); font-weight:600; font-size:.78rem;
+  text-transform:uppercase; letter-spacing:.04em; white-space:nowrap;
+}
+.answer tbody tr:last-child td{border-bottom:0;}
+.answer tbody tr:nth-child(even) td{background:color-mix(in srgb, var(--inset) 45%, transparent);}
+.answer td{font-variant-numeric:tabular-nums;}
+.answer table td:not(:first-child),.answer table th:not(:first-child){text-align:right;}
+
+/* tarjeta de aviso (error / NO_RESPONDIBLE) */
+.card.warn{border-color:var(--warn-line); background:var(--warn-bg);}
+.card.warn .q-head .qmark{background:color-mix(in srgb,var(--warn) 15%,transparent); color:var(--warn);}
+.card.warn .answer{color:var(--ink);}
+.warn-note{display:flex; gap:10px; align-items:flex-start; color:var(--ink-2); font-size:.92rem;}
+.warn-note svg{width:18px; height:18px; color:var(--warn); flex-shrink:0; margin-top:2px;}
+
+/* mapa */
+.map{height:clamp(340px,52vh,480px); margin-top:16px; background:var(--inset); border-top:1px solid var(--line); border-bottom:1px solid var(--line);}
+.leaflet-container{font-family:inherit; background:var(--inset);}
+.legend{
+  display:flex; align-items:center; flex-wrap:wrap; gap:12px 18px; padding:11px 20px;
+  font-size:.79rem; color:var(--ink-2); background:var(--inset); border-bottom:1px solid var(--line);
+}
+.legend .scale{display:flex; align-items:center; gap:7px;}
+.legend .bar{height:11px; width:130px; border-radius:3px; background:linear-gradient(to right,var(--map-lo),var(--map-hi)); border:1px solid rgba(0,0,0,.08);}
+.legend .swatch{display:inline-block; width:12px; height:12px; border-radius:3px; background:var(--map-null); border:1px solid var(--line-strong); vertical-align:-2px;}
+.legend .supr{display:inline-flex; align-items:center; gap:6px; cursor:help; border-bottom:1px dotted var(--ink-3);}
+.legend b{font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums;}
+
+/* metadatos + acciones */
+.meta{
+  display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; padding:14px 20px;
+  border-top:1px solid var(--line);
+}
+.pill{
+  display:inline-flex; align-items:center; gap:6px; font-size:.77rem; color:var(--ink-2);
+  background:var(--inset); border:1px solid var(--line); border-radius:999px; padding:4px 11px;
+  font-variant-numeric:tabular-nums;
+}
+.pill.supr{color:var(--warn); background:var(--warn-bg); border-color:var(--warn-line); cursor:help;}
+.pill .k{width:6px; height:6px; border-radius:50%; background:var(--petroleo);}
+.meta .spacer{flex:1;}
+.act{
+  font:inherit; font-size:.79rem; color:var(--ink-2); background:none; border:1px solid var(--line);
+  border-radius:8px; padding:6px 11px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  transition:all .13s;
+}
+.act:hover{border-color:var(--petroleo); color:var(--petroleo-600);}
+.act.ok{border-color:var(--petroleo); color:var(--petroleo-600); background:var(--petroleo-50);}
+.act svg{width:14px; height:14px;}
+
+/* SQL desplegable */
+details.sql{border-top:1px solid var(--line);}
+details.sql summary{
+  list-style:none; cursor:pointer; padding:12px 20px; display:flex; align-items:center; gap:9px;
+  font-size:.83rem; color:var(--ink-2); font-weight:500; user-select:none;
+}
+details.sql summary::-webkit-details-marker{display:none;}
+details.sql summary .chev{transition:transform .18s; color:var(--ink-3);}
+details.sql[open] summary .chev{transform:rotate(90deg);}
+details.sql summary:hover{color:var(--ink);}
+.sql-body{padding:0 20px 18px;}
+.sql-bar{display:flex; justify-content:flex-end; margin-bottom:8px;}
+.sql-body pre{
+  margin:0; background:var(--inset); border:1px solid var(--line); border-radius:9px;
+  padding:14px 16px; overflow-x:auto; font-family:var(--mono); font-size:.82rem;
+  line-height:1.5; color:var(--ink); white-space:pre; tab-size:2;
+}
+
+/* spinner / loading */
+.loader{display:flex; align-items:center; gap:12px; color:var(--ink-2); font-size:.95rem; padding:2px 0 8px;}
+.spin{width:18px; height:18px; border-radius:50%; border:2.5px solid var(--line-strong); border-top-color:var(--petroleo); animation:sp .7s linear infinite; flex-shrink:0;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.loader .msg{transition:opacity .3s;}
+
+/* footer */
+footer{border-top:1px solid var(--line); margin-top:34px; padding:24px 0 40px; color:var(--ink-3); font-size:.82rem; line-height:1.7;}
+footer .fwrap{display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center;}
+footer .sep{color:var(--line-strong);}
+
+/* modal cómo funciona */
+dialog{
+  border:1px solid var(--line); border-radius:16px; padding:0; max-width:520px; width:calc(100% - 32px);
+  background:var(--surface); color:var(--ink); box-shadow:0 24px 60px -16px rgba(0,0,0,.4);
+}
+dialog::backdrop{background:rgba(12,20,19,.55); backdrop-filter:blur(2px);}
+.modal-in{padding:26px 26px 24px;}
+.modal-in h2{margin:0 0 4px; font-size:1.15rem; letter-spacing:-.02em;}
+.modal-in .msub{color:var(--ink-3); font-size:.85rem; margin:0 0 18px;}
+ol.steps{list-style:none; counter-reset:s; margin:0; padding:0; display:flex; flex-direction:column; gap:14px;}
+ol.steps li{counter-increment:s; display:flex; gap:13px; align-items:flex-start;}
+ol.steps li::before{
+  content:counter(s); flex-shrink:0; width:25px; height:25px; border-radius:8px;
+  background:var(--petroleo-50); color:var(--petroleo-600); font-weight:700; font-size:.82rem;
+  display:flex; align-items:center; justify-content:center; margin-top:1px;
+}
+ol.steps b{font-weight:600;} ol.steps .d{color:var(--ink-2); font-size:.9rem;}
+.modal-x{position:absolute; top:14px; right:14px; background:var(--surface-2); border:0; width:30px; height:30px; border-radius:8px; cursor:pointer; color:var(--ink-2); font-size:1.1rem; line-height:1;}
+.modal-x:hover{background:var(--line); color:var(--ink);}
+dialog{position:fixed; inset:0; margin:auto;}
+.modal-wrap{position:relative;}
+
+@media (max-width:560px){
+  .brand .tag{display:none;}
+  form{flex-direction:column; padding:8px;}
+  form .qi{padding:4px 6px;}
+  button.ask{width:100%; padding:12px;}
+  .q-head .qtime{display:none;}
+  .card > .body{padding:16px 16px 4px;}
+  .meta,.legend,details.sql summary,.sql-body{padding-left:16px; padding-right:16px;}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important; transition-duration:.001ms !important;}
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 </head>
 <body>
-<h1>Habla con tu Censo</h1>
-<p class="sub">Preguntale al Censo 2011 (INE Uruguay) en español. Solo agregados públicos. El SQL ejecutado se muestra siempre.</p>
 
-<form id="f">
-  <input id="q" placeholder="¿Cuánta gente vive en Salto?" autofocus>
-  <button>Preguntar</button>
-</form>
+<header>
+  <div class="wrap hd">
+    <div class="brand">
+      <span class="mark">Habla con tu Censo<span class="dot">.</span></span>
+      <span class="tag">El Censo 2011 de Uruguay, en lenguaje natural</span>
+    </div>
+    <nav>
+      <button type="button" id="btn-como">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12" y2="17"/></svg>
+        Cómo funciona
+      </button>
+      <a href="https://github.com/caloisio1/habla-con-tu-censo" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2A10 10 0 0 0 8.8 21.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.4-2.2-.2-4.6-1.1-4.6-4.9 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.8-2.4 4.7-4.6 4.9.3.3.6.9.6 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg>
+        GitHub
+      </a>
+    </nav>
+  </div>
+</header>
 
-<div class="ejemplos">
-  <span>¿Cuánta gente vive en Paso de los Toros?</span>
-  <span>Porcentaje de afrodescendientes por departamento</span>
-  <span>Porcentaje de afrodescendientes por barrio de Montevideo</span>
-  <span>Cantidad de hogares con 2 o más NBI por sección censal</span>
-</div>
+<main class="wrap">
+  <section class="hero">
+    <h1>Preguntá. El Censo responde con datos reales.</h1>
+    <p class="lead">Consultá el Censo 2011 del INE Uruguay en español. Cada respuesta muestra el SQL que la generó.</p>
+    <form id="f">
+      <div class="qi">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="q" name="q" autocomplete="off" aria-label="Escribí tu pregunta al Censo 2011" placeholder="¿Cuánta gente vive en Salto?" autofocus>
+      </div>
+      <button class="ask" type="submit">Preguntar</button>
+    </form>
+    <div class="ejemplos" aria-label="Ejemplos de preguntas">
+      <span class="lbl">Probá con un ejemplo</span>
+      <button type="button" class="chip">¿Cuánta gente vive en Paso de los Toros?</button>
+      <button type="button" class="chip">Porcentaje de afrodescendientes por departamento</button>
+      <button type="button" class="chip">Porcentaje de afrodescendientes por barrio de Montevideo</button>
+      <button type="button" class="chip">Cantidad de hogares con 2 o más NBI por sección censal</button>
+    </div>
+  </section>
 
-<div id="mapa" hidden></div>
-<div id="leyenda" hidden>
-  <span>menor</span><span class="barra"></span><span>mayor</span>
-  <span style="margin-left:12px"><span class="gris"></span> sin dato publicable</span>
-</div>
-<div id="respuesta" hidden></div>
-<div id="sql"></div>
+  <section id="historial" aria-live="polite" aria-label="Respuestas"></section>
+</main>
+
+<footer>
+  <div class="wrap fwrap">
+    <span>Datos: <b style="color:var(--ink-2);font-weight:600">Censo 2011, INE Uruguay</b></span>
+    <span class="sep">·</span>
+    <span>Solo resultados agregados; las celdas con menos de 5 casos se suprimen automáticamente</span>
+    <span class="sep">·</span>
+    <a href="https://github.com/caloisio1/habla-con-tu-censo" target="_blank" rel="noopener">Código abierto</a>
+  </div>
+</footer>
+
+<dialog id="modal">
+  <div class="modal-wrap">
+    <button class="modal-x" type="button" aria-label="Cerrar" onclick="document.getElementById('modal').close()">✕</button>
+    <div class="modal-in">
+      <h2>Cómo funciona</h2>
+      <p class="msub">Una respuesta auditable en cuatro pasos.</p>
+      <ol class="steps">
+        <li><div><b>Tu pregunta</b> <span class="d">— la escribís en español, como hablarías con una persona.</span></div></li>
+        <li><div><b>SQL validado</b> <span class="d">— se traduce a una consulta SQL que pasa por un guardrail de seguridad antes de ejecutarse.</span></div></li>
+        <li><div><b>Datos reales</b> <span class="d">— se corre sobre los 3,3 millones de registros del Censo 2011; las celdas con menos de 5 casos se suprimen.</span></div></li>
+        <li><div><b>Respuesta auditable</b> <span class="d">— se redacta citando los números y siempre podés ver el SQL exacto que se ejecutó.</span></div></li>
+      </ol>
+    </div>
+  </div>
+</dialog>
 
 <script>
 const f = document.getElementById('f'), q = document.getElementById('q'),
-      r = document.getElementById('respuesta'), s = document.getElementById('sql'),
-      mapaEl = document.getElementById('mapa'), leyenda = document.getElementById('leyenda');
+      hist = document.getElementById('historial');
 
 // nivel de mapa -> geojson servido desde static/ + propiedad de join + nombre + encuadre
 const MAPA_CFG = {
@@ -67,27 +373,45 @@ const MAPA_CFG = {
                   nombre: p => `CCZ ${p.ccz}`, centro: [-34.86, -56.17], zoom: 11 },
 };
 
-let mapa = null;
+const SUPR_MSG = 'Suprimido por confidencialidad: menos de 5 casos.';
 
-function color(t) {  // escala secuencial (ColorBrewer Blues), t en [0,1]
-  const a = [222, 235, 247], b = [8, 48, 107];
-  const c = a.map((x, i) => Math.round(x + (b[i] - x) * t));
+function color(t){  // escala secuencial teal, t en [0,1], usa las variables de la paleta
+  const cs = getComputedStyle(document.documentElement);
+  const parse = v => v.trim().replace('#','').match(/.{2}/g).map(h=>parseInt(h,16));
+  const a = parse(cs.getPropertyValue('--map-lo')), b = parse(cs.getPropertyValue('--map-hi'));
+  const c = a.map((x,i)=>Math.round(x+(b[i]-x)*t));
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
+function fmt(v){ return Number.isInteger(v) ? v.toLocaleString('es-UY') : v.toFixed(2).replace('.',','); }
+function ahora(){ const d = new Date(); return d.toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}); }
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
-function fmt(v) {
-  return Number.isInteger(v) ? v.toLocaleString('es-UY') : v.toFixed(2);
+// icono svg copiar/check
+const ICO_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+const ICO_OK   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+function copiar(btn, texto, etiqueta){
+  navigator.clipboard.writeText(texto).then(()=>{
+    const orig = btn.innerHTML;
+    btn.innerHTML = ICO_OK + ' Copiado';
+    btn.classList.add('ok');
+    setTimeout(()=>{ btn.innerHTML = orig; btn.classList.remove('ok'); }, 1600);
+  }).catch(()=>{ btn.textContent = 'No se pudo copiar'; });
 }
 
-document.querySelectorAll('.ejemplos span').forEach(el =>
-  el.onclick = () => { q.value = el.textContent; f.requestSubmit(); });
+// envuelve tablas en un contenedor scrollable
+function envolverTablas(cont){
+  cont.querySelectorAll('table').forEach(t=>{
+    if (t.parentElement.classList.contains('tablewrap')) return;
+    const w = document.createElement('div'); w.className='tablewrap';
+    t.replaceWith(w); w.appendChild(t);
+  });
+}
 
-async function renderMapa(m) {
+async function renderMapa(el, m){
   const cfg = MAPA_CFG[m.nivel];
   if (!cfg) return;
-  mapaEl.hidden = false; leyenda.hidden = false;
-  if (mapa) { mapa.remove(); mapa = null; }
-  mapa = L.map(mapaEl);
+  const mapa = L.map(el, {scrollWheelZoom:false});
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     { attribution: '© OpenStreetMap, © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(mapa);
 
@@ -102,37 +426,149 @@ async function renderMapa(m) {
       const v = lookup[String(feat.properties[cfg.prop])];
       const tiene = v !== undefined;
       const t = max > min ? (v - min) / (max - min) : 0.5;
-      return { weight: 1, color: '#888', fillOpacity: 0.8,
-               fillColor: tiene ? color(t) : '#e0e0e0' };
+      return { weight: 1, color: 'rgba(120,130,128,.55)', fillOpacity: 0.82,
+               fillColor: tiene ? color(t) : getComputedStyle(document.documentElement).getPropertyValue('--map-null').trim() };
     },
     onEachFeature: (feat, lyr) => {
       const v = lookup[String(feat.properties[cfg.prop])];
       const nombre = cfg.nombre(feat.properties);
       lyr.bindTooltip(
-        v !== undefined ? `<b>${nombre}</b><br>${fmt(v)}`
-                        : `<b>${nombre}</b><br>sin dato publicable`,
+        v !== undefined ? `<b>${esc(nombre)}</b><br>${fmt(v)}`
+                        : `<b>${esc(nombre)}</b><br><span style="opacity:.75">${SUPR_MSG}</span>`,
         { sticky: true });
     },
   }).addTo(mapa);
 
   if (cfg.centro) mapa.setView(cfg.centro, cfg.zoom);
-  else mapa.fitBounds(capa.getBounds());
+  else mapa.fitBounds(capa.getBounds(), {padding:[12,12]});
+  setTimeout(()=>mapa.invalidateSize(), 60);
+  return {min, max};
 }
 
-f.onsubmit = async (e) => {
+// --- construcción de tarjetas ---
+let uid = 0;
+
+function tarjetaLoading(pregunta){
+  const card = document.createElement('article');
+  card.className = 'card';
+  card.innerHTML = `<div class="body">
+      <div class="q-head">
+        <span class="qmark">?</span>
+        <span class="qtext">${esc(pregunta)}</span>
+        <span class="qtime">${ahora()}</span>
+      </div>
+      <div class="loader"><span class="spin" aria-hidden="true"></span><span class="msg">Generando consulta…</span></div>
+    </div>`;
+  hist.prepend(card);
+  const msgEl = card.querySelector('.msg');
+  const msgs = ['Generando consulta…','Validando la consulta…','Consultando 3,3 millones de registros…','Redactando la respuesta…'];
+  let i = 0;
+  const timer = setInterval(()=>{ i=(i+1)%msgs.length; if(msgEl){ msgEl.style.opacity=0; setTimeout(()=>{msgEl.textContent=msgs[i]; msgEl.style.opacity=1;},300);} }, 2100);
+  return { card, stop:()=>clearInterval(timer) };
+}
+
+function pill(texto, cls){
+  return `<span class="pill ${cls||''}">${cls==='supr'?'':'<span class="k"></span>'}${texto}</span>`;
+}
+
+async function rellenarOK(card, pregunta, j){
+  const id = ++uid;
+  const tieneMapa = !!j.mapa;
+  const nFilas = Array.isArray(j.datos) ? j.datos.length : 0;
+  const supr = j.celdas_suprimidas || 0;
+
+  let metaPills = '';
+  metaPills += pill(`${nFilas.toLocaleString('es-UY')} ${nFilas===1?'fila':'filas'}`);
+  if (supr) metaPills += `<span class="pill supr" title="${SUPR_MSG}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" stroke-linecap="round" stroke-linejoin="round"/></svg>${supr} ${supr===1?'celda suprimida':'celdas suprimidas'}</span>`;
+  metaPills += pill('Censo 2011 · INE');
+
+  card.innerHTML = `<div class="body">
+      <div class="q-head">
+        <span class="qmark">?</span>
+        <span class="qtext">${esc(pregunta)}</span>
+        <span class="qtime">${ahora()}</span>
+      </div>
+      <div class="answer" id="ans-${id}"></div>
+    </div>
+    ${tieneMapa ? `<div class="legend" id="leg-${id}"></div><div class="map" id="map-${id}" role="img" aria-label="Mapa coroplético del resultado"></div>` : ''}
+    <div class="meta">
+      ${metaPills}
+      <span class="spacer"></span>
+      <button class="act copy-ans" type="button">${ICO_COPY} Copiar respuesta</button>
+    </div>
+    ${j.sql ? `<details class="sql"><summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="9 6 15 12 9 18"/></svg> Ver SQL ejecutado</summary>
+      <div class="sql-body"><div class="sql-bar"><button class="act copysql" type="button">${ICO_COPY} Copiar</button></div><pre>${esc(j.sql)}</pre></div></details>` : ''}`;
+
+  const ans = card.querySelector(`#ans-${id}`);
+  ans.innerHTML = marked.parse(j.respuesta || '');
+  envolverTablas(ans);
+
+  card.querySelector('.copy-ans').onclick = e => copiar(e.currentTarget, j.respuesta || '');
+  const cs = card.querySelector('.copysql'); if (cs) cs.onclick = e => copiar(e.currentTarget, j.sql);
+
+  if (tieneMapa){
+    try{
+      const r = await renderMapa(card.querySelector(`#map-${id}`), j.mapa);
+      const leg = card.querySelector(`#leg-${id}`);
+      const rango = r ? `<b>${fmt(r.min)}</b><span class="bar"></span><b>${fmt(r.max)}</b>` : '';
+      leg.innerHTML = `<span class="scale">${rango}</span>
+        <span class="supr" title="${SUPR_MSG}"><span class="swatch"></span> sin dato publicable</span>`;
+    }catch(err){ console.error(err); card.querySelector(`#map-${id}`)?.remove(); card.querySelector(`#leg-${id}`)?.remove(); }
+  }
+}
+
+function rellenarAviso(card, pregunta, j){
+  card.classList.add('warn');
+  card.innerHTML = `<div class="body">
+      <div class="q-head">
+        <span class="qmark">!</span>
+        <span class="qtext">${esc(pregunta)}</span>
+        <span class="qtime">${ahora()}</span>
+      </div>
+      <div class="warn-note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div class="answer">${marked.parse(j.respuesta || 'No se pudo responder la consulta.')}</div>
+      </div>
+    </div>
+    ${j.sql ? `<details class="sql"><summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="9 6 15 12 9 18"/></svg> Ver SQL ejecutado</summary>
+      <div class="sql-body"><div class="sql-bar"><button class="act copysql" type="button">${ICO_COPY} Copiar</button></div><pre>${esc(j.sql)}</pre></div></details>` : ''}`;
+  const cs = card.querySelector('.copysql'); if (cs) cs.onclick = e => copiar(e.currentTarget, j.sql);
+}
+
+async function preguntar(texto){
+  const { card, stop } = tarjetaLoading(texto);
+  const askBtn = f.querySelector('button.ask'); askBtn.disabled = true;
+  try{
+    const res = await fetch('preguntar', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({texto})
+    });
+    const j = await res.json();
+    stop();
+    if (j.ok === false) rellenarAviso(card, texto, j);
+    else await rellenarOK(card, texto, j);
+  }catch(err){
+    stop();
+    rellenarAviso(card, texto, {respuesta:'Hubo un problema de conexión. Probá de nuevo en unos segundos.'});
+    console.error(err);
+  }finally{ askBtn.disabled = false; }
+}
+
+f.onsubmit = e => {
   e.preventDefault();
-  r.hidden = false; r.textContent = 'Consultando…'; s.textContent = '';
-  mapaEl.hidden = true; leyenda.hidden = true;
-  const res = await fetch('preguntar', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({texto: q.value})
-  });
-  const j = await res.json();
-  r.innerHTML = marked.parse(j.respuesta || '');
-  if (j.sql) s.textContent = 'SQL: ' + j.sql;
-  if (j.mapa) { try { await renderMapa(j.mapa); } catch (err) { console.error(err); } }
+  const t = q.value.trim();
+  if (!t) return;
+  preguntar(t);
+  q.value = ''; q.blur();
 };
+
+document.querySelectorAll('.ejemplos .chip').forEach(el =>
+  el.onclick = () => { preguntar(el.textContent.trim()); });
+
+document.getElementById('btn-como').onclick = () => document.getElementById('modal').showModal();
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target.id === 'modal') e.target.close();  // click en backdrop
+});
 </script>
 </body>
 </html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Habla con tu Censo — Censo 2011 en lenguaje natural</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; color: #1a1a1a; }
+  h1 { font-size: 1.4rem; }
+  .sub { color: #555; margin-bottom: 24px; }
+  form { display: flex; gap: 8px; }
+  input { flex: 1; padding: 10px; font-size: 1rem; border: 1px solid #bbb; border-radius: 6px; }
+  button { padding: 10px 18px; font-size: 1rem; border: 0; border-radius: 6px; background: #0b5394; color: white; cursor: pointer; }
+  #mapa { height: 440px; margin-top: 24px; border-radius: 8px; border: 1px solid #ddd; }
+  #leyenda { margin-top: 8px; font-size: 0.8rem; color: #555; display: flex; align-items: center; gap: 8px; }
+  #leyenda .barra { height: 12px; width: 160px; border-radius: 3px; background: linear-gradient(to right, rgb(222,235,247), rgb(8,48,107)); }
+  #leyenda .gris { display: inline-block; width: 12px; height: 12px; background: #e0e0e0; border: 1px solid #bbb; border-radius: 2px; }
+  #respuesta { margin-top: 24px; padding: 16px; background: #f4f6f8; border-radius: 8px; white-space: pre-wrap; }
+  #sql { margin-top: 12px; font-family: monospace; font-size: 0.85rem; color: #666; white-space: pre-wrap; }
+  .ejemplos span { display: inline-block; margin: 4px 6px 0 0; padding: 4px 10px; background: #e8eef4; border-radius: 12px; font-size: 0.85rem; cursor: pointer; }
+  #respuesta table { border-collapse: collapse; margin: 8px 0; }
+  #respuesta th, #respuesta td { padding: 8px; border: 1px solid #ddd; }
+  #respuesta th { background: #f0f0f0; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+</head>
+<body>
+<h1>Habla con tu Censo</h1>
+<p class="sub">Preguntale al Censo 2011 (INE Uruguay) en español. Solo agregados públicos. El SQL ejecutado se muestra siempre.</p>
+
+<form id="f">
+  <input id="q" placeholder="¿Cuánta gente vive en Salto?" autofocus>
+  <button>Preguntar</button>
+</form>
+
+<div class="ejemplos">
+  <span>¿Cuánta gente vive en Paso de los Toros?</span>
+  <span>Porcentaje de afrodescendientes por departamento</span>
+  <span>Porcentaje de afrodescendientes por barrio de Montevideo</span>
+  <span>Cantidad de hogares con 2 o más NBI por sección censal</span>
+</div>
+
+<div id="mapa" hidden></div>
+<div id="leyenda" hidden>
+  <span>menor</span><span class="barra"></span><span>mayor</span>
+  <span style="margin-left:12px"><span class="gris"></span> sin dato publicable</span>
+</div>
+<div id="respuesta" hidden></div>
+<div id="sql"></div>
+
+<script>
+const f = document.getElementById('f'), q = document.getElementById('q'),
+      r = document.getElementById('respuesta'), s = document.getElementById('sql'),
+      mapaEl = document.getElementById('mapa'), leyenda = document.getElementById('leyenda');
+
+// nivel de mapa -> geojson servido desde static/ + propiedad de join + nombre + encuadre
+const MAPA_CFG = {
+  departamento: { archivo: 'static/departamentos.geojson', prop: 'departamento',
+                  nombre: p => p.departamento, centro: null },
+  seccion:      { archivo: 'static/secciones_censales.geojson', prop: 'codsec',
+                  nombre: p => `Sección ${p.seccion} (${p.depto})`, centro: null },
+  barrio:       { archivo: 'static/barrios_montevideo.geojson', prop: 'barrio',
+                  nombre: p => p.barrio, centro: [-34.86, -56.17], zoom: 11 },
+  ccz:          { archivo: 'static/ccz_montevideo.geojson', prop: 'ccz',
+                  nombre: p => `CCZ ${p.ccz}`, centro: [-34.86, -56.17], zoom: 11 },
+};
+
+let mapa = null;
+
+function color(t) {  // escala secuencial (ColorBrewer Blues), t en [0,1]
+  const a = [222, 235, 247], b = [8, 48, 107];
+  const c = a.map((x, i) => Math.round(x + (b[i] - x) * t));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+function fmt(v) {
+  return Number.isInteger(v) ? v.toLocaleString('es-UY') : v.toFixed(2);
+}
+
+document.querySelectorAll('.ejemplos span').forEach(el =>
+  el.onclick = () => { q.value = el.textContent; f.requestSubmit(); });
+
+async function renderMapa(m) {
+  const cfg = MAPA_CFG[m.nivel];
+  if (!cfg) return;
+  mapaEl.hidden = false; leyenda.hidden = false;
+  if (mapa) { mapa.remove(); mapa = null; }
+  mapa = L.map(mapaEl);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    { attribution: '© OpenStreetMap, © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(mapa);
+
+  const vals = m.datos.map(d => d.valor);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const lookup = {};
+  m.datos.forEach(d => { lookup[String(d.clave)] = d.valor; });
+
+  const gj = await (await fetch(cfg.archivo)).json();
+  const capa = L.geoJSON(gj, {
+    style: feat => {
+      const v = lookup[String(feat.properties[cfg.prop])];
+      const tiene = v !== undefined;
+      const t = max > min ? (v - min) / (max - min) : 0.5;
+      return { weight: 1, color: '#888', fillOpacity: 0.8,
+               fillColor: tiene ? color(t) : '#e0e0e0' };
+    },
+    onEachFeature: (feat, lyr) => {
+      const v = lookup[String(feat.properties[cfg.prop])];
+      const nombre = cfg.nombre(feat.properties);
+      lyr.bindTooltip(
+        v !== undefined ? `<b>${nombre}</b><br>${fmt(v)}`
+                        : `<b>${nombre}</b><br>sin dato publicable`,
+        { sticky: true });
+    },
+  }).addTo(mapa);
+
+  if (cfg.centro) mapa.setView(cfg.centro, cfg.zoom);
+  else mapa.fitBounds(capa.getBounds());
+}
+
+f.onsubmit = async (e) => {
+  e.preventDefault();
+  r.hidden = false; r.textContent = 'Consultando…'; s.textContent = '';
+  mapaEl.hidden = true; leyenda.hidden = true;
+  const res = await fetch('preguntar', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({texto: q.value})
+  });
+  const j = await res.json();
+  r.innerHTML = marked.parse(j.respuesta || '');
+  if (j.sql) s.textContent = 'SQL: ' + j.sql;
+  if (j.mapa) { try { await renderMapa(j.mapa); } catch (err) { console.error(err); } }
+};
+</script>
+</body>
+</html>
