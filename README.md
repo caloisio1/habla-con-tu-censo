@@ -10,6 +10,33 @@ from official microdata — never from an LLM's memory.**
 A working prototype of a natural-language query layer for national statistical
 offices, built as a modern alternative to legacy dissemination tools (REDATAM).
 
+<p align="center">
+  <img src="docs/captura-inicio.png" width="820"
+       alt="Landing page with a large search box asking '¿Cuánta gente vive en Salto?' and example-question chips below it">
+</p>
+
+Ask in plain Spanish and get an answer computed from the microdata — with a
+choropleth map when the query is geographic, the valid universe and any
+suppressed cells labelled, and the exact SQL one click away:
+
+<p align="center">
+  <img src="docs/captura-resultado.png" width="600"
+       alt="Result card: '% of Afro-descendants by department' answered with a styled table and a choropleth map of Uruguay, over a 'View executed SQL' toggle">
+</p>
+
+<details>
+<summary>Dark theme (same result)</summary>
+
+<p align="center">
+  <img src="docs/captura-resultado-oscuro.png" width="600"
+       alt="The same result card rendered in the dark theme">
+</p>
+
+</details>
+
+<sub>Light/dark themes, responsive to mobile, and the executed SQL shown on
+every answer.</sub>
+
 ## How it works
 
 ```
