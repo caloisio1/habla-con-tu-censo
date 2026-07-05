@@ -4,3 +4,4 @@ openai>=1.30
 pytest>=8.0
 pyreadstat>=1.2
 dbfread>=2.0
+sqlglot>=25

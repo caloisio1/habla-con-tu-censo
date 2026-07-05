@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from openai import OpenAI
 
+from app import dicc
 from app.sql_guard import (
     validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION,
 )
@@ -37,77 +38,119 @@ class Pregunta(BaseModel):
     texto: str
 
 
-ESQUEMA = """
-Tabla de MICRODATOS: personas(departamento TEXT, sexo TEXT, edad INTEGER,
-                              asc_afro TEXT, asc_principal TEXT, nbi INTEGER,
-                              hogar_key TEXT, SECC TEXT, LOC TEXT,
-                              BARRIO85 TEXT, CCZ INTEGER,
-                              codsec INTEGER, codloc INTEGER)
-Tabla de REFERENCIA: localidades(codloc INTEGER, nombre TEXT, departamento TEXT)
-- Una fila = una persona censada (Censo 2011, INE Uruguay).
-- departamento: uno de estos 19 valores exactos (siempre en mayúsculas y SIN tildes):
-  'MONTEVIDEO','ARTIGAS','CANELONES','CERRO LARGO','COLONIA','DURAZNO',
-  'FLORES','FLORIDA','LAVALLEJA','MALDONADO','PAYSANDU','RIO NEGRO',
-  'RIVERA','ROCHA','SALTO','SAN JOSE','SORIANO','TACUAREMBO',
-  'TREINTA Y TRES'
-- sexo: 'Hombres' | 'Mujeres'
-- edad: edad en años cumplidos (0 a 110)
-- asc_afro: 'Si' | 'No' | NULL. Es la MENCIÓN de ascendencia afro o negra.
-  NULL = no relevado o imputado. "Afrodescendiente"/"afro" a secas = asc_afro='Si'.
-- asc_principal: ascendencia principal declarada. Valores: 'Afro o Negra',
-  'Asiática o Amarilla','Blanca','Indígena','Otra','Ninguna', o NULL.
-  Solo la responden quienes declararon MÁS DE UNA ascendencia; es una pregunta
-  DISTINTA de la mención (asc_afro). No la uses para contar afrodescendientes.
-- nbi: cantidad de Necesidades Básicas Insatisfechas del HOGAR (se repite en
-  cada integrante del hogar). Valores 0,1,2,3 donde 3 = "3 o MÁS" (variable
-  topeada: NO existe 4 ni más). NULL = no relevado / vivienda colectiva /
-  secreto estadístico del INE. Preguntas por "más de 3 NBI" NO son respondibles.
-- hogar_key: identificador de hogar. SOLO puede aparecer dentro de
-  COUNT(DISTINCT hogar_key). No lo pongas en SELECT, WHERE, GROUP BY ni ORDER BY.
-- codsec: código de sección censal (departamento*100 + sección). Válido en salida.
-- codloc: código de localidad (departamento*1000 + localidad). Se usa para el
-  JOIN con localidades: personas.codloc = localidades.codloc.
-- BARRIO85: nombre del barrio, SOLO Montevideo (capitalización tipo
-  'Ciudad Vieja'). Válido en salida.
-- CCZ: número de centro comunal zonal, SOLO Montevideo. Válido en salida.
-- localidades.nombre: nombre de la localidad en MAYÚSCULAS y SIN tilde
-  (ej: 'PASO DE LOS TOROS', 'BELLA UNION'). Preguntas por una localidad se
-  responden con JOIN localidades ON personas.codloc = localidades.codloc y
-  filtro por localidades.nombre.
+# Capa 1: columnas DERIVADAS legibles (semántica v3). El LLM las prefiere sobre
+# las crudas equivalentes. Capa 2: las 145 variables crudas (dicc.esquema_variables()).
+ESQUEMA_LEGIBLE = """Una fila = una persona censada (Censo 2011, INE Uruguay).
+
+TABLA personas: 145 variables CRUDAS del INE (listadas abajo) + estas columnas
+DERIVADAS, legibles, que DEBÉS PREFERIR sobre sus equivalentes crudas:
+- departamento TEXT: 19 valores exactos, MAYÚSCULAS y SIN tildes:
+  'MONTEVIDEO','ARTIGAS','CANELONES','CERRO LARGO','COLONIA','DURAZNO','FLORES',
+  'FLORIDA','LAVALLEJA','MALDONADO','PAYSANDU','RIO NEGRO','RIVERA','ROCHA',
+  'SALTO','SAN JOSE','SORIANO','TACUAREMBO','TREINTA Y TRES'. (Usá departamento, no DPTO.)
+- sexo TEXT: 'Hombres' | 'Mujeres'. (Usá sexo, no PERPH02.)
+- edad INTEGER: años cumplidos, 0 a 110. (Usá edad, no PERNA01.)
+- asc_afro TEXT: 'Si' | 'No' | NULL. MENCIÓN de ascendencia afro o negra.
+  "afrodescendiente"/"afro" = asc_afro='Si'. NULL = perdido. (Preferí sobre PERER01_1.)
+- asc_principal TEXT: 'Afro o Negra','Asiática o Amarilla','Blanca','Indígena',
+  'Otra','Ninguna' o NULL. Solo la responden quienes declararon MÁS DE UNA
+  ascendencia; es DISTINTA de la mención: NO la uses para contar afrodescendientes.
+- nbi INTEGER: cantidad de NBI del HOGAR, 0..3 (3 = "3 o MÁS"; topeada, no hay 4).
+  Se repite en cada integrante del hogar. NULL = perdido. (Preferí sobre NBI_CANTIDAD.)
+- hogar_key TEXT: identificador de hogar (= ID_VIVIENDA || '-' || HOGID).
+- vivienda_key TEXT: identificador de vivienda (= ID_VIVIENDA).
+- codsec INTEGER: código de sección censal (departamento*100 + SECC). Válido en salida.
+- codloc INTEGER: código de localidad (departamento*1000 + LOC). Para el JOIN con localidades.
+- BARRIO85 TEXT: nombre del barrio, SOLO Montevideo ('Ciudad Vieja'). Válido en salida.
+- CCZ INTEGER: centro comunal zonal, SOLO Montevideo. Válido en salida.
+
+TABLA localidades(codloc INTEGER, nombre TEXT, departamento TEXT): referencia.
+  nombre en MAYÚSCULAS y SIN tilde ('PASO DE LOS TOROS','BELLA UNION'). Preguntas por
+  una localidad -> JOIN localidades ON personas.codloc = localidades.codloc y filtro
+  por localidades.nombre."""
+
+REGLAS = """Reglas estrictas:
+- Devolvé SOLO la consulta SQL (dialecto SQLite), sin explicaciones ni markdown.
+- Solo SELECT y SIEMPRE agregado: cada columna del SELECT externo es un agregado
+  (COUNT/SUM/…) o una columna del GROUP BY. Nunca devuelvas filas individuales.
+- Toda consulta debe incluir al menos un COUNT.
+
+UNIDADES DE CONTEO (elegí el alias según lo que se pregunta):
+- personas  -> COUNT(*) AS personas
+- hogares   -> COUNT(DISTINCT hogar_key) AS hogares
+- viviendas -> COUNT(DISTINCT vivienda_key) AS viviendas
+Las variables de HOGAR (HOG*, nbi) y de VIVIENDA (VIV*) se REPITEN en cada integrante;
+para contar hogares o viviendas es OBLIGATORIO COUNT(DISTINCT ...). hogar_key y
+vivienda_key en el SELECT externo SOLO dentro de COUNT(DISTINCT ...); en subconsultas,
+WHERE, JOIN y GROUP BY internos son libres.
+
+PERDIDOS: los códigos anotados con NR/NC/IG/SD/SE (ver leyenda arriba) y los NULL son
+PERDIDOS: EXCLUILOS SIEMPRE de conteos, totales y denominadores (filtrá esos códigos o
+IS NOT NULL). Un código NO anotado con esas siglas es una categoría VÁLIDA aunque sea 8
+o 9. En un porcentaje, el denominador debe excluir los perdidos de esa variable. NUNCA
+uses la población total como denominador de una variable con perdidos.
+
+PORCENTAJES: la métrica es el porcentaje (primera métrica del SELECT). Si querés que la
+celda sea suprimible, agregá el conteo válido como columna aparte con alias AS n_validos
+(no 'personas'/'hogares', para no confundir el mapa).
+
+LOCALIDADES: preguntas por una localidad -> JOIN localidades por codloc y filtro por
+localidades.nombre en MAYÚSCULAS y SIN tilde.
+
+PATRONES DE MAPA (desglose geográfico): la clave geográfica va como PRIMERA columna y la
+métrica como segunda.
+- "... por departamento"   -> GROUP BY departamento
+- "... por sección censal" -> GROUP BY codsec
+- "... por barrio"         -> GROUP BY BARRIO85 con WHERE departamento='MONTEVIDEO'
+- "... por CCZ"            -> GROUP BY CCZ con WHERE departamento='MONTEVIDEO'
+BARRIO85 y CCZ existen SOLO en Montevideo: barrio/CCZ de otro departamento -> NO_RESPONDIBLE.
+
+FRECUENCIAS de una variable de hogar o vivienda:
+- hogares por categoría -> COUNT(DISTINCT hogar_key) ... GROUP BY <var>
+- personas que viven en hogares con esa característica -> COUNT(*)
+
+PERID (número de persona dentro del hogar): "una fila por hogar" -> WHERE PERID=1.
+Tamaño del hogar: preferí HOGPR01 (cantidad de personas en el hogar).
+
+CONSULTAS JERÁRQUICAS (condición sobre OTROS miembros del hogar):
+- "personas en hogares donde AL MENOS UN miembro cumple X" ->
+    SELECT COUNT(*) AS personas FROM personas
+    WHERE hogar_key IN (SELECT hogar_key FROM personas WHERE X)
+- "hogares con AL MENOS N miembros que cumplen X" ->
+    SELECT COUNT(DISTINCT hogar_key) AS hogares FROM personas WHERE hogar_key IN (
+      SELECT hogar_key FROM personas WHERE X GROUP BY hogar_key HAVING COUNT(*) >= N)
+
+Otras aclaraciones:
+- nbi está topeada en 3 ("3 o más"); "más de 3 NBI" NO es respondible.
+- afrodescendiente = asc_afro='Si'.
+- Las variables crudas con nombre no ASCII (p. ej. "Años_estudio", "NBI_EDUCACIÓN")
+  van entre comillas dobles.
+- VIVIENDAS DESOCUPADAS: esta base son los microdatos de PERSONAS y solo contiene
+  viviendas OCUPADAS (VIVVO03 = 1 o 2). Preguntas por viviendas DESOCUPADAS, vacantes,
+  vacías o "para alquilar/vender" (VIVVO03 3-7) NO son respondibles con estos datos ->
+  devolvé exactamente: NO_RESPONDIBLE_VIVIENDAS
+- Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE"""
+
+PROMPT_SQL = f"""Sos un traductor de preguntas en español a SQL (dialecto SQLite) sobre \
+el Censo 2011 de Uruguay.
+{ESQUEMA_LEGIBLE}
+
+VARIABLES CRUDAS DEL INE (nombre | etiqueta | códigos). Usá el CÓDIGO, no la etiqueta
+(ej.: WHERE VIVVO03=3). Preferí las columnas derivadas de arriba cuando exista una equivalente.
+{dicc.LEYENDA_PERDIDOS}
+{dicc.esquema_variables()}
+
+{REGLAS}
 """
 
-PROMPT_SQL = f"""Sos un traductor de preguntas en español a SQL (dialecto SQLite).
-Esquema disponible:
-{ESQUEMA}
-Reglas estrictas:
-- Devolvé SOLO la consulta SQL, sin explicaciones ni markdown.
-- Solo SELECT, y SIEMPRE agregado. Nunca devuelvas filas individuales.
-- UNIDADES y ALIAS OBLIGATORIOS:
-  * Preguntas sobre PERSONAS -> COUNT(*) AS personas
-  * Preguntas sobre HOGARES  -> COUNT(DISTINCT hogar_key) AS hogares
-    (obligatorio para hogares porque nbi se repite en cada integrante del hogar).
-- PERDIDOS: los NULL se excluyen SIEMPRE de conteos, totales y denominadores.
-  Al calcular proporciones de una variable con perdidos, el denominador debe
-  filtrar sus NULL. Ej: % afro = personas con asc_afro='Si' sobre personas con
-  asc_afro IS NOT NULL. NUNCA uses la población total como denominador de una
-  variable que tiene perdidos.
-- Podés usar WHERE (edad, departamento, sexo, asc_afro, asc_principal, nbi,
-  codsec, BARRIO85, CCZ, codloc), GROUP BY y ORDER BY.
-- LOCALIDADES: preguntas por una localidad (ej. "Paso de los Toros", "Bella
-  Unión") -> JOIN localidades ON personas.codloc = localidades.codloc y filtrá
-  por localidades.nombre en MAYÚSCULAS y SIN tilde. Las localidades SÍ son
-  respondibles.
-- PATRONES DE MAPA (cuando la pregunta pida un desglose geográfico):
-  * "... por departamento"    -> GROUP BY departamento
-  * "... por sección censal"  -> GROUP BY codsec
-  * "... por barrio"          -> GROUP BY BARRIO85 con WHERE departamento='MONTEVIDEO'
-  * "... por CCZ"             -> GROUP BY CCZ con WHERE departamento='MONTEVIDEO'
-  En estos casos poné la clave geográfica (departamento / codsec / BARRIO85 / CCZ)
-  como PRIMERA columna del SELECT y la métrica (conteo o porcentaje) como segunda.
-- BARRIO85 y CCZ existen SOLO en Montevideo: preguntas de barrio o CCZ para otro
-  departamento -> devolvé exactamente NO_RESPONDIBLE.
-- Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE
-"""
+
+MENSAJE_VIVIENDAS_DESOCUPADAS = (
+    "Esta base contiene los microdatos de PERSONAS del Censo 2011, que solo "
+    "incluyen viviendas ocupadas: no puedo contar viviendas desocupadas ni "
+    "vacantes. El stock de viviendas desocupadas está en la base de VIVIENDAS "
+    "del censo, que todavía no está cargada en este sistema. Sí puedo responder, "
+    "en cambio, sobre viviendas ocupadas por departamento o por localidad."
+)
 
 
 _DEPTOS_CON_TILDE = {
@@ -236,6 +279,9 @@ def construir_mapa(sql: str, filas: list) -> dict | None:
 def preguntar(p: Pregunta):
     sql_crudo = generar_sql(p.texto)
 
+    if sql_crudo == "NO_RESPONDIBLE_VIVIENDAS":
+        return {"ok": False, "respuesta": MENSAJE_VIVIENDAS_DESOCUPADAS}
+
     if sql_crudo == "NO_RESPONDIBLE":
         return {
             "ok": False,
@@ -245,7 +291,7 @@ def preguntar(p: Pregunta):
     sql_crudo = normalizar_departamentos(sql_crudo)
 
     try:
-        sql_seguro = validar(sql_crudo)
+        sql_seguro, columnas_conteo = validar(sql_crudo)
     except SQLNoSeguro as e:
         # The guardrail fired: we do NOT execute, we do NOT improvise an answer.
         return {"ok": False, "respuesta": f"Consulta rechazada por seguridad: {e}"}
@@ -254,7 +300,7 @@ def preguntar(p: Pregunta):
         con.row_factory = sqlite3.Row
         filas = [dict(f) for f in con.execute(sql_seguro).fetchall()]
 
-    filas, suprimidas = suprimir_celdas_chicas(filas)
+    filas, suprimidas = suprimir_celdas_chicas(filas, columnas_conteo)
 
     if not filas:
         return {

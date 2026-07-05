@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
 .env
-datos/censo.db
+datos/censo*.db
 datos/personas.csv
 .pytest_cache/
 venv/
