@@ -27,7 +27,10 @@ from app.sql_guard import (
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
 
-client = OpenAI()  # requires OPENAI_API_KEY in environment
+# Bounded timeout: without it, a hung/half-closed LLM response wedges the worker
+# thread indefinitely and freezes the app (incident 2026-07-06). 60s per request
+# (connect/read/write/pool) + bounded retries.
+client = OpenAI(timeout=60.0, max_retries=2)  # requires OPENAI_API_KEY in environment
 app = FastAPI(title="Habla con tu Censo")
 
 # Sirve los geojson de mapas (relativo a la página, funciona tras nginx /censo/).
