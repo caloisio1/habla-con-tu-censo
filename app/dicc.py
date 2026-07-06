@@ -132,3 +132,21 @@ def esquema_variables() -> str:
         else:
             lineas.append(f"- {nombre} | {etiqueta}")
     return "\n".join(lineas)
+
+
+def leyenda_de(nombres) -> str:
+    """Subconjunto de esquema_variables() para SOLO las variables crudas cuyo
+    nombre está en `nombres`. Sirve para inyectarle al redactor la leyenda de
+    codificaciones acotada a lo que aparece en el SQL ejecutado (no las 145)."""
+    quiero = {n.lower() for n in nombres}
+    lineas = []
+    for v in variables():
+        if v["nombre"].lower() not in quiero:
+            continue
+        etiqueta = (v["etiqueta"] or "").strip()
+        vl = v.get("value_labels") or {}
+        if vl:
+            lineas.append(f"- {v['nombre']} | {etiqueta} | {_fmt_codigos(vl)}")
+        else:
+            lineas.append(f"- {v['nombre']} | {etiqueta}")
+    return "\n".join(lineas)

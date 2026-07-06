@@ -183,15 +183,70 @@ def generar_sql(pregunta: str) -> str:
     return r.choices[0].message.content.strip()
 
 
-def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int) -> str:
+# Semántica de las columnas DERIVADAS cuya codificación NO es obvia (topeadas,
+# ascendencia). Es la MISMA información que ya usa el generador de SQL (ver
+# ESQUEMA_LEGIBLE); se la damos al redactor para que narre sin malinterpretar los
+# códigos ni "auditar" un SQL correcto. El diccionario crudo no la trae porque
+# estas columnas son derivadas.
+_SEMANTICA_DERIVADAS = {
+    "nbi": ('nbi = cantidad de NBI del hogar, TOPEADA en 3: el valor 3 significa '
+            '"3 o MÁS" (no existe 4). Es del hogar y se repite en cada integrante.'),
+    "asc_afro": ("asc_afro = mención de ascendencia afro ('Si'/'No'/NULL); "
+                 "afrodescendiente = 'Si'. NULL = perdido, no se cuenta."),
+    "asc_principal": ("asc_principal = ascendencia principal; SOLO la declaran quienes "
+                      "mencionaron más de una ascendencia; NO sirve para contar afro."),
+}
+
+
+def unidad_conteo(columnas_conteo: list) -> str:
+    """Unidad de análisis de la consulta según el alias de la columna de conteo
+    (personas / hogares / viviendas). Para nombrar la nota de supresión y la
+    narración con la unidad correcta, no 'personas' por defecto."""
+    cols = {c.lower() for c in columnas_conteo}
+    if "hogares" in cols:
+        return "hogares"
+    if "viviendas" in cols:
+        return "viviendas"
+    return "personas"
+
+
+def leyenda_codificaciones(sql: str, columnas_conteo: list) -> str:
+    """Leyenda COMPACTA de codificaciones para el redactor: SOLO las variables
+    (derivadas y crudas) presentes en el SQL ejecutado. Filtrar por consulta
+    mantiene acotado el costo en tokens (no se inyectan las 145 variables)."""
+    sql_low = sql.lower()
+    lineas = [
+        "Unidad de conteo: personas=COUNT(*); hogares=COUNT(DISTINCT hogar_key); "
+        "viviendas=COUNT(DISTINCT vivienda_key). Alias de conteo de esta consulta: "
+        + (", ".join(columnas_conteo) or "n/d") + "."
+    ]
+    for col, txt in _SEMANTICA_DERIVADAS.items():
+        if re.search(rf"\b{col}\b", sql_low):
+            lineas.append(txt)
+    presentes = [v["nombre"] for v in dicc.variables()
+                 if re.search(rf"\b{re.escape(v['nombre'].lower())}\b", sql_low)]
+    crudas = dicc.leyenda_de(presentes)
+    if crudas:
+        lineas.append(crudas)
+    return "\n".join(lineas)
+
+
+def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
+                       columnas_conteo: list) -> str:
+    unidad = unidad_conteo(columnas_conteo)
     nota = (
-        f"\nNota: {suprimidas} celda(s) con menos de {UMBRAL_SUPRESION} personas "
+        f"\nNota: {suprimidas} celda(s) con menos de {UMBRAL_SUPRESION} {unidad} "
         "fueron suprimidas por confidencialidad estadística."
         if suprimidas else ""
     )
     r = client.chat.completions.create(
         model=MODELO,
-        max_completion_tokens=1000,
+        # El redactor solo NARRA (no razona): con el razonamiento por defecto de
+        # gpt-5.5 las preguntas de mapa consumían todo el presupuesto y devolvían
+        # respuesta VACÍA (finish=length). reasoning_effort='low' lo evita de raíz
+        # (y baja costo/latencia); el tope holgado es margen, el modelo corta al terminar.
+        reasoning_effort="low",
+        max_completion_tokens=2000,
         messages=[
             {
                 "role": "system",
@@ -199,11 +254,23 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int) ->
                     "Respondé la pregunta del usuario usando EXCLUSIVAMENTE los datos "
                     "provistos. Si los datos no alcanzan, decilo. Citá la fuente: "
                     "'Censo 2011, INE Uruguay'. Sé breve y preciso.\n"
+                    "Tu función es NARRAR los resultados. NO auditás, corregís ni "
+                    "critiques la consulta SQL: asumila correcta y contá lo que devolvió.\n"
+                    "MAPAS: si la consulta agrupa por una unidad geográfica (departamento, "
+                    "sección censal, barrio, CCZ), el frontend DIBUJA el mapa coroplético "
+                    "automáticamente. NUNCA digas que no podés mostrar un mapa ni que faltan "
+                    "geometrías: el mapa se muestra solo.\n"
+                    f"UNIDAD DE ANÁLISIS de esta consulta: {unidad}. Nombrá esa unidad "
+                    "(personas, hogares o viviendas) al narrar y en la nota de supresión; "
+                    "no digas 'personas' por defecto.\n"
                     "Si el universo de la consulta excluye perdidos (valores NULL: "
                     "no relevado, viviendas colectivas o secreto estadístico), aclaralo "
                     "explícitamente (ej.: 'sobre N personas con respuesta válida'). "
                     "Nunca presentes un porcentaje como si el denominador fuera toda la "
                     "población cuando la variable tiene perdidos.\n"
+                    "CODIFICACIONES de esta consulta (respetalas al narrar; p. ej. una "
+                    "variable topeada en 3 significa '3 o más'):\n"
+                    + leyenda_codificaciones(sql, columnas_conteo) + "\n"
                     "Contexto metodológico (usalo solo si es pertinente): el Censo 2011 "
                     "fue el primer censo de derecho de Uruguay (cuenta a las personas en "
                     "su residencia habitual), con fecha de referencia 4 de octubre de 2011. "
@@ -314,7 +381,7 @@ def preguntar(p: Pregunta):
 
     respuesta = {
         "ok": True,
-        "respuesta": redactar_respuesta(p.texto, sql_seguro, filas, suprimidas),
+        "respuesta": redactar_respuesta(p.texto, sql_seguro, filas, suprimidas, columnas_conteo),
         "sql": sql_seguro,   # transparency: the executed SQL is always shown
         "datos": filas,
         "celdas_suprimidas": suprimidas,
