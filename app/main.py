@@ -21,11 +21,20 @@ from openai import OpenAI
 
 from app import dicc
 from app.sql_guard import (
-    validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION,
+    validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO,
 )
+import consultar_2023   # motor Censo 2023 (ponderado): interfaz preguntar(texto)
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
+
+# Línea fija que acompaña las cifras de PERSONAS del Censo 2023 (estimaciones del
+# censo ponderado). Se agrega SOLO cuando la métrica es SUM(W) — no en viviendas
+# ni hogares, que son conteos exactos.
+PONDERACION_2023 = (
+    "Cifras de personas del Censo 2023: estimaciones basadas en el censo ponderado del INE."
+)
+_RX_SUMW = re.compile(r"\bsum\s*\(\s*[^)]*\bw\b", re.I)
 
 # Bounded timeout: without it, a hung/half-closed LLM response wedges the worker
 # thread indefinitely and freezes the app (incident 2026-07-06). 60s per request
@@ -39,6 +48,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 class Pregunta(BaseModel):
     texto: str
+    censo: str = "2023"   # censo por defecto de la interfaz pública
 
 
 # Capa 1: columnas DERIVADAS legibles (semántica v3). El LLM las prefiere sobre
@@ -235,12 +245,20 @@ def leyenda_codificaciones(sql: str, columnas_conteo: list) -> str:
 
 
 def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
-                       columnas_conteo: list) -> str:
+                       columnas_conteo: list, truncado: bool = False) -> str:
     unidad = unidad_conteo(columnas_conteo)
     nota = (
         f"\nNota: {suprimidas} celda(s) con menos de {UMBRAL_SUPRESION} {unidad} "
         "fueron suprimidas por confidencialidad estadística."
         if suprimidas else ""
+    )
+    # (d) Si el resultado quedó recortado por el LIMIT, el redactor NO debe presentar
+    # extremos (máximo/mínimo/único) como si fueran del universo completo.
+    aviso_trunc = (
+        "\nATENCIÓN: los resultados están RECORTADOS por un límite de filas (cláusula "
+        "LIMIT): NO son el universo completo. No afirmes que un valor es el máximo, el "
+        "mínimo, el mayor, el menor ni el único; describí solo lo que muestran las filas."
+        if truncado else ""
     )
     r = client.chat.completions.create(
         model=MODELO,
@@ -264,8 +282,14 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
                     "automáticamente. NUNCA digas que no podés mostrar un mapa ni que faltan "
                     "geometrías: el mapa se muestra solo.\n"
                     f"UNIDAD DE ANÁLISIS de esta consulta: {unidad}. Nombrá esa unidad "
-                    "(personas, hogares o viviendas) al narrar y en la nota de supresión; "
-                    "no digas 'personas' por defecto.\n"
+                    "(personas, hogares o viviendas) al narrar; no digas 'personas' por defecto.\n"
+                    "NO escribas ninguna nota, aclaración ni frase sobre celdas suprimidas, "
+                    "confidencialidad o secreto estadístico: el sistema agrega esa nota "
+                    "automáticamente al final; no la escribas vos ni la repitas.\n"
+                    "Las cifras del Censo 2011 son CONTEOS EXACTOS de los microdatos: NO uses "
+                    "'aproximadamente', 'alrededor de', 'unos/unas' ni 'estimación' para "
+                    "presentarlas (fuera del contexto metodológico general de omisión censal).\n"
+                    f"{aviso_trunc}\n"
                     "Si el universo de la consulta excluye perdidos (valores NULL: "
                     "no relevado, viviendas colectivas o secreto estadístico), aclaralo "
                     "explícitamente (ej.: 'sobre N personas con respuesta válida'). "
@@ -285,7 +309,7 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
             },
             {
                 "role": "user",
-                "content": f"Pregunta: {pregunta}\nSQL ejecutado: {sql}\nResultados: {filas}{nota}",
+                "content": f"Pregunta: {pregunta}\nSQL ejecutado: {sql}\nResultados: {filas}",
             },
         ],
     )
@@ -345,9 +369,10 @@ def construir_mapa(sql: str, filas: list) -> dict | None:
     return {"nivel": nivel, "datos": datos}
 
 
-@app.post("/preguntar")
-def preguntar(p: Pregunta):
-    sql_crudo = generar_sql(p.texto)
+def responder_2011(texto: str) -> dict:
+    """Pipeline del motor 2011 (lo usa el servicio unificado cuando el selector elige 2011).
+    Abre censo.db en SOLO LECTURA (la app nunca escribe la base)."""
+    sql_crudo = generar_sql(texto)
 
     if sql_crudo == "NO_RESPONDIBLE_VIVIENDAS":
         return {"ok": False, "respuesta": MENSAJE_VIVIENDAS_DESOCUPADAS}
@@ -366,9 +391,13 @@ def preguntar(p: Pregunta):
         # The guardrail fired: we do NOT execute, we do NOT improvise an answer.
         return {"ok": False, "respuesta": f"Consulta rechazada por seguridad: {e}"}
 
-    with sqlite3.connect(DB_PATH) as con:
+    with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True) as con:
         con.row_factory = sqlite3.Row
         filas = [dict(f) for f in con.execute(sql_seguro).fetchall()]
+
+    # Si las filas devueltas alcanzan el tope del LIMIT, el resultado puede estar
+    # recortado -> se avisa al redactor para que no narre extremos como universales (d).
+    truncado = len(filas) >= LIMITE_MAXIMO
 
     filas, suprimidas = suprimir_celdas_chicas(filas, columnas_conteo)
 
@@ -384,7 +413,7 @@ def preguntar(p: Pregunta):
 
     respuesta = {
         "ok": True,
-        "respuesta": redactar_respuesta(p.texto, sql_seguro, filas, suprimidas, columnas_conteo),
+        "respuesta": redactar_respuesta(texto, sql_seguro, filas, suprimidas, columnas_conteo, truncado),
         "sql": sql_seguro,   # transparency: the executed SQL is always shown
         "datos": filas,
         "celdas_suprimidas": suprimidas,
@@ -396,6 +425,22 @@ def preguntar(p: Pregunta):
         respuesta["mapa"] = mapa
 
     return respuesta
+
+
+@app.post("/preguntar")
+def preguntar(p: Pregunta):
+    """Interfaz pública única. Despacha al motor según el censo elegido en el
+    selector del frontend (por defecto 2023)."""
+    if p.censo == "2011":
+        return responder_2011(p.texto)
+
+    # Censo 2023 (ponderado). La línea de ponderación se agrega SOLO cuando la
+    # métrica es SUM(W) (personas); viviendas y hogares son conteos exactos (regla c).
+    r = consultar_2023.preguntar(p.texto)
+    r.pop("veredicto", None)
+    if r.get("ok") and _RX_SUMW.search(r.get("sql") or ""):
+        r["respuesta"] = r.get("respuesta", "") + "\n\n_" + PONDERACION_2023 + "_"
+    return r
 
 
 @app.get("/")

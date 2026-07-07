@@ -1,10 +1,10 @@
 # Habla con tu Censo
 
-*Talk to your Census — natural-language interface over Uruguay's 2011 census microdata*
+*Talk to your Census — natural-language interface over Uruguay's census microdata (2011 & 2023)*
 
-**Ask Uruguay's 2011 Census questions in plain Spanish. Answers are computed
-from the official microdata — 3,285,824 person records — never from an LLM's
-memory, and the executed SQL is shown on every answer.**
+**Ask Uruguay's 2011 and 2023 Censuses questions in plain Spanish. Pick the
+census with a selector; answers are computed from the official microdata —
+never from an LLM's memory — and the executed SQL is shown on every answer.**
 
 **Live demo: https://srv1236510.hstgr.cloud/**
 
@@ -42,12 +42,21 @@ every answer.</sub>
 ## What it is
 
 A conversational interface over the **person-level microdata of Uruguay's 2011
-Census** (INE). The queryable table, `personas`, holds one row per person —
-**3,285,824 records** across **155 columns**: the **145 raw INE variables**
-(kept with their original codes) plus readable **derived columns**
-(`departamento`, `sexo`, `edad`, `asc_afro`, `asc_principal`, `nbi`, `codsec`,
-`codloc`) and structural keys (`hogar_key`, `vivienda_key`). A small
-`localidades` reference table (615 localities) resolves place names.
+and 2023 Censuses** (INE). A selector in the interface chooses the census;
+**2023 is the default**. Each answer is tagged with the census it came from.
+
+- **2011** — the `personas` table holds one row per person, **3,285,824 records**
+  across **155 columns**: the **145 raw INE variables** (kept with their original
+  codes) plus readable **derived columns** (`departamento`, `sexo`, `edad`,
+  `asc_afro`, `asc_principal`, `nbi`, `codsec`, `codloc`) and structural keys
+  (`hogar_key`, `vivienda_key`). A `localidades` reference table resolves place
+  names. Counts are **exact**.
+- **2023 (weighted)** — the INE's weighted census. Person figures are
+  **estimates**: the published number is `SUM(W)` over the weight variable, so the
+  interface rounds them and labels them as weighted estimates. Households
+  (`COUNT(DISTINCT hogar_key)`) and dwellings (a separate `viviendas_2023` table)
+  are **exact counts**. Place names resolve through the official nomenclator
+  (departments, localities, census tracts and segments, Montevideo neighbourhoods).
 
 A question in Spanish is translated to SQL by an LLM, the SQL is validated by a
 real parser, executed over SQLite, disclosure-controlled, and only then turned
@@ -110,11 +119,13 @@ question (ES) → LLM writes SQL → sqlglot validation gate → SQLite over mic
 
 **FastAPI + SQLite + OpenAI + Leaflet**, ~vanilla single-page front-end (no build
 step). The schema text the model sees, the column whitelist the guard enforces,
-and the missing-value rules are **all generated from `datos/diccionario.json`**
-(`app/dicc.py`) — the public INE metadata for the 145 variables. Pointing the
-pipeline at another census's `.sav` + dictionary adapts the system without
-touching the query logic. The model is configurable via the `CENSO_MODELO`
-environment variable.
+and the missing-value rules are **all generated from a data dictionary** — the
+public INE metadata for each census — not hand-written code. The same pattern
+runs **two engines behind one selector**: the 2011 engine (`app/main.py`,
+`app/sql_guard.py`) and the 2023 weighted engine (`consultar_2023.py`,
+`sql_guard_2023.py`), each with its own dictionary and disclosure rules, sharing
+the front-end, the Leaflet maps and the aggregate-only guarantee. The model is
+configurable via the `CENSO_MODELO` environment variable.
 
 ## Run it
 
@@ -149,6 +160,12 @@ uvicorn app.main:app --reload
 Then open http://localhost:8000 and ask, for example:
 *"¿Cuántas mujeres mayores de 75 años hay en Rivera?"*
 
+> The steps above build the **2011** database. The **2023 weighted** census
+> (`consultar_2023.py`, `sql_guard_2023.py`) runs against its own database,
+> prepared separately from the INE's weighted microdata and nomenclator; that
+> microdata and its loading pipeline are not part of this repository. The 2023
+> data dictionary and the GeoJSON map layers used at runtime **are** included.
+
 Key columns of the `personas` table:
 
 | Column | Description |
@@ -166,11 +183,13 @@ stored as NULL and always excluded from counts and denominators.
 
 ## Data quality & scope
 
-The persons microdata contains **occupied dwellings only**, so questions about
-**vacant / unoccupied dwellings** are out of scope and return a clear message
-(`NO_RESPONDIBLE_VIVIENDAS`) rather than a wrong answer. Loading counts, the
-household/`PERID` consistency note, and the full scope limitation are documented
-in [`datos/NOTAS_CALIDAD.md`](datos/NOTAS_CALIDAD.md).
+The **2011** persons microdata contains **occupied dwellings only**, so questions
+about **vacant / unoccupied dwellings** are out of scope there and return a clear
+message (`NO_RESPONDIBLE_VIVIENDAS`) rather than a wrong answer. The **2023**
+census has a dedicated dwellings table, so vacant-dwelling questions *are*
+answerable under the 2023 selector. Loading counts, the household/`PERID`
+consistency note, and the full 2011 scope limitation are documented in
+[`datos/NOTAS_CALIDAD.md`](datos/NOTAS_CALIDAD.md).
 
 ## Tests
 

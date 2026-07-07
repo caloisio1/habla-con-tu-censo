@@ -9,3 +9,17 @@ censo.log
 censo_test.log
 *.bak.*
 *.sav
+
+# Datos y bases (nunca al repo)
+datos/censo2023.db
+datos/*.db
+# Backups y artefactos locales de despliegue / pruebas
+*.bak-*
+*.bak.*
+backup_*/
+*.log
+regress.py
+e1_check*.py
+lanzar_*.sh
+uvi_test.log
+incident_*.txt

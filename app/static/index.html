@@ -3,286 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Habla con tu Censo — El Censo 2011 de Uruguay en lenguaje natural</title>
-<meta name="description" content="Preguntale al Censo 2011 del INE Uruguay en español. Solo resultados agregados; el SQL ejecutado se muestra siempre.">
+<title>Habla con tu Censo — El Censo de Uruguay (2011 y 2023) en lenguaje natural</title>
+<meta name="description" content="Preguntale al Censo 2011 y al Censo 2023 (ponderado) del INE Uruguay en español. Solo resultados agregados; el SQL ejecutado se muestra siempre.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/static/censo.css">
 <style>
-/* ---------- Tipografía self-host (sin CDN en runtime, sin build) ---------- */
-@font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:swap;src:url("static/Inter-Regular.woff2") format("woff2");}
-@font-face{font-family:Inter;font-style:normal;font-weight:500;font-display:swap;src:url("static/Inter-Medium.woff2") format("woff2");}
-@font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;src:url("static/Inter-SemiBold.woff2") format("woff2");}
-@font-face{font-family:Inter;font-style:normal;font-weight:700;font-display:swap;src:url("static/Inter-Bold.woff2") format("woff2");}
-
-/* ---------- Paleta: petróleo profundo + acento cálido, neutros con sesgo teal ---------- */
-:root{
-  --ground:#F5F4F0; --surface:#FFFFFF; --surface-2:#EEEEE8; --inset:#F3F2EC;
-  --ink:#16211F; --ink-2:#52605C; --ink-3:#7C8884;
-  --line:#E2E4DE; --line-strong:#D2D5CE;
-  --petroleo:#0E4E4B; --petroleo-700:#0A3A38; --petroleo-600:#0F5B57;
-  --petroleo-50:#E6EFEE;
-  --calido:#BE6636; --calido-700:#A0552B; --calido-tint:#F6E9DF;
-  --warn:#8A5E12; --warn-bg:#FAF0D9; --warn-line:#E8D4A2;
-  --map-lo:#DCEBEA; --map-hi:#0A3A38; --map-null:#D7DAD4;
-  --shadow:0 1px 2px rgba(20,40,38,.05), 0 6px 20px -8px rgba(20,40,38,.12);
-  --focus:#0F5B57;
-  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
-}
-@media (prefers-color-scheme:dark){
-  :root{
-    --ground:#0E1514; --surface:#16201E; --surface-2:#1E2A28; --inset:#111917;
-    --ink:#EAEEEC; --ink-2:#A8B4B0; --ink-3:#7C8884;
-    --line:#273331; --line-strong:#33413E;
-    --petroleo:#3FA69E; --petroleo-700:#12615D; --petroleo-600:#2E938B;
-    --petroleo-50:#16302E;
-    --calido:#E0965F; --calido-700:#C97B43; --calido-tint:#2A1E12;
-    --warn:#E6C578; --warn-bg:#241D0F; --warn-line:#463916;
-    --map-lo:#123B39; --map-hi:#8FD9D1; --map-null:#2A3634;
-    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -12px rgba(0,0,0,.55);
-    --focus:#3FA69E;
-  }
-}
-:root[data-theme="light"]{
-  --ground:#F5F4F0; --surface:#FFFFFF; --surface-2:#EEEEE8; --inset:#F3F2EC;
-  --ink:#16211F; --ink-2:#52605C; --ink-3:#7C8884;
-  --line:#E2E4DE; --line-strong:#D2D5CE;
-  --petroleo:#0E4E4B; --petroleo-700:#0A3A38; --petroleo-600:#0F5B57; --petroleo-50:#E6EFEE;
-  --calido:#BE6636; --calido-700:#A0552B; --calido-tint:#F6E9DF;
-  --warn:#8A5E12; --warn-bg:#FAF0D9; --warn-line:#E8D4A2;
-  --map-lo:#DCEBEA; --map-hi:#0A3A38; --map-null:#D7DAD4;
-  --shadow:0 1px 2px rgba(20,40,38,.05), 0 6px 20px -8px rgba(20,40,38,.12);
-  --focus:#0F5B57;
-}
-:root[data-theme="dark"]{
-  --ground:#0E1514; --surface:#16201E; --surface-2:#1E2A28; --inset:#111917;
-  --ink:#EAEEEC; --ink-2:#A8B4B0; --ink-3:#7C8884;
-  --line:#273331; --line-strong:#33413E;
-  --petroleo:#3FA69E; --petroleo-700:#12615D; --petroleo-600:#2E938B; --petroleo-50:#16302E;
-  --calido:#E0965F; --calido-700:#C97B43; --calido-tint:#2A1E12;
-  --warn:#E6C578; --warn-bg:#241D0F; --warn-line:#463916;
-  --map-lo:#123B39; --map-hi:#8FD9D1; --map-null:#2A3634;
-  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -12px rgba(0,0,0,.55);
-  --focus:#3FA69E;
-}
-
-*{box-sizing:border-box;}
-html{-webkit-text-size-adjust:100%;}
-body{
-  margin:0; background:var(--ground); color:var(--ink);
-  font-family:Inter,-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;
-  font-size:16px; line-height:1.55; -webkit-font-smoothing:antialiased;
-  font-feature-settings:"cv05","ss01";
-}
-.wrap{max-width:780px; margin:0 auto; padding:0 20px;}
-
-a{color:var(--petroleo-600); text-decoration:none;}
-a:hover{color:var(--calido);}
-:focus-visible{outline:2.5px solid var(--focus); outline-offset:2px; border-radius:4px;}
-
-/* ---------- Header ---------- */
-header{border-bottom:1px solid var(--line); background:var(--surface);}
-.hd{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0;}
-.brand{display:flex; align-items:baseline; gap:10px; min-width:0;}
-.brand .mark{
-  font-weight:700; font-size:1.12rem; letter-spacing:-.02em; color:var(--ink);
-  white-space:nowrap;
-}
-.brand .mark .dot{color:var(--petroleo);}
-.brand .tag{
-  color:var(--ink-3); font-size:.82rem; white-space:nowrap; overflow:hidden;
-  text-overflow:ellipsis;
-}
-.hd nav{display:flex; gap:6px; flex-shrink:0;}
-.hd nav a,.hd nav button{
-  font:inherit; font-size:.85rem; color:var(--ink-2); background:none; border:0;
-  padding:6px 10px; border-radius:7px; cursor:pointer; display:inline-flex;
-  align-items:center; gap:6px;
-}
-.hd nav a:hover,.hd nav button:hover{background:var(--surface-2); color:var(--ink);}
-.hd nav svg{width:15px; height:15px;}
-
-/* ---------- Hero / buscador ---------- */
-.hero{padding:40px 0 26px; text-align:center; position:relative;}
-.hero::before{
-  content:""; position:absolute; inset:0 0 auto; height:220px; z-index:0; pointer-events:none;
-  background:radial-gradient(120% 90% at 50% -10%, var(--petroleo-50), transparent 62%);
-}
-.hero > *{position:relative; z-index:1;}
-.hero h1{
-  font-size:clamp(1.55rem,4.4vw,2.05rem); line-height:1.12; letter-spacing:-.028em;
-  margin:0 0 8px; text-wrap:balance;
-}
-.hero p.lead{color:var(--ink-2); margin:0 auto 24px; max-width:46ch; font-size:1rem;}
-form{
-  display:flex; gap:8px; background:var(--surface); border:1px solid var(--line-strong);
-  border-radius:14px; padding:7px 7px 7px 8px; box-shadow:var(--shadow);
-  max-width:640px; margin:0 auto; transition:border-color .15s, box-shadow .15s;
-}
-form:focus-within{border-color:var(--petroleo); box-shadow:0 0 0 3px var(--petroleo-50);}
-form .qi{display:flex; align-items:center; gap:9px; flex:1; min-width:0; padding-left:6px;}
-form .qi svg{width:18px; height:18px; color:var(--ink-3); flex-shrink:0;}
-input#q{
-  flex:1; min-width:0; border:0; background:none; color:var(--ink);
-  font:inherit; font-size:1.02rem; padding:9px 0;
-}
-input#q::placeholder{color:var(--ink-3);}
-input#q:focus{outline:none;}
-button.ask{
-  font:inherit; font-weight:600; font-size:.98rem; color:#fff; background:var(--petroleo);
-  border:0; border-radius:9px; padding:11px 20px; cursor:pointer; white-space:nowrap;
-  transition:background .15s;
-}
-button.ask:hover{background:var(--petroleo-700);}
-button.ask:disabled{opacity:.6; cursor:default;}
-
-.ejemplos{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:16px auto 0; max-width:640px;}
-.ejemplos .lbl{width:100%; color:var(--ink-3); font-size:.76rem; text-transform:uppercase; letter-spacing:.09em; margin-bottom:1px;}
-.chip{
-  font:inherit; font-size:.85rem; color:var(--ink-2); background:var(--surface);
-  border:1px solid var(--line); border-radius:999px; padding:7px 14px; cursor:pointer;
-  transition:all .13s;
-}
-.chip:hover{border-color:var(--petroleo); color:var(--petroleo-600); background:var(--petroleo-50);}
-
-/* ---------- Historial de tarjetas ---------- */
-#historial{display:flex; flex-direction:column; gap:20px; padding:14px 0 8px;}
-.card{
-  background:var(--surface); border:1px solid var(--line); border-radius:14px;
-  box-shadow:var(--shadow); overflow:hidden; animation:rise .35s cubic-bezier(.2,.7,.3,1);
-}
-@keyframes rise{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;}}
-.card > .body{padding:18px 20px 4px;}
-.q-head{display:flex; align-items:flex-start; gap:12px; margin-bottom:12px;}
-.q-head .qmark{
-  flex-shrink:0; width:26px; height:26px; border-radius:8px; background:var(--petroleo-50);
-  color:var(--petroleo-600); display:flex; align-items:center; justify-content:center;
-  font-weight:700; font-size:.9rem; margin-top:1px;
-}
-.q-head .qtext{font-weight:600; font-size:1.04rem; line-height:1.35; letter-spacing:-.01em;}
-.q-head .qtime{margin-left:auto; color:var(--ink-3); font-size:.74rem; font-variant-numeric:tabular-nums; white-space:nowrap; padding-top:4px;}
-
-/* respuesta markdown */
-.answer{color:var(--ink); font-size:.97rem;}
-.answer > :first-child{margin-top:0;} .answer > :last-child{margin-bottom:0;}
-.answer p{margin:.55em 0;}
-.answer strong{font-weight:600;}
-.answer h1,.answer h2,.answer h3{font-size:1.02rem; margin:1em 0 .4em;}
-.tablewrap{overflow-x:auto; margin:12px 0; border:1px solid var(--line); border-radius:10px;}
-.answer table{border-collapse:collapse; width:100%; font-size:.9rem;}
-.answer th,.answer td{padding:9px 13px; text-align:left; border-bottom:1px solid var(--line);}
-.answer thead th{
-  background:var(--inset); color:var(--ink-2); font-weight:600; font-size:.78rem;
-  text-transform:uppercase; letter-spacing:.04em; white-space:nowrap;
-}
-.answer tbody tr:last-child td{border-bottom:0;}
-.answer tbody tr:nth-child(even) td{background:color-mix(in srgb, var(--inset) 45%, transparent);}
-.answer td{font-variant-numeric:tabular-nums;}
-.answer table td:not(:first-child),.answer table th:not(:first-child){text-align:right;}
-
-/* tarjeta de aviso (error / NO_RESPONDIBLE) */
-.card.warn{border-color:var(--warn-line); background:var(--warn-bg);}
-.card.warn .q-head .qmark{background:color-mix(in srgb,var(--warn) 15%,transparent); color:var(--warn);}
-.card.warn .answer{color:var(--ink);}
-.warn-note{display:flex; gap:10px; align-items:flex-start; color:var(--ink-2); font-size:.92rem;}
-.warn-note svg{width:18px; height:18px; color:var(--warn); flex-shrink:0; margin-top:2px;}
-
-/* mapa */
-.map{height:clamp(340px,52vh,480px); margin-top:16px; background:var(--inset); border-top:1px solid var(--line); border-bottom:1px solid var(--line);}
-.leaflet-container{font-family:inherit; background:var(--inset);}
-.legend{
-  display:flex; align-items:center; flex-wrap:wrap; gap:12px 18px; padding:11px 20px;
-  font-size:.79rem; color:var(--ink-2); background:var(--inset); border-bottom:1px solid var(--line);
-}
-.legend .scale{display:flex; align-items:center; gap:7px;}
-.legend .bar{height:11px; width:130px; border-radius:3px; background:linear-gradient(to right,var(--map-lo),var(--map-hi)); border:1px solid rgba(0,0,0,.08);}
-.legend .swatch{display:inline-block; width:12px; height:12px; border-radius:3px; background:var(--map-null); border:1px solid var(--line-strong); vertical-align:-2px;}
-.legend .supr{display:inline-flex; align-items:center; gap:6px; cursor:help; border-bottom:1px dotted var(--ink-3);}
-.legend b{font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums;}
-
-/* metadatos + acciones */
-.meta{
-  display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; padding:14px 20px;
-  border-top:1px solid var(--line);
-}
-.pill{
-  display:inline-flex; align-items:center; gap:6px; font-size:.77rem; color:var(--ink-2);
-  background:var(--inset); border:1px solid var(--line); border-radius:999px; padding:4px 11px;
-  font-variant-numeric:tabular-nums;
-}
-.pill.supr{color:var(--warn); background:var(--warn-bg); border-color:var(--warn-line); cursor:help;}
-.pill .k{width:6px; height:6px; border-radius:50%; background:var(--petroleo);}
-.meta .spacer{flex:1;}
-.act{
-  font:inherit; font-size:.79rem; color:var(--ink-2); background:none; border:1px solid var(--line);
-  border-radius:8px; padding:6px 11px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
-  transition:all .13s;
-}
-.act:hover{border-color:var(--petroleo); color:var(--petroleo-600);}
-.act.ok{border-color:var(--petroleo); color:var(--petroleo-600); background:var(--petroleo-50);}
-.act svg{width:14px; height:14px;}
-
-/* SQL desplegable */
-details.sql{border-top:1px solid var(--line);}
-details.sql summary{
-  list-style:none; cursor:pointer; padding:12px 20px; display:flex; align-items:center; gap:9px;
-  font-size:.83rem; color:var(--ink-2); font-weight:500; user-select:none;
-}
-details.sql summary::-webkit-details-marker{display:none;}
-details.sql summary .chev{transition:transform .18s; color:var(--ink-3);}
-details.sql[open] summary .chev{transform:rotate(90deg);}
-details.sql summary:hover{color:var(--ink);}
-.sql-body{padding:0 20px 18px;}
-.sql-bar{display:flex; justify-content:flex-end; margin-bottom:8px;}
-.sql-body pre{
-  margin:0; background:var(--inset); border:1px solid var(--line); border-radius:9px;
-  padding:14px 16px; overflow-x:auto; font-family:var(--mono); font-size:.82rem;
-  line-height:1.5; color:var(--ink); white-space:pre; tab-size:2;
-}
-
-/* spinner / loading */
-.loader{display:flex; align-items:center; gap:12px; color:var(--ink-2); font-size:.95rem; padding:2px 0 8px;}
-.spin{width:18px; height:18px; border-radius:50%; border:2.5px solid var(--line-strong); border-top-color:var(--petroleo); animation:sp .7s linear infinite; flex-shrink:0;}
-@keyframes sp{to{transform:rotate(360deg);}}
-.loader .msg{transition:opacity .3s;}
-
-/* footer */
-footer{border-top:1px solid var(--line); margin-top:34px; padding:24px 0 40px; color:var(--ink-3); font-size:.82rem; line-height:1.7;}
-footer .fwrap{display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center;}
-footer .sep{color:var(--line-strong);}
-
-/* modal cómo funciona */
-dialog{
-  border:1px solid var(--line); border-radius:16px; padding:0; max-width:520px; width:calc(100% - 32px);
-  background:var(--surface); color:var(--ink); box-shadow:0 24px 60px -16px rgba(0,0,0,.4);
-}
-dialog::backdrop{background:rgba(12,20,19,.55); backdrop-filter:blur(2px);}
-.modal-in{padding:26px 26px 24px;}
-.modal-in h2{margin:0 0 4px; font-size:1.15rem; letter-spacing:-.02em;}
-.modal-in .msub{color:var(--ink-3); font-size:.85rem; margin:0 0 18px;}
-ol.steps{list-style:none; counter-reset:s; margin:0; padding:0; display:flex; flex-direction:column; gap:14px;}
-ol.steps li{counter-increment:s; display:flex; gap:13px; align-items:flex-start;}
-ol.steps li::before{
-  content:counter(s); flex-shrink:0; width:25px; height:25px; border-radius:8px;
-  background:var(--petroleo-50); color:var(--petroleo-600); font-weight:700; font-size:.82rem;
-  display:flex; align-items:center; justify-content:center; margin-top:1px;
-}
-ol.steps b{font-weight:600;} ol.steps .d{color:var(--ink-2); font-size:.9rem;}
-.modal-x{position:absolute; top:14px; right:14px; background:var(--surface-2); border:0; width:30px; height:30px; border-radius:8px; cursor:pointer; color:var(--ink-2); font-size:1.1rem; line-height:1;}
-.modal-x:hover{background:var(--line); color:var(--ink);}
-dialog{position:fixed; inset:0; margin:auto;}
-.modal-wrap{position:relative;}
-
-@media (max-width:560px){
-  .brand .tag{display:none;}
-  form{flex-direction:column; padding:8px;}
-  form .qi{padding:4px 6px;}
-  button.ask{width:100%; padding:12px;}
-  .q-head .qtime{display:none;}
-  .card > .body{padding:16px 16px 4px;}
-  .meta,.legend,details.sql summary,.sql-body{padding-left:16px; padding-right:16px;}
-}
-@media (prefers-reduced-motion:reduce){
-  *{animation-duration:.001ms !important; transition-duration:.001ms !important;}
-}
+.censo-sel{display:inline-flex;border:1px solid var(--line-strong);border-radius:10px;overflow:hidden;margin:0 auto 18px;background:var(--surface);}
+.censo-sel input{position:absolute;opacity:0;width:0;height:0;}
+.censo-sel label{padding:8px 20px;font-size:.9rem;font-weight:600;cursor:pointer;color:var(--ink-2);}
+.censo-sel label:first-of-type{border-right:1px solid var(--line);}
+.censo-sel input:checked + label{background:var(--petroleo);color:#fff;}
+.censo-sel input:focus-visible + label{outline:2.5px solid var(--focus);outline-offset:-2px;}
+.selrow{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.selrow .sublbl{color:var(--ink-3);font-size:.76rem;text-transform:uppercase;letter-spacing:.09em;margin-bottom:4px;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -293,7 +26,7 @@ dialog{position:fixed; inset:0; margin:auto;}
   <div class="wrap hd">
     <div class="brand">
       <span class="mark">Habla con tu Censo<span class="dot">.</span></span>
-      <span class="tag">El Censo 2011 de Uruguay, en lenguaje natural</span>
+      <span class="tag">El Censo de Uruguay, en lenguaje natural</span>
     </div>
     <nav>
       <button type="button" id="btn-como">
@@ -311,20 +44,18 @@ dialog{position:fixed; inset:0; margin:auto;}
 <main class="wrap">
   <section class="hero">
     <h1>Preguntá. El Censo responde con datos reales.</h1>
-    <p class="lead">Consultá el Censo 2011 del INE Uruguay en español. Cada respuesta muestra el SQL que la generó.</p>
+    <p class="lead">Elegí el censo —2011 o 2023— y preguntá en español. Cada respuesta muestra el SQL que la generó.</p>
+    <div class="selrow"><span class="sublbl">Censo</span><div class="censo-sel" role="radiogroup" aria-label="Seleccionar censo"><input type="radio" name="censo" id="c2011" value="2011"><label for="c2011">Censo 2011</label><input type="radio" name="censo" id="c2023" value="2023" checked><label for="c2023">Censo 2023</label></div></div>
     <form id="f">
       <div class="qi">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="q" name="q" autocomplete="off" aria-label="Escribí tu pregunta al Censo 2011" placeholder="¿Cuánta gente vive en Salto?" autofocus>
+        <input id="q" name="q" autocomplete="off" aria-label="Escribí tu pregunta al Censo" placeholder="¿Cuánta gente vive en Salto?" autofocus>
       </div>
       <button class="ask" type="submit">Preguntar</button>
     </form>
     <div class="ejemplos" aria-label="Ejemplos de preguntas">
       <span class="lbl">Probá con un ejemplo</span>
-      <button type="button" class="chip">¿Cuánta gente vive en Paso de los Toros?</button>
-      <button type="button" class="chip">Porcentaje de afrodescendientes por departamento</button>
-      <button type="button" class="chip">Porcentaje de niños de 5 años o menos por barrio de Montevideo</button>
-      <button type="button" class="chip">Cantidad de hogares con 2 o más NBI por sección censal</button>
+      <span id="chipbox"></span>
     </div>
   </section>
 
@@ -333,7 +64,7 @@ dialog{position:fixed; inset:0; margin:auto;}
 
 <footer>
   <div class="wrap fwrap">
-    <span>Datos: <b style="color:var(--ink-2);font-weight:600">Censo 2011, INE Uruguay</b></span>
+    <span>Datos: <b id="fuente-datos" style="color:var(--ink-2);font-weight:600">Censo 2023, INE Uruguay</b></span>
     <span class="sep">·</span>
     <span>Solo resultados agregados; las celdas con menos de 5 casos se suprimen automáticamente</span>
     <span class="sep">·</span>
@@ -348,9 +79,9 @@ dialog{position:fixed; inset:0; margin:auto;}
       <h2>Cómo funciona</h2>
       <p class="msub">Una respuesta auditable en cuatro pasos.</p>
       <ol class="steps">
-        <li><div><b>Tu pregunta</b> <span class="d">— la escribís en español, como hablarías con una persona.</span></div></li>
+        <li><div><b>Tu pregunta</b> <span class="d">— la escribís en español, como hablarías con una persona, y elegís el censo (2011 o 2023).</span></div></li>
         <li><div><b>SQL validado</b> <span class="d">— se traduce a una consulta SQL que pasa por un guardrail de seguridad antes de ejecutarse.</span></div></li>
-        <li><div><b>Datos reales</b> <span class="d">— se corre sobre los 3,3 millones de registros del Censo 2011; las celdas con menos de 5 casos se suprimen.</span></div></li>
+        <li><div><b>Datos reales</b> <span class="d">— se corre sobre los microdatos del censo elegido; las celdas con menos de 5 casos se suprimen.</span></div></li>
         <li><div><b>Respuesta auditable</b> <span class="d">— se redacta citando los números y siempre podés ver el SQL exacto que se ejecutó.</span></div></li>
       </ol>
     </div>
@@ -361,16 +92,28 @@ dialog{position:fixed; inset:0; margin:auto;}
 const f = document.getElementById('f'), q = document.getElementById('q'),
       hist = document.getElementById('historial');
 
-// nivel de mapa -> geojson servido desde static/ + propiedad de join + nombre + encuadre
+// nivel de mapa -> geojson (estático público) + propiedad de join + nombre + encuadre
 const MAPA_CFG = {
-  departamento: { archivo: 'static/departamentos.geojson', prop: 'departamento',
+  departamento: { archivo: '/static/departamentos.geojson', prop: 'departamento',
                   nombre: p => p.departamento, centro: null },
-  seccion:      { archivo: 'static/secciones_censales.geojson', prop: 'codsec',
+  seccion:      { archivo: '/static/secciones_censales.geojson', prop: 'codsec',
                   nombre: p => `Sección ${p.seccion} (${p.depto})`, centro: null },
-  barrio:       { archivo: 'static/barrios_montevideo.geojson', prop: 'barrio',
+  barrio:       { archivo: '/static/barrios_montevideo.geojson', prop: 'barrio',
                   nombre: p => p.barrio, centro: [-34.86, -56.17], zoom: 11 },
-  ccz:          { archivo: 'static/ccz_montevideo.geojson', prop: 'ccz',
+  ccz:          { archivo: '/static/ccz_montevideo.geojson', prop: 'ccz',
                   nombre: p => `CCZ ${p.ccz}`, centro: [-34.86, -56.17], zoom: 11 },
+  // Niveles del Censo 2023: GeoJSON estáticos públicos servidos desde /static/geo_2023/.
+  // Join por 'codigo' (código compuesto) que emite construir_mapa_2023.
+  depto_2023:     { archivo: '/static/geo_2023/geo_2023_departamentos.json', prop: 'codigo',
+                    nombre: p => p.nombre, centro: null },
+  seccion_2023:   { archivo: '/static/geo_2023/geo_2023_secciones.json', prop: 'codigo',
+                    nombre: p => p.nombre, centro: null },
+  localidad_2023: { archivo: '/static/geo_2023/geo_2023_localidades.json', prop: 'codigo',
+                    nombre: p => p.nombre, centro: null },
+  segmento_2023:  { archivo: '/static/geo_2023/geo_2023_segmentos', prop: 'codigo',
+                    nombre: p => p.nombre, centro: null },
+  barrio_2023:    { archivo: '/static/geo_2023/geo_2023_barrios_mvd.json', prop: 'codigo',
+                    nombre: p => p.nombre, centro: [-34.86, -56.17], zoom: 11 },
 };
 
 const SUPR_MSG = 'Suprimido por confidencialidad: menos de 5 casos.';
@@ -408,6 +151,28 @@ function envolverTablas(cont){
   });
 }
 
+// fetch con timeout ACOTADO (AbortController): si el backend cuelga, la conexión se
+// aborta en vez de quedar ESTABLISHED para siempre. No es un reintento: es un tope.
+function fetchT(url, opts = {}, ms = 30000){
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t));
+}
+
+// Segmentos 2023: el set completo excede el presupuesto por archivo, así que se sirven
+// partidos por departamento. Como el mapa es acotado, pedimos solo el/los departamento(s)
+// presentes en la respuesta (DD = primeros 2 dígitos del código).
+async function cargarGeoJSON(cfg, m){
+  if (m.nivel === 'segmento_2023'){
+    const deptos = [...new Set(m.datos.map(d => String(d.clave).slice(0, 2)))];
+    const fcs = await Promise.all(deptos.map(dd =>
+      fetchT(`${cfg.archivo}_${dd}.json`).then(r => r.ok ? r.json() : { features: [] })
+        .catch(() => ({ features: [] }))));
+    return { type: 'FeatureCollection', features: fcs.flatMap(fc => fc.features || []) };
+  }
+  return (await fetchT(cfg.archivo)).json();
+}
+
 async function renderMapa(el, m){
   const cfg = MAPA_CFG[m.nivel];
   if (!cfg) return;
@@ -420,7 +185,7 @@ async function renderMapa(el, m){
   const lookup = {};
   m.datos.forEach(d => { lookup[String(d.clave)] = d.valor; });
 
-  const gj = await (await fetch(cfg.archivo)).json();
+  const gj = await cargarGeoJSON(cfg, m);
   const capa = L.geoJSON(gj, {
     style: feat => {
       const v = lookup[String(feat.properties[cfg.prop])];
@@ -461,7 +226,7 @@ function tarjetaLoading(pregunta){
     </div>`;
   hist.prepend(card);
   const msgEl = card.querySelector('.msg');
-  const msgs = ['Generando consulta…','Validando la consulta…','Consultando 3,3 millones de registros…','Redactando la respuesta…'];
+  const msgs = ['Generando consulta…','Validando la consulta…','Consultando los microdatos del censo…','Redactando la respuesta…'];
   let i = 0;
   const timer = setInterval(()=>{ i=(i+1)%msgs.length; if(msgEl){ msgEl.style.opacity=0; setTimeout(()=>{msgEl.textContent=msgs[i]; msgEl.style.opacity=1;},300);} }, 2100);
   return { card, stop:()=>clearInterval(timer) };
@@ -471,7 +236,7 @@ function pill(texto, cls){
   return `<span class="pill ${cls||''}">${cls==='supr'?'':'<span class="k"></span>'}${texto}</span>`;
 }
 
-async function rellenarOK(card, pregunta, j){
+async function rellenarOK(card, pregunta, j, censo){
   const id = ++uid;
   const tieneMapa = !!j.mapa;
   const nFilas = Array.isArray(j.datos) ? j.datos.length : 0;
@@ -480,7 +245,7 @@ async function rellenarOK(card, pregunta, j){
   let metaPills = '';
   metaPills += pill(`${nFilas.toLocaleString('es-UY')} ${nFilas===1?'fila':'filas'}`);
   if (supr) metaPills += `<span class="pill supr" title="${SUPR_MSG}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" stroke-linecap="round" stroke-linejoin="round"/></svg>${supr} ${supr===1?'celda suprimida':'celdas suprimidas'}</span>`;
-  metaPills += pill('Censo 2011 · INE');
+  metaPills += pill(`Censo ${censo === '2011' ? '2011' : '2023'} · INE`);
 
   card.innerHTML = `<div class="body">
       <div class="q-head">
@@ -535,18 +300,28 @@ function rellenarAviso(card, pregunta, j){
   const cs = card.querySelector('.copysql'); if (cs) cs.onclick = e => copiar(e.currentTarget, j.sql);
 }
 
+function censoSel(){ return document.querySelector('input[name="censo"]:checked').value; }
+const CHIPS = {
+  '2011': ['¿Cuánta gente vive en Paso de los Toros?','Porcentaje de afrodescendientes por departamento','Porcentaje de niños de 5 años o menos por barrio de Montevideo','Cantidad de hogares con 2 o más NBI por sección censal'],
+  '2023': ['¿Cuántas personas viven en Paso de los Toros?','¿Qué porcentaje de la población es afrodescendiente?','¿Cuántas viviendas desocupadas hay?','Porcentaje de afrodescendientes por barrio de Montevideo'],
+};
+function renderChips(){
+  const box = document.getElementById('chipbox'); box.innerHTML='';
+  CHIPS[censoSel()].forEach(t => { const b=document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=t; b.onclick=()=>preguntar(t); box.appendChild(b); });
+}
 async function preguntar(texto){
   const { card, stop } = tarjetaLoading(texto);
   const askBtn = f.querySelector('button.ask'); askBtn.disabled = true;
+  const censo = censoSel();   // fijar el censo del momento (el usuario puede togglear luego)
   try{
-    const res = await fetch('preguntar', {
+    const res = await fetchT('/preguntar', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({texto})
-    });
+      body: JSON.stringify({texto, censo})
+    }, 90000);  // tope 90s: el backend acota el LLM a 60s; margen para red
     const j = await res.json();
     stop();
     if (j.ok === false) rellenarAviso(card, texto, j);
-    else await rellenarOK(card, texto, j);
+    else await rellenarOK(card, texto, j, censo);
   }catch(err){
     stop();
     rellenarAviso(card, texto, {respuesta:'Hubo un problema de conexión. Probá de nuevo en unos segundos.'});
@@ -562,8 +337,14 @@ f.onsubmit = e => {
   q.value = ''; q.blur();
 };
 
-document.querySelectorAll('.ejemplos .chip').forEach(el =>
-  el.onclick = () => { preguntar(el.textContent.trim()); });
+// El rótulo de fuente del footer sigue al censo seleccionado.
+function sincronizarFuente(){
+  const b = document.getElementById('fuente-datos');
+  if (b) b.textContent = `Censo ${censoSel()}, INE Uruguay`;
+}
+renderChips();
+sincronizarFuente();
+document.querySelectorAll('input[name="censo"]').forEach(r => r.onchange = () => { renderChips(); sincronizarFuente(); });
 
 document.getElementById('btn-como').onclick = () => document.getElementById('modal').showModal();
 document.getElementById('modal').addEventListener('click', e => {

@@ -1,0 +1,180 @@
+CENSO 2023 (INE Uruguay), versión ponderada. Reglas de conteo (DISTINTAS de 2011):
+(a) PERSONAS se cuentan con SUM(W) (ponderador), NUNCA COUNT(*). Redondear el resultado.
+(b) HOGARES con COUNT(DISTINCT hogar_key).
+(c) VIVIENDAS van contra la tabla viviendas_2023 y ahí sí COUNT(*) (esa tabla NO tiene ponderador).
+(d) PROHIBIDO unir personas_2023 con viviendas_2023 (universos distintos; el INE lo desaconseja). Los JOIN solo se permiten con tablas de nomenclátor (departamentos_2023, localidades_2023, barrios_mvd_2023).
+(e) Los códigos PERDIDOS (ver cada variable y los genéricos) van SIEMPRE excluidos de conteos y denominadores (IS NOT NULL / filtrarlos).
+(f) Las variables de cuestionario vienen VACÍAS para los enumerados por registro administrativo (FUENTE_EXT='2'). Al reportar porcentajes de esas variables, el denominador son los relevados con cuestionario (excluir NULL).
+(g) La geografía es por CÓDIGO (texto con ceros a la izquierda). Para responder por NOMBRE, unir al nomenclátor: personas_2023.DEPARTAMENTO||personas_2023.LOCALIDAD = localidades_2023.codloc; DEPARTAMENTO = departamentos_2023.codigo.
+Supresión de confidencialidad: SIEMPRE sobre el n CRUDO de registros (COUNT(*)), nunca sobre la cifra ponderada.
+
+CÓDIGOS GENÉRICOS PERDIDOS: 7777=No corresponde; 8888=No relevado; 9898=Ignorado; 99 / 9999=No recuerda
+
+TABLA personas_2023 (SUM(W)):
+- ID_CENSO | IDENTIFICACIÓN DE LA PERSONA | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- DIRECCION_ID | IDENTIFICACIÓN DE LA DIRECCIÓN | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- DEPARTAMENTO | DEPARTAMENTO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- LOCALIDAD | LOCALIDAD | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- LOCALIDAD_AGRUP | LOCALIDAD AGRUPADA | 0=No; 1=Si; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- SECCION | SECCION | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- SECCION_AGRUP | SECCION AGRUPADA | 0=No; 1=Si; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- SEGMENTO | SEGMENTO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- SEGMENTO_AGRUP | SEGMENTO AGRUPADO | 0=No; 1=Si; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVID | NÚMERO DE VIVIENDA | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGID | NÚMERO DE HOGAR | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERID | NÚMERO DE PERSONA | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- REGION_4 | REGIÓN | 1=Montevideo; 2=Interior, localidades de 5000 habitantes o más; 3=Interior, localidades de menos de 5000 habitantes; 4=Zona rural; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- AREA | AREA | 1=Urbano; 2=Rural; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- BARRIO85 | ÁREA APROXIMADA A BARRIO (DEF. 1985) MONTEVIDEO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- CCZ | CENTRO COMUNAL ZONAL (MONTEVIDEO) | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- MUNICIPIO_136 | MUNICIPIO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- FUENTE_EXT | MODALIDAD DE RELEVAMIENTO | 1=Cuestionario Censal; 2=Registros administrativos; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- SIT_CALLE | PERSONA EN SITUACIÓN DE CALLE (INTEMPERIE O REFUGIOS) | 0=No; 1=Si; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- RELEVAMIENTO | MODALIDAD DE RELEVAMIENTO | 1=CAPI; 2=CAWI; 3=CATI; 4=Registros de viviendas colectivas; 5=Registros administrativos; 6=Situación de calle; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- CUESTIONARIO_COMPLETO | PERSONAS QUE RESPONDEN EL CUESTIONARIO CENSAL COMPLETO | 0=No; 1=Si; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- CUESTIONARIO_BASICO | PERSONAS QUE RESPONDEN EL CUESTIONARIO CENSAL REDUCIDO O BÁSICO | 0=No; 1=Si; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- UNIVERSO | UNIVERSO | 1=Viviendas particulares; 2=Viviendas colectivas; 3=Situación de calle; 4=Desconocido; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- AGREGADO_A_HOGAR_CENSADO |  | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- MADRE_PERID |  | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVVO00 | TIPO DE VIVIENDA RESUMIDO | 1=Particular; 2=Colectiva; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVVO01 | TIPO DE VIVIENDA | 1=Casa; 2=Apartamento en edificio en altura con ascensor; 3=Apartamento en edificio en altura sin ascensor; 4=Apartamento en edificio de una planta; 5=Apartamento o cuarto en local o vivienda colectiva; 6=Local no construido para vivienda; 7=Vivienda móvil (carpa, casa rodante, etc.); 8=Otro tipo de vivienda particular; 9=Hotel, pensión u otra casa de hospedaje; 10=Hospital, sanatorio (con internación permanente); 11=Residencial de ancianos; 12=Residencial de estudiantes; 13=Casa de peones; 14=Internado religioso; 15=Establecimiento de reclusión, penitenciarios; 16=Hogares y/o Centros de atención / protección; 17=Cuartel militar o policial; 22=Refugios; 21=Centro de rehabilitación no carcelaria con internación permanente; 18=Otra colectiva; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVVO02 | CONDICIÓN DE OCUPACIÓN | 1=Ocupada; 2=Desocupada; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVVO03 |  | 1=Ocupada con residentes presentes; 2=Ocupada con residentes ausentes; 3=Desocupada: de uso temporal u ocasional; 4=Desocupada: para alquilar o vender; 5=Desocupada: en construcción o reparación; 6=Desocupada: ruinosa, destruida o inhabitable, tapiada; 7=Desocupada: vacante; 8=Desocupada: ignorado; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVVO04 | RESIDENTES HABITUALES QUE NO INTEGRAN EL HOGAR COLECTIVO | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVDV01 | MATERIAL PREDOMINANTE EN PAREDES EXTERIORES | 1=Ladrillos, ticholos, piedras o bloques CON terminación; 2=Ladrillos, ticholos, piedras o bloques SIN terminación; 3=Materiales livianos (madera o chapa) CON revestimiento; 4=Materiales livianos (madera o chapa) SIN revestimiento; 8=Sistema constructivo no tradicional de tipo construcción en seco (isopanel, steel frame, wood frame, etc) CON terminación; 9=Sistema constructivo no tradicional de tipo construcción en seco (isopanel, steel frame, wood frame, etc) SIN terminación; 5=Barro (terrón, adobe o fajina); 6=Materiales de desecho; 7=Otro material; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVDV02 | MATERIAL PREDOMINANTE DE LOS TECHOS | 7=Planchada de hormigón  o bovedilla CON protección (tejas u otros); 8=Planchada de hormigón o bovedilla SIN protección; 2=Liviano CON cielo raso; 3=Liviano SIN cielo raso; 9=Sistema constructivo no tradicional (isopanel, techo verde, steel frame) CON cielo raso; 10=Sistema constructivo no tradicional (isopanel, techo verde, steel frame) SIN cielo raso; 4=Quincha; 5=Materiales de desecho; 6=Otro material; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVDV03 | MATERIAL PREDOMINANTE DE LOS PISOS | 1=Cerámica, baldosas, piedra laja, madera, moqueta, linóleo, vinílico; 2=Arena y portland; 3=Sólo contrapiso sin piso; 4=Tierra sin piso ni contrapiso; 5=Otro material; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVDV11 | EVENTOS ADVERSOS EN LOS ÚLTIMOS 5 AÑOS | 1=Sí, por inundaciones; 2=Sí, por temporales o rachas de viento muy fuertes; 3=Sí, por ambos eventos; 4=No; 5=No sabe; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVDV05 | ORIGEN DEL AGUA | 1=OSE o red general; 2=Pozo surgente protegido; 3=Pozo surgente no protegido; 4=Aljibe; 5=Cachimba; 6=Arroyo, río; 7=Otro; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- I_VIVDV05 | ORIGEN DEL AGUA IMPUTADA | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- I_VIVDV05_TIPO | ORIGEN DEL AGUA IMPUTADA | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVDV06 | LLEGADA DE AGUA | 1=Por cañería dentro de la vivienda; 2=Por cañería fuera de la vivienda - A menos de 100 m. de distancia; 3=Por cañería fuera de la vivienda - A más de 100 m. de distancia; 4=Por otros medios; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVDV07 | PRINCIPAL MEDIO DE ALUMBRADO ELÉCTRICO | 1=UTE o red general; 2=Cargador eólico de batería; 3=Cargador solar de batería; 4=Grupo electrógeno propio; 5=Otro eléctrico; 6=No tiene; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVHV01 | CANTIDAD DE HOGARES EN LA VIVIENDA | Nº=Cantidad de hogares particulares que comparten la vivienda; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- MATERIALIDAD | MATERIALIDAD | 1=Materiales pesados en paredes y techos y piso resistente; 2=Materiales pesados en paredes, techo liviano y piso resistente; 3=Materiales pesados en paredes y techos y piso no resistente; 4=Materiales pesados en paredes, techo liviano y piso no resistente; 5=Materiales livianos en paredes y techos y piso resistente; 6=Materiales livianos en paredes y techos y piso no resistente; 7=Paredes de barro o adobe, techo liviano y piso resistente; 8=Paredes de barro o adobe, techo liviano y piso no resistente; 9=Materiales de desecho en paredes o techos; 10=Otras combinaciones de materiales; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- ID_HOGAR | IDENTIFICADOR UNICO DE HOGAR | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGTE01 | TENENCIA DE LA VIVIENDA | 1=Propietario; 2=Integrante de una cooperativa de vivienda; 3=Inquilino o arrendatario; 4=Usufructuario u ocupante; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGTE02 | CARACTERÍSTICAS PROPIETARIO | 1=De la vivienda y el terreno y la está pagando; 2=De la vivienda y el terreno y ya la pagó; 3=Solamente de la vivienda y la está pagando; 4=Solamente de la vivienda y ya la pagó; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGTE03 | CARACTERÍSTICAS USUFRUCTUARIO U OCUPANTE | 1=Por relación de dependencia (trabajo); 2=Gratuito, otorgada por el BPS; 3=Gratuito, vivienda prestada; 4=Sin permiso del propietario; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- I_HOGTE02 | CARACTERÍSTICAS PROPIETARIO IMPUTADA | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- I_HOGTE02_TIPO | CARACTERÍSTICAS PROPIETARIO IMPUTADA TIPO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGSH01 | DISPONIBILIDAD DE BAÑO | 1=Sí, con cisterna; 2=Sí, sin cisterna; 3=No dispone de baño; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGSH02 | USO DEL BAÑO | 1=De uso exclusivo del hogar; 2=Compartido con otros hogares; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGSH03 | EVACUACIÓN DEL SERVICIO SANITARIO | 1=Red general o saneamiento; 2=Fosa séptica, pozo negro; 3=Entubado hacia el arroyo; 4=Superficie, hueco en el suelo u otro; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- I_HOGSH03 | EVACUACIÓN DEL SERVICIO SANITARIO IMPUTADA | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- I_HOGSH03_TIPO | EVACUACIÓN DEL SERVICIO SANITARIO IMPUTADA TIPO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGSC01 | LUGAR PARA COCINAR | 1=Sí, privado de este hogar; 2=Sí, compartido con otros hogares; 3=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGHD00 | HABITACIONES TOTALES | Nº=Cantidad de habitaciones que no son baños ni cocinas; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGHD01 | HABITACIONES PARA DORMIR | Nº=Cantidad de habitaciones para dormir; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGSC02 | FUENTE PRINCIPAL DE ENERGÍA PARA COCINAR | 1=Electricidad; 2=Gas por cañería; 3=Supergás; 4=Queroseno; 5=Leña o carbón; 6=Otra fuente; 7=Ninguna; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCA01 | FUENTE PRINCIPAL DE ENERGÍA PARA CALEFACCIONAR | 1=Electricidad; 2=Leña o derivados; 3=Gas por cañería; 4=Supergás; 5=Queroseno; 6=Gas oil; 7=Fuel-oil; 8=Otra fuente; 9=Ninguna; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGRS01 | DISPOSICIÓN DE RESIDUOS | 1=La tiran en un contenedor o depósito; 2=La recoge un camión o carrito de basura; 3=La queman; 4=La entierran; 5=La tiran en un terreno baldío o calle; 6=La tiran al río, arroyo o mar; 7=Otra forma de desecharla; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCE27 | CALEFÓN, TERMOFÓN, CALDERETA O CALENTADOR INSTANTÁNEO | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCE26 | COLECTOR SOLAR | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCE03 | REFRIGERADOR O FREEZER | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCE04 | SECADORA DE ROPA | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCE17 | EQUIPO DE AIRE ACONDICIONADO | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCE17_1 |  | Nº=Cantidad de equipos de aire acondicionado; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCE28 | COMPUTADORA, LAPTOP, NOTEBOOK O TABLET | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCE11 | ACCESO A INTERNET | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCE22 | SERVICIO DE STREAMING | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCE12_1 | CICLOMOTORES O MOTOCICLETAS | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGCE13 | AUTOMÓVILES O CAMIONETAS | Nº=Cantidad de automóviles o camionetas; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGMA01 | MASCOTAS EN EL HOGAR (tiene mascotas) | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGMA01_1 | PERROS | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGMA01_1_1 |  | Nº=Cantidad de perros; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGMA01_2 | GATOS | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGMA01_2_1 |  | Nº=Cantidad de gatos; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGPR01 | CANTIDAD TOTAL DE PERSONAS | Nº=Cantidad total de personas incluyendo población enumerada por registros administrativos; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGPR01_1 | CANTIDAD DE PERSONAS 0-2 AÑOS | Nº=Cantidad de personas 0 a 2 años incluyendo población enumerada por registros administrativos; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGPR01_2 | CANTIDAD DE PERSONAS 3-70 AÑOS | Nº=Cantidad de personas 3 a 70 años incluyendo población enumerada por registros administrativos; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- HOGPR01_3 | CANTIDAD DE PERSONAS 71 AÑOS O MÁS | Nº=Cantidad de personas 71 y más años incluyendo población enumerada por registros administrativos; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERPH02 | SEXO AL NACER | 1=Varón; 2=Mujer; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERNA01 | EDAD | Años=Edad en años cumplidos.; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERNA02_ANO | AÑO DE NACIMIENTO | Año=Año de nacimiento; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERPA01 | RELACIÓN DE PARENTESCO | 1=Jefe/a o persona de referencia; 2=Cónyuge; 3=Hijo/a de referente y cónyuge; 4=Hijo/a sólo del referente; 5=Hijo/a del cónyuge; 7=Padre/madre; 9=Hermano/a; 11=Nieto/a; 16=Abuelo/a; 8=Suegro/a; 6=Yerno/nuera; 10=Cuñado/a; 12=Otro parentesco distinto de los anteriores; 13=Otro vínculo: NO pariente; 14=Servicio doméstico o familiar del mismo; 15=Miembro de hogar colectivo; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERPA02 | MADRE VIVE EN EL HOGAR | 1=Sí, vive en el hogar; 2=No vive en el hogar; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERPA02_1 | Número de persona si PERPA02=1 | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERPA03 | PADRE VIVE EN EL HOGAR | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERPA03_1 | Número de persona si PERPA03=1 | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERER01_1 | AFRO O NEGRA | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERER01_2 | ASIÁTICA | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERER01_3 | BLANCA | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERER01_4 | INDÍGENA | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERER01_5 | OTRA | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERER02 | ASCENDENCIA PRINCIPAL | 1=Afro o Negra; 2=Asiática; 3=Blanca; 4=Indígena; 5=Otra; 6=Ninguna; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERDI01 | DIFICULTAD PARA VER | 1=No tiene dificultad; 2=Tiene alguna dificultad; 3=Tiene mucha dificultad; 4=No puede hacerlo o le resulta imposible; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERDI02 | DIFICULTAD PARA OÍR | 1=No tiene dificultad; 2=Tiene alguna dificultad; 3=Tiene mucha dificultad; 4=No puede hacerlo o le resulta imposible; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERDI04 | DIFICULTAD PARA CAMINAR O SUBIR ESCALONES | 1=No tiene dificultad; 2=Tiene alguna dificultad; 3=Tiene mucha dificultad; 4=No puede hacerlo o le resulta imposible; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERDI03 | DIFICULTAD PARA COMUNICARSE | 1=No tiene dificultad; 2=Tiene alguna dificultad; 3=Tiene mucha dificultad; 4=No puede hacerlo o le resulta imposible; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERDI07 | DIFICULTAD PARA RECORDAR O CONCENTRARSE | 1=No tiene dificultad; 2=Tiene alguna dificultad; 3=Tiene mucha dificultad; 4=No puede hacerlo o le resulta imposible; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERDI06 | DIFICULTAD PARA REALIZAR TAREAS DE CUIDADO PERSONAL | 1=No tiene dificultad; 2=Tiene alguna dificultad; 3=Tiene mucha dificultad; 4=No puede hacerlo o le resulta imposible; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- DISC_TIENE | DISCAPACIDAD TIENE | 0=No tiene; 1=Tiene; 2=Menor de 5 años; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- DIFICULTAD | GRADO DIFICULTAD | 0=Menor de 5 años; 1=No tiene; 2=Leve; 3=Moderada; 4=Severa; 7777:NC; 8888:NR; 9898:IG; 9999:NRec; 5:NR; 6:IG
+- PERTEA | DIAGNÓSTICO DE AUTISMO | 1=Sí, fue diagnosticado; 2=No, no fue diagnosticado; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PEREC01 | CÓNYUGE O PAREJA EN EL HOGAR | 1=Sí, tiene cónyuge o pareja en el hogar; 2=No tiene; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PEREC02 | Número de persona si PEREC01=1 | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PEREC03 | TIPO DE UNIÓN | 4=Casamiento civil con pareja de otro sexo; 5=Casamiento civil con pareja del mismo sexo; 2=Unión libre con pareja de otro sexo; 3=Unión libre con pareja del mismo sexo; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PEREC04 | ESTADO ACTUAL | 2=Divorciado/a de casamiento; 7=Separado de casamiento; 1=Separado/a de unión libre; 4=Viudo/a de casamiento; 5=Viudo/a de unión libre; 6=Nunca convivió en pareja (soltero/a); 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI01 | LUGAR DE NACIMIENTO | 1=En este departamento; 3=En otro departamento; 4=En otro país; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI01_2 | Código de departamento asociado a PERMI01=3 | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI01_4 | Código de país asociado a PERMI01=4 | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI02 | AÑO DE LLEGADA A URUGUAY | Año=; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI05 | TIEMPO DE RESIDENCIA SIN INTERRUPCIONES EN ESTA LOCALIDAD | 1=Siempre residió aquí; 2=No siempre residió aquí; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI05_1 |  | Nº=Cantidad de años que hace que reside aquí; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI06 | LUGAR DE RESIDENCIA ANTERIOR | 1=En otra ciudad o localidad de este departamento; 2=En otro departamento; 3=En otro país; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI06_2 | Código de departamento asociado a PERMI06=2 | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI06_4 | Código de país asociado a PERMI06=3 | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI07 | LUGAR DE RESIDENCIA EN 2018 (CINCO AÑOS ANTES) | 1=En este departamento; 3=En otro departamento; 4=En otro país; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI07_2 | Código de departamento asociado a PERMI07=3 | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI07_4 | Código de país asociado a PERMI07=4 | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI03 | RESIDENCIA EN EL EXTRANJERO AL MENOS UN AÑO | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERMI04 | AÑO DE REGRESO A URUGUAY | Año=; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- DEPTO_RES_2018 | DEPARTAMENTO DE RESIDENCIA 2018 | 1 a 19=Código del departamento de residencia en 2018; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- DEPTO_NACIM | DEPARTAMENTO DE NACIMIENTO | 1 a 19=Código del departamento de nacimiento; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- ASISTENCIA | ASISTENCIA A CENTRO EDUCATIVO | 1=Asiste; 2=No asiste; 7777:NC; 8888:NR; 9898:IG; 9999:NRec; 7:NC; 8:NR; 9:IG
+- NIVELEDU25MAS | MAXIMO NIVEL ALCANZADO | 0=Menor de 25 años; 2=Primaria; 4=Educación media básica o Ciclo Básico; 5=Educación media superior o Bachillerato; 6=Capacitaciones o cursos de UTU; 7=Magisterio o profesorado; 8=Terciario no universitario; 9=Universidad o similar; 10=Postgrado (Diploma/Maestría/Doctorado); 12=Nunca asistió; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL01 | TRABAJÓ ALGÚN DÍA DE LA SEMANA PASADA | 1=Sí, trabajó; 2=No trabajó; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL13 | ACTIVIDAD DURANTE LA SEMANA PASADA, AL MENOS 1 HORA | 1=Realizó algún trabajo puntual y concreto a cambio de remuneración en dinero o en especie; 2=Colaboró en el cuidado de animales, cultivos o huerta que no fueran para su consumo propio; 3=Colaboró en un negocio familiar sin recibir remuneración; 4=No realizó actividades generadoras de ingresos; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL03 | TRABAJO O NEGOCIO AL QUE SEGURO VOLVERÁ | 1=Sí, tiene un trabajo o negocio al que volverá; 2=No tiene trabajo o negocio al que volver; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL04 | LAS ÚLTIMAS CUATRO SEMANAS BUSCÓ TRABAJO | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL06 | TIPO DE OCUPACIÓN (según CIUO-08)| | 0=Ocupaciones militares; 1=Directores y gerentes; 2=Profesionales científicos e intelectuales; 3=Técnicos y profesionales de nivel medio; 4=Personal de apoyo administrativo; 5=Trabajadores de los servicios y vendedores de comercios y mercados; 6=Agricultores y trabajadores calificados agropecuarios, forestales y pesqueros; 7=Oficiales, operarios y artesanos de artes mecánicas y de otros oficios; 8=Operadores de instalaciones y máquinas y ensambladores; 9=Ocupaciones elementales; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL08 | CATEGORÍA DE OCUPACIÓN | 1=Asalariado/a privado/a; 2=Asalariado/a público/a; 11=Miembro de cooperativa de trabajo (incluye sociales y de artistas); 4=Patrón/a; 5=Trabajador por cuenta propia; 6=Trabajador familiar no remunerado; 7=Trabajador de un programa social de empleo; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL09 | LUGAR DÓNDE REALIZA EL TRABAJO | 7=Teletrabajo (exclusivo); 8=Teletrabajo híbrido (semipresencial); 1=En esta vivienda (no incluye teletrabajo); 2=Fuera de esta vivienda, aquí en (Localidad); 3=En otra localidad o paraje de (Departamento); 4=En otro departamento; 5=En otro país; 6=Trabajo itinerante (en más de una localidad); 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL09_2 | Código de departamento asociado a PERAL09=4 | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL09_4 | Código de país asociado a PERAL09=5 | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL11 | JUBILADO/A O PENSIONISTA | 1=Sí; 2=No; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL14_4 | REALIZA LAS TAREAS DOMÉSTICAS | 1=Sí, de forma exclusiva; 2=No; 3=Se encarga de forma compartida; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERAL14_5 | REALIZA LAS TAREAS DE CUIDADO A ALGÚN MIEMBRO DEL HOGAR | 1=Sí, de forma exclusiva; 2=No; 3=Se encarga de forma compartida; 7777:NC; 8888:NR; 9898:IG; 9999:NRec; 4:NC
+- I_PERAL06 | TIPO DE OCUPACIÓN (según CIUO-08)| | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- I_PERAL06_TIPO |  | svm=Clasificación incial; manual=Clasificación Manual; rf=Clasificación con Random Forest; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- POBPCOAC | CONDICIÓN DE ACTIVIDAD ECONÓMICA | 1=Menor de 12 años; 2=Ocupados; 3=Desocupados; 4=Inactivos, jubilados o pensionistas; 5=Inactivos, otras causas; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERFM01 | CANTIDAD DE HIJAS E HIJOS NACIDOS VIVOS | Nº=Total de hijas e hijos nacidos vivos; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERFM01_2 |  | Nº=Total mujeres; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERFM01_3 |  | Nº=Total varones; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERFM02 | CANTIDAD DE HIJAS E HIJOS VIVOS ACTUALMENTE | Nº=Total de hijos/as vivos actualmente; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERFM04_1 | AÑO DE NACIMIENTO DEL ÚLTIMO HIJO/A | Año=Año de nacimiento del último hijo/a, agrupado según tramos quinquenales.; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- PERFM05 | AÑO DE NACIMIENTO DEL PRIMER HIJO/A | Año=Año de nacimiento del primer hijo/a, agrupado según tramos quinquenales.; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- W | PONDERADOR | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- ESTRATO | ESTRATO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- TR | TASA DE MUESTREO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+DERIVADAS: vivienda_key=DIRECCION_ID-'VIVID' (id de vivienda; NULL en situación de calle); hogar_key=DIRECCION_ID-VIVID-HOGID solo si UNIVERSO in (1,2); COUNT(DISTINCT) = hogares; asc_afro=1 si PERER01_1='1' (afrodescendiente), 0 si '2', NULL si perdido
+
+TABLA viviendas_2023 (COUNT(*)):
+- DIRECCION_ID | IDENTIFICACIÓN DE LA DIRECCIÓN | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVID | NÚMERO DE VIVIENDA | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- DEPARTAMENTO | DEPARTAMENTO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- SECCION | SECCION | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- SEGMENTO | SEGMENTO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- LOCALIDAD | LOCALIDAD | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- REGION_4 | REGIÓN | 1=Montevideo; 2=Interior, localidades de 5000 habitantes o más; 3=Interior, localidades de menos de 5000 habitantes; 4=Zona rural; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- AREA | AREA | 1=Urbano; 2=Rural; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- BARRIO85 | ÁREA APROXIMADA A BARRIO (DEF. 1985) MONTEVIDEO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- CCZ | CENTRO COMUNAL ZONAL (MONTEVIDEO) | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- MUNICIPIO_136 | MUNICIPIO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVVO00 | TIPO DE VIVIENDA RESUMIDO | 1=Particular; 2=Colectiva; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVVO01 | TIPO DE VIVIENDA | 1=Casa; 2=Apartamento en edificio en altura con ascensor; 3=Apartamento en edificio en altura sin ascensor; 4=Apartamento en edificio de una planta; 5=Apartamento o cuarto en local o vivienda colectiva; 6=Local no construido para vivienda; 7=Vivienda móvil (carpa, casa rodante, etc.); 8=Otro tipo de vivienda particular; 9=Hotel, pensión u otra casa de hospedaje; 10=Hospital, sanatorio (con internación permanente); 11=Residencial de ancianos; 12=Residencial de estudiantes; 13=Casa de peones; 14=Internado religioso; 15=Establecimiento de reclusión, penitenciarios; 16=Hogares y/o Centros de atención / protección; 17=Cuartel militar o policial; 22=Refugios; 21=Centro de rehabilitación no carcelaria con internación permanente; 18=Otra colectiva; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVVO02 | CONDICIÓN DE OCUPACIÓN | 1=Ocupada; 2=Desocupada; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- VIVVO03 |  | 1=Ocupada con residentes presentes; 2=Ocupada con residentes ausentes; 3=Desocupada: de uso temporal u ocasional; 4=Desocupada: para alquilar o vender; 5=Desocupada: en construcción o reparación; 6=Desocupada: ruinosa, destruida o inhabitable, tapiada; 7=Desocupada: vacante; 8=Desocupada: ignorado; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+
+NOMENCLÁTOR: departamentos_2023: codigo(TEXT 2 díg) -> nombre (19 deptos); localidades_2023: codloc(TEXT 5 díg = depto+localidad) -> nombre, departamento, nomdepto; barrios_mvd_2023: codbarrio(TEXT 7 díg) -> nombre (solo Montevideo). CLAVE DE JOIN DE BARRIO: personas_2023.BARRIO85 contiene el NOMBRE del barrio (texto, ej 'CASAVALLE', 'BUCEO'), NO un código -> unir SIEMPRE por nombre: JOIN barrios_mvd_2023 b ON personas_2023.BARRIO85 = b.nombre; para mapear por barrio usar b.codbarrio AS geo_codigo (NUNCA BARRIO85=codbarrio, no matchea).
