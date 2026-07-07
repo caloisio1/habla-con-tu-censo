@@ -85,7 +85,9 @@ de cinco años antes (`PERMI07`).
 
 - **2011:** validado contra el clasificador oficial del INE (*Localidades censales
   2011*): 615/615 localidades presentes con nombres completos.
-- **2023:** el nomenclátor de localidades es **provisional** — a la fecha el INE no
-  publicó la versión actualizada para 2023, por lo que la resolución de nombres de
-  localidad 2023 se apoya en la base 2011 y puede diferir en localidades nuevas o
-  redelimitadas.
+- **2023:** el nomenclátor `localidades_2023` (671 localidades) se pobló desde la
+  **cartografía oficial del INE 2023** (geopackage `loc_23_pg.gpkg`), NO de la tabla
+  2011 (el nomenclátor 2011 solo cubría ~87% de los códigos 2023, por eso se bajó la
+  cartografía oficial). Resuelve el **100%** de los códigos de localidad presentes en
+  los microdatos 2023. (El archivo de referencia *Localidades censales 2011.xlsx*, con
+  población por localidad, sí existe solo para 2011.)

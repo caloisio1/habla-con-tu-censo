@@ -200,10 +200,9 @@ consistency note, place-of-birth coding, and the full 2011 scope limitation are
 documented in [`datos/NOTAS_CALIDAD.md`](datos/NOTAS_CALIDAD.md).
 
 **Locality nomenclator.** The **2011** locality names are validated against the
-official INE classifier (615/615 localities). The **2023** locality nomenclator is
-**provisional**: the INE has not yet released the updated 2023 version, so 2023
-locality-name resolution leans on the 2011 base and may differ for new or redrawn
-localities.
+official INE classifier (615/615 localities). The **2023** names come from the
+**official INE 2023 cartography** (localities geopackage, `loc_23_pg`) and resolve
+100% of the locality codes present in the microdata.
 
 ## Tests
 

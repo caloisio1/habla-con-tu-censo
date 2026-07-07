@@ -204,10 +204,10 @@ de nacimiento y la limitación de alcance de 2011 están documentados en
 [`datos/NOTAS_CALIDAD.md`](datos/NOTAS_CALIDAD.md).
 
 **Nomenclátor de localidades.** Los nombres de localidad de **2011** están validados
-contra el clasificador oficial del INE (615/615 localidades). El nomenclátor de
-localidades de **2023** es **provisional**: el INE aún no publicó la versión
-actualizada 2023, por lo que la resolución de nombres de localidad 2023 se apoya en la
-base 2011 y puede diferir en localidades nuevas o redelimitadas.
+contra el clasificador oficial del INE (615/615 localidades). Los de **2023**
+provienen de la **cartografía oficial del INE 2023** (geopackage de localidades,
+`loc_23_pg`) y resuelven el 100% de los códigos de localidad presentes en los
+microdatos.
 
 ## Tests
 
