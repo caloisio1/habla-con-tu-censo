@@ -207,7 +207,9 @@ de nacimiento y la limitación de alcance de 2011 están documentados en
 contra el clasificador oficial del INE (615/615 localidades). Los de **2023**
 provienen de la **cartografía oficial del INE 2023** (geopackage de localidades,
 `loc_23_pg`) y resuelven el 100% de los códigos de localidad presentes en los
-microdatos.
+microdatos. El INE mantiene el marco cartográfico 2023 en **revisión técnica** (nota
+del 14/05/2026); si publica una versión corregida, el nomenclátor y las capas
+geográficas se regeneran desde la fuente oficial.
 
 ## Tests
 

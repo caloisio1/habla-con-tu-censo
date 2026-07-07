@@ -88,6 +88,12 @@ de cinco años antes (`PERMI07`).
 - **2023:** el nomenclátor `localidades_2023` (671 localidades) se pobló desde la
   **cartografía oficial del INE 2023** (geopackage `loc_23_pg.gpkg`), NO de la tabla
   2011 (el nomenclátor 2011 solo cubría ~87% de los códigos 2023, por eso se bajó la
-  cartografía oficial). Resuelve el **100%** de los códigos de localidad presentes en
-  los microdatos 2023. (El archivo de referencia *Localidades censales 2011.xlsx*, con
+  cartografía oficial). (El archivo de referencia *Localidades censales 2011.xlsx*, con
   población por localidad, sí existe solo para 2011.)
+  - Dos métricas de cobertura, distintas y ambas correctas: **96,57% (648/671)** es la
+    cobertura del geopackage hacia nombres —las 23 sin nombre son pseudo-localidades
+    rurales y códigos de missing—; **100% (621/621)** es la cobertura operativa: todos
+    los códigos de localidad que aparecen en los microdatos resuelven a nombre.
+  - El INE mantiene el **marco cartográfico 2023 en revisión técnica** (nota del
+    14/05/2026); si publica una versión corregida, el nomenclátor y las capas
+    geográficas se regeneran desde la fuente oficial (no se editan a mano).

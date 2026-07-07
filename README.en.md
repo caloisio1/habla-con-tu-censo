@@ -202,7 +202,10 @@ documented in [`datos/NOTAS_CALIDAD.md`](datos/NOTAS_CALIDAD.md).
 **Locality nomenclator.** The **2011** locality names are validated against the
 official INE classifier (615/615 localities). The **2023** names come from the
 **official INE 2023 cartography** (localities geopackage, `loc_23_pg`) and resolve
-100% of the locality codes present in the microdata.
+100% of the locality codes present in the microdata. The INE keeps the 2023
+cartographic framework under **technical review** (note of 2026-05-14); if a corrected
+version is published, the nomenclator and geographic layers are regenerated from the
+official source.
 
 ## Tests
 
