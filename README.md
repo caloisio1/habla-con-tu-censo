@@ -12,7 +12,7 @@ desde la memoria de un modelo— y en cada respuesta se muestra el SQL ejecutado
 
 Un prototipo funcional de una capa de consulta en lenguaje natural para oficinas
 nacionales de estadística, pensado como una alternativa moderna y auditable a las
-herramientas de difusión heredadas (REDATAM).
+herramientas de difusión heredadas.
 
 <p align="center">
   <img src="docs/captura-inicio.png" width="820"
@@ -78,13 +78,13 @@ convierte en prosa que cita las cifras reales.
   como no relevado / no corresponde / ignorado / secreto estadístico (y los NULL) se
   descartan siempre de conteos y denominadores — nunca se presenta una tasa sobre la
   población total cuando la variable tiene perdidos.
-- **Selección jerárquica** — subconsultas al estilo REDATAM que expresan condiciones
+- **Selección jerárquica** — subconsultas jerárquicas que expresan condiciones
   sobre *otros* integrantes del hogar (p. ej. "personas en hogares donde al menos un
   integrante tiene más de 75 años").
-- **Cuatro niveles geográficos** — departamento, localidad (por nombre, vía la tabla
-  `localidades`), barrio de Montevideo (`BARRIO85`) / CCZ y sección censal (`codsec`)
-  — con **mapas coropléticos (Leaflet)** para los niveles mapeables (departamento,
-  sección censal, barrio de Montevideo, CCZ).
+- **Niveles geográficos** — departamento, localidad (por nombre, vía la tabla
+  `localidades`), barrio de Montevideo (`BARRIO85`) / CCZ, sección censal (`codsec`)
+  y segmentos censales (2023), la geografía más fina publicada — con **mapas
+  coropléticos (Leaflet)** para los niveles mapeables.
 - **Lugar de nacimiento y migración interna** — personas nacidas en el exterior, por
   país (resuelto con el clasificador oficial de países del INE, `datos/paises.csv`,
   unido como `localidades`), y la matriz de migración interna (nacidos en el
@@ -234,7 +234,7 @@ modelo— se puede construir en unos pocos cientos de líneas de Python.
 
 ## Próximos pasos
 
-El desarrollo continúa en tres direcciones:
+El desarrollo continúa en cuatro direcciones:
 
 **Comparación intercensal (2011–2023).** El sistema calculará el mismo indicador en
 ambos censos —cada uno con sus propias reglas de conteo y supresión— y compondrá la

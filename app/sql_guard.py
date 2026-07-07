@@ -5,7 +5,7 @@ con un PARSER REAL (sqlglot). Reemplaza el guard v3 basado en regex.
 Principio: si una consulta no puede verificarse como segura, NO se ejecuta.
 
 La tabla `personas` tiene una fila por persona, así que además de las defensas
-habituales rige el control de divulgación estadística (igual que REDATAM):
+habituales rige el control de divulgación estadística:
 
   A. Solo agregados: cada columna de la proyección externa es una expresión
      agregada o una columna del GROUP BY. Nunca filas individuales.

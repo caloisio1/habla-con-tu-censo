@@ -11,8 +11,7 @@ never from an LLM's memory — and the executed SQL is shown on every answer.**
 **Live demo: https://srv1236510.hstgr.cloud/**
 
 A working prototype of a natural-language query layer for national statistical
-offices, built as a modern, auditable alternative to legacy dissemination tools
-(REDATAM).
+offices, built as a modern, auditable alternative to legacy dissemination tools.
 
 <p align="center">
   <img src="docs/captura-inicio.png" width="820"
@@ -76,13 +75,13 @@ back into prose that cites the actual numbers.
   as not-surveyed / not-applicable / unknown / statistical-secrecy (and NULLs)
   are always dropped from counts and denominators — a rate is never presented
   over the total population when the variable has missing data.
-- **Hierarchical selection** — REDATAM-style subqueries expressing conditions on
+- **Hierarchical selection** — hierarchical subqueries expressing conditions on
   *other* household members (e.g. "people in households where at least one member
   is over 75").
-- **Four geographic levels** — department, locality (by name, via the
-  `localidades` table), Montevideo neighbourhood (`BARRIO85`) / CCZ, and census
-  tract (`codsec`) — with **choropleth Leaflet maps** rendered for the mappable
-  levels (department, census tract, Montevideo neighbourhood, CCZ).
+- **Geographic levels** — department, locality (by name, via the
+  `localidades` table), Montevideo neighbourhood (`BARRIO85`) / CCZ, census
+  tract (`codsec`), and census segments (2023), the finest geography published —
+  with **choropleth Leaflet maps** rendered for the mappable levels.
 - **Place of birth and internal migration** — persons born abroad, by country
   (resolved through the official INE country classifier, `datos/paises.csv`, joined
   like `localidades`), and the internal migration matrix (born in department X,
@@ -229,7 +228,7 @@ lines of Python.
 
 ## Roadmap
 
-Development continues along three lines:
+Development continues along four lines:
 
 **Cross-census comparison (2011–2023).** The system will compute the same indicator
 in each census — each under its own counting and suppression rules — and compose the
