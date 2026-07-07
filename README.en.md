@@ -250,6 +250,9 @@ each source's official documentation, so adding other censuses from the region's
 round — or household surveys — is a loading-and-configuration problem, not a rewrite.
 Planned extensions include chat-defined derived variables and additional bases.
 
+**Multilingual availability.** The interface will also be available in Portuguese,
+French, and English, broadening the system's regional and international reach.
+
 ## Author
 
 Carlos Aloisio — sociologist, statistician and developer (Montevideo, UY).

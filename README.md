@@ -259,6 +259,9 @@ otros censos de la ronda 2020 de la región —o encuestas de hogares— es un p
 carga y configuración, no de reescritura. Entre las extensiones previstas: cálculo de
 variables derivadas por chat y ampliación de las bases disponibles.
 
+**Disponibilidad multilingüe.** La interfaz estará disponible además en portugués,
+francés e inglés, ampliando el alcance regional e internacional del sistema.
+
 ## Autor
 
 Carlos Aloisio — sociólogo, estadístico y desarrollador (Montevideo, UY).
