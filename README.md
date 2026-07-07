@@ -1,209 +1,213 @@
 # Habla con tu Censo
 
-**English** · [Español](README.es.md)
+**Español** · [Read in English →](README.en.md)
 
-*Talk to your Census — natural-language interface over Uruguay's census microdata (2011 & 2023)*
+*Hablá con tu Censo — interfaz en lenguaje natural sobre los microdatos censales de Uruguay (2011 y 2023)*
 
-**Ask Uruguay's 2011 and 2023 Censuses questions in plain Spanish. Pick the
-census with a selector; answers are computed from the official microdata —
-never from an LLM's memory — and the executed SQL is shown on every answer.**
+**Preguntale al Censo 2011 y al Censo 2023 de Uruguay en español. Elegís el censo
+con un selector; las respuestas se calculan sobre los microdatos oficiales —nunca
+desde la memoria de un modelo— y en cada respuesta se muestra el SQL ejecutado.**
 
-**Live demo: https://srv1236510.hstgr.cloud/**
+**Demo en vivo: https://srv1236510.hstgr.cloud/**
 
-A working prototype of a natural-language query layer for national statistical
-offices, built as a modern, auditable alternative to legacy dissemination tools
-(REDATAM).
+Un prototipo funcional de una capa de consulta en lenguaje natural para oficinas
+nacionales de estadística, pensado como una alternativa moderna y auditable a las
+herramientas de difusión heredadas (REDATAM).
 
 <p align="center">
   <img src="docs/captura-inicio.png" width="820"
-       alt="Landing page with a large search box asking '¿Cuánta gente vive en Salto?' and example-question chips below it">
+       alt="Página de inicio con una caja de búsqueda grande que pregunta '¿Cuánta gente vive en Salto?' y chips de preguntas de ejemplo debajo">
 </p>
 
-Ask in plain Spanish and get an answer computed from the microdata — with a
-choropleth map when the query is geographic, the valid universe and any
-suppressed cells labelled, and the exact SQL one click away:
+Preguntá en español y obtené una respuesta calculada sobre los microdatos —con un
+mapa coroplético cuando la consulta es geográfica, el universo válido y las celdas
+suprimidas etiquetadas, y el SQL exacto a un clic:
 
 <p align="center">
   <img src="docs/captura-resultado.png" width="600"
-       alt="Result card: '% of Afro-descendants by department' answered with a styled table and a choropleth map of Uruguay, over a 'View executed SQL' toggle">
+       alt="Tarjeta de resultado: '% de afrodescendientes por departamento' respondido con una tabla y un mapa coroplético de Uruguay, sobre un desplegable 'Ver SQL ejecutado'">
 </p>
 
 <details>
-<summary>Dark theme (same result)</summary>
+<summary>Tema oscuro (mismo resultado)</summary>
 
 <p align="center">
   <img src="docs/captura-resultado-oscuro.png" width="600"
-       alt="The same result card rendered in the dark theme">
+       alt="La misma tarjeta de resultado renderizada en tema oscuro">
 </p>
 
 </details>
 
-<sub>Light/dark themes, responsive to mobile, and the executed SQL shown on
-every answer.</sub>
+<sub>Temas claro/oscuro, adaptable a móvil, y el SQL ejecutado a la vista en cada
+respuesta.</sub>
 
-## What it is
+## Qué es
 
-A conversational interface over the **person-level microdata of Uruguay's 2011
-and 2023 Censuses** (INE). A selector in the interface chooses the census;
-**2023 is the default**. Each answer is tagged with the census it came from.
+Una interfaz conversacional sobre los **microdatos a nivel de persona de los Censos
+2011 y 2023 de Uruguay** (INE). Un selector en la interfaz elige el censo;
+**el predeterminado es 2023**. Cada respuesta queda etiquetada con el censo del que
+proviene.
 
-- **2011** — the `personas` table holds one row per person, **3,285,824 records**
-  across **155 columns**: the **145 raw INE variables** (kept with their original
-  codes) plus readable **derived columns** (`departamento`, `sexo`, `edad`,
-  `asc_afro`, `asc_principal`, `nbi`, `codsec`, `codloc`) and structural keys
-  (`hogar_key`, `vivienda_key`). A `localidades` reference table resolves place
-  names. Counts are **exact**.
-- **2023 (weighted)** — the INE's weighted census. Person figures are
-  **estimates**: the published number is `SUM(W)` over the weight variable, so the
-  interface rounds them and labels them as weighted estimates. Households
-  (`COUNT(DISTINCT hogar_key)`) and dwellings (a separate `viviendas_2023` table)
-  are **exact counts**. Place names resolve through the official nomenclator
-  (departments, localities, census tracts and segments, Montevideo neighbourhoods).
+- **2011** — la tabla `personas` tiene una fila por persona, **3.285.824 registros**
+  en **155 columnas**: las **145 variables crudas del INE** (con sus códigos
+  originales) más **columnas derivadas** legibles (`departamento`, `sexo`, `edad`,
+  `asc_afro`, `asc_principal`, `nbi`, `codsec`, `codloc`) y claves estructurales
+  (`hogar_key`, `vivienda_key`). Una tabla de referencia `localidades` resuelve los
+  nombres de lugar. Los conteos son **exactos**.
+- **2023 (ponderado)** — el censo ponderado del INE. Las cifras de personas son
+  **estimaciones**: la cifra publicada es `SUM(W)` sobre el ponderador, así que la
+  interfaz las redondea y las etiqueta como estimaciones ponderadas. Los hogares
+  (`COUNT(DISTINCT hogar_key)`) y las viviendas (una tabla `viviendas_2023` aparte)
+  son **conteos exactos**. Los nombres de lugar se resuelven con el nomenclátor
+  oficial (departamentos, localidades, secciones y segmentos censales, barrios de
+  Montevideo).
 
-A question in Spanish is translated to SQL by an LLM, the SQL is validated by a
-real parser, executed over SQLite, disclosure-controlled, and only then turned
-back into prose that cites the actual numbers.
+Una pregunta en español se traduce a SQL con un LLM, el SQL se valida con un parser
+real, se ejecuta sobre SQLite, se controla la divulgación y recién entonces se
+convierte en prosa que cita las cifras reales.
 
-## What you can ask
+## Qué se puede preguntar
 
-- **Counts** of persons, households or dwellings —
+- **Conteos** de personas, hogares o viviendas —
   `COUNT(*)`, `COUNT(DISTINCT hogar_key)`, `COUNT(DISTINCT vivienda_key)`
-  (household and dwelling variables repeat on every member, so distinct counts
-  are enforced).
-- **Frequencies** of any of the 145 variables (e.g. dwellings by type,
-  households by number of Unsatisfied Basic Needs).
-- **Percentages** with **automatic exclusion of missing values**: codes flagged
-  as not-surveyed / not-applicable / unknown / statistical-secrecy (and NULLs)
-  are always dropped from counts and denominators — a rate is never presented
-  over the total population when the variable has missing data.
-- **Hierarchical selection** — REDATAM-style subqueries expressing conditions on
-  *other* household members (e.g. "people in households where at least one member
-  is over 75").
-- **Four geographic levels** — department, locality (by name, via the
-  `localidades` table), Montevideo neighbourhood (`BARRIO85`) / CCZ, and census
-  tract (`codsec`) — with **choropleth Leaflet maps** rendered for the mappable
-  levels (department, census tract, Montevideo neighbourhood, CCZ).
-- **Place of birth and internal migration** — persons born abroad, by country
-  (resolved through the official INE country classifier, `datos/paises.csv`, joined
-  like `localidades`), and the internal migration matrix (born in department X,
-  living in Y). Country and birth-department codes come from the nomenclator, never
-  from the model's memory. See `datos/NOTAS_CALIDAD.md` for the coding details.
+  (las variables de hogar y vivienda se repiten en cada integrante, por eso se
+  fuerzan los conteos distintos).
+- **Frecuencias** de cualquiera de las 145 variables (p. ej. viviendas por tipo,
+  hogares por cantidad de Necesidades Básicas Insatisfechas).
+- **Porcentajes** con **exclusión automática de los perdidos**: los códigos marcados
+  como no relevado / no corresponde / ignorado / secreto estadístico (y los NULL) se
+  descartan siempre de conteos y denominadores — nunca se presenta una tasa sobre la
+  población total cuando la variable tiene perdidos.
+- **Selección jerárquica** — subconsultas al estilo REDATAM que expresan condiciones
+  sobre *otros* integrantes del hogar (p. ej. "personas en hogares donde al menos un
+  integrante tiene más de 75 años").
+- **Cuatro niveles geográficos** — departamento, localidad (por nombre, vía la tabla
+  `localidades`), barrio de Montevideo (`BARRIO85`) / CCZ y sección censal (`codsec`)
+  — con **mapas coropléticos (Leaflet)** para los niveles mapeables (departamento,
+  sección censal, barrio de Montevideo, CCZ).
+- **Lugar de nacimiento y migración interna** — personas nacidas en el exterior, por
+  país (resuelto con el clasificador oficial de países del INE, `datos/paises.csv`,
+  unido como `localidades`), y la matriz de migración interna (nacidos en el
+  departamento X que viven en Y). Los códigos de país y de departamento de nacimiento
+  vienen del nomenclátor, nunca de la memoria del modelo. Ver `datos/NOTAS_CALIDAD.md`
+  para el detalle de la codificación.
 
-## Statistical disclosure control
+## Control de divulgación estadística
 
-Because the underlying table is microdata (one row per person), the validation
-gate (`app/sql_guard.py`) is built on a **real SQL parser (`sqlglot`)** working
-on the parsed tree, not on text matching:
+Como la tabla subyacente es de microdatos (una fila por persona), la compuerta de
+validación (`app/sql_guard.py`) se apoya en un **parser SQL real (`sqlglot`)** que
+trabaja sobre el árbol parseado, no sobre coincidencias de texto:
 
-1. **Aggregate-only output** — every column of the outer projection must be an
-   aggregate or a `GROUP BY` column; `SELECT *` and bare column selection are
-   rejected. Individual rows can never be returned.
-2. **Structural small-cell suppression** — the guard identifies *on the tree*
-   which output columns are counts and hands them to the suppressor; any result
-   cell with fewer than **5 persons** is dropped after execution (standard NSO
-   practice). Suppressed geographies render as grey ("sin dato publicable") on
-   the maps.
-3. **Fail-closed** — if the guard cannot prove a query safe (unparseable, counts
-   not identifiable, disallowed table/column/function), it is **not executed**
-   and no answer is improvised.
-4. **Defense-in-depth** — single `SELECT` statement only; table whitelist
-   (`personas`, `localidades`, `paises`) with joins allowed only on the nomenclator
-   keys (`codloc`, country code); column
-   whitelist from the dictionary; re-identifying keys (`hogar_key`,
-   `vivienda_key`) allowed in the outer projection only inside
-   `COUNT(DISTINCT …)`; dangerous SQLite functions blocked; mandatory, capped
-   `LIMIT`.
+1. **Salida solo agregada** — cada columna de la proyección externa debe ser un
+   agregado o una columna del `GROUP BY`; `SELECT *` y la selección de columnas
+   sueltas se rechazan. Nunca se devuelven filas individuales.
+2. **Supresión estructural de celdas chicas** — el guard identifica *en el árbol* qué
+   columnas de salida son conteos y se las pasa al supresor; toda celda de resultado
+   con menos de **5 personas** se descarta tras la ejecución (práctica estándar de las
+   ONE). Las geografías suprimidas se pintan en gris ("sin dato publicable") en los
+   mapas.
+3. **Falla cerrada** — si el guard no puede probar que una consulta es segura
+   (no parseable, conteos no identificables, tabla/columna/función no permitida), la
+   consulta **no se ejecuta** y no se improvisa ninguna respuesta.
+4. **Defensa en profundidad** — una sola sentencia `SELECT`; lista blanca de tablas
+   (`personas`, `localidades`, `paises`) con JOIN permitido solo por las claves del
+   nomenclátor (`codloc`, código de país); lista blanca de columnas desde el
+   diccionario; claves reidentificantes (`hogar_key`, `vivienda_key`) permitidas en la
+   proyección externa solo dentro de `COUNT(DISTINCT …)`; funciones peligrosas de
+   SQLite bloqueadas; `LIMIT` obligatorio y acotado.
 
-The suppression threshold, whitelist and prompt are **configuration derived from
-the dictionary, not hand-written code**.
+El umbral de supresión, la lista blanca y el prompt son **configuración derivada del
+diccionario, no código escrito a mano**.
 
-## Architecture
+## Arquitectura
 
 ```
-question (ES) → LLM writes SQL → sqlglot validation gate → SQLite over microdata
-             → small-cell suppression → LLM writes the answer from real numbers
-             → choropleth map (Leaflet) when the query is geographic
+pregunta (ES) → el LLM escribe SQL → compuerta de validación sqlglot → SQLite sobre microdatos
+             → supresión de celdas chicas → el LLM redacta la respuesta con las cifras reales
+             → mapa coroplético (Leaflet) cuando la consulta es geográfica
 ```
 
-**FastAPI + SQLite + OpenAI + Leaflet**, ~vanilla single-page front-end (no build
-step). The schema text the model sees, the column whitelist the guard enforces,
-and the missing-value rules are **all generated from a data dictionary** — the
-public INE metadata for each census — not hand-written code. The same pattern
-runs **two engines behind one selector**: the 2011 engine (`app/main.py`,
-`app/sql_guard.py`) and the 2023 weighted engine (`consultar_2023.py`,
-`sql_guard_2023.py`), each with its own dictionary and disclosure rules, sharing
-the front-end, the Leaflet maps and the aggregate-only guarantee. The model is
-configurable via the `CENSO_MODELO` environment variable.
+**FastAPI + SQLite + OpenAI + Leaflet**, front-end de una sola página ~vanilla (sin
+paso de build). El texto del esquema que ve el modelo, la lista blanca de columnas que
+aplica el guard y las reglas de perdidos se **generan todos a partir de un diccionario
+de datos** —los metadatos públicos del INE de cada censo—, no de código escrito a
+mano. El mismo patrón corre **dos motores detrás de un selector**: el motor 2011
+(`app/main.py`, `app/sql_guard.py`) y el motor 2023 ponderado (`consultar_2023.py`,
+`sql_guard_2023.py`), cada uno con su diccionario y sus reglas de divulgación,
+compartiendo el front-end, los mapas Leaflet y la garantía de solo-agregados. El
+modelo se configura con la variable de entorno `CENSO_MODELO`.
 
-## Run it
+## Cómo correrlo
 
 ```bash
 pip install -r requirements.txt
 
-# The INE microdata file is NOT included in this repo (it is not ours to
-# redistribute). Download the Census 2011 persons microdata from
-# https://www.ine.gub.uy and place the .sav in datos/.
-# The expected file is "Base unificada Viv_Hog_Pers.sav".
+# El archivo de microdatos del INE NO se incluye en este repo (no es nuestro para
+# redistribuir). Descargá los microdatos de personas del Censo 2011 desde
+# https://www.ine.gub.uy y poné el .sav en datos/.
+# El archivo esperado es "Base unificada Viv_Hog_Pers.sav".
 
-# 1. Generate the data dictionary — schema, whitelist and LLM prompt all derive
-#    from this file. Metadata only: it reads labels, not microdata.
+# 1. Generar el diccionario de datos — el esquema, la lista blanca y el prompt del LLM
+#    derivan de este archivo. Solo metadatos: lee etiquetas, no microdatos.
 python datos/generar_diccionario.py "datos/Base unificada Viv_Hog_Pers.sav"
 
-# 2. Verify the column mapping against your file before loading (this is also
-#    the module cargar.py imports its derivation rules from).
+# 2. Verificar el mapeo de columnas contra tu archivo antes de cargar (es también
+#    el módulo del que cargar.py importa sus reglas de derivación).
 python datos/convertir_ine.py --inspeccionar "datos/Base unificada Viv_Hog_Pers.sav"
 
-# 3. Build the database (datos/censo.db). Reads the .sav in chunks — no
-#    intermediate CSV — loading the 145 raw variables + derived columns + the
-#    localidades reference table.
+# 3. Construir la base (datos/censo.db). Lee el .sav en bloques —sin CSV
+#    intermedio— cargando las 145 variables crudas + columnas derivadas + la tabla
+#    de referencia localidades.
 python datos/cargar.py "datos/Base unificada Viv_Hog_Pers.sav"
 
-# 4. Set your OpenAI key
+# 4. Configurar tu clave de OpenAI
 export OPENAI_API_KEY=sk-...
 
-# 5. Launch
+# 5. Lanzar
 uvicorn app.main:app --reload
 ```
 
-Then open http://localhost:8000 and ask, for example:
+Después abrí http://localhost:8000 y preguntá, por ejemplo:
 *"¿Cuántas mujeres mayores de 75 años hay en Rivera?"*
 
-> The steps above build the **2011** database. The **2023 weighted** census
-> (`consultar_2023.py`, `sql_guard_2023.py`) runs against its own database,
-> prepared separately from the INE's weighted microdata and nomenclator; that
-> microdata and its loading pipeline are not part of this repository. The 2023
-> data dictionary and the GeoJSON map layers used at runtime **are** included.
+> Los pasos de arriba construyen la base de **2011**. El censo **2023 ponderado**
+> (`consultar_2023.py`, `sql_guard_2023.py`) corre contra su propia base, preparada
+> por separado a partir de los microdatos ponderados y el nomenclátor del INE; esos
+> microdatos y su pipeline de carga no forman parte de este repositorio. El
+> diccionario de datos 2023 y las capas GeoJSON usadas en tiempo de ejecución **sí**
+> se incluyen.
 
-Key columns of the `personas` table:
+Columnas clave de la tabla `personas`:
 
-| Column | Description |
+| Columna | Descripción |
 |---|---|
-| `departamento`, `sexo`, `edad` | Department (19 values), sex, age in years |
-| `asc_afro` | Mention of Afro/Black ancestry (`Si`/`No`/NULL) |
-| `asc_principal` | Main declared ancestry (only for those declaring more than one) |
-| `nbi` | Household's Unsatisfied Basic Needs (0–3, capped at "3 or more") |
-| `codsec`, `codloc`, `BARRIO85`, `CCZ` | Census tract, locality, Montevideo neighbourhood / CCZ |
-| `hogar_key`, `vivienda_key` | Household / dwelling id (only inside `COUNT(DISTINCT …)`) |
-| *145 raw INE variables* | Original codes (e.g. `VIVVO03`, `HOGPR01`), with the dictionary's value labels |
+| `departamento`, `sexo`, `edad` | Departamento (19 valores), sexo, edad en años |
+| `asc_afro` | Mención de ascendencia afro/negra (`Si`/`No`/NULL) |
+| `asc_principal` | Ascendencia principal declarada (solo para quienes declararon más de una) |
+| `nbi` | Necesidades Básicas Insatisfechas del hogar (0–3, topeada en "3 o más") |
+| `codsec`, `codloc`, `BARRIO85`, `CCZ` | Sección censal, localidad, barrio de Montevideo / CCZ |
+| `hogar_key`, `vivienda_key` | Id de hogar / vivienda (solo dentro de `COUNT(DISTINCT …)`) |
+| *145 variables crudas del INE* | Códigos originales (p. ej. `VIVVO03`, `HOGPR01`), con las etiquetas de valor del diccionario |
 
-Missing values (not surveyed, collective dwellings, statistical secrecy) are
-stored as NULL and always excluded from counts and denominators.
+Los perdidos (no relevado, viviendas colectivas, secreto estadístico) se guardan como
+NULL y se excluyen siempre de conteos y denominadores.
 
-## Data quality & scope
+## Calidad y alcance de los datos
 
-The **2011** persons microdata contains **occupied dwellings only**, so questions
-about **vacant / unoccupied dwellings** are out of scope there and return a clear
-message (`NO_RESPONDIBLE_VIVIENDAS`) rather than a wrong answer. The **2023**
-census has a dedicated dwellings table, so vacant-dwelling questions *are*
-answerable under the 2023 selector. Loading counts, the household/`PERID`
-consistency note, place-of-birth coding, and the full 2011 scope limitation are
-documented in [`datos/NOTAS_CALIDAD.md`](datos/NOTAS_CALIDAD.md).
+Los microdatos de personas de **2011** contienen **solo viviendas ocupadas**, así que
+las preguntas por **viviendas desocupadas / vacantes** están fuera de alcance ahí y
+devuelven un mensaje claro (`NO_RESPONDIBLE_VIVIENDAS`) en vez de una respuesta
+incorrecta. El censo **2023** tiene una tabla de viviendas dedicada, así que las
+preguntas por viviendas desocupadas *sí* se responden bajo el selector 2023. Los
+conteos de carga, la nota de consistencia hogares/`PERID`, la codificación del lugar
+de nacimiento y la limitación de alcance de 2011 están documentados en
+[`datos/NOTAS_CALIDAD.md`](datos/NOTAS_CALIDAD.md).
 
-**Locality nomenclator.** The **2011** locality names are validated against the
-official INE classifier (615/615 localities). The **2023** locality nomenclator is
-**provisional**: the INE has not yet released the updated 2023 version, so 2023
-locality-name resolution leans on the 2011 base and may differ for new or redrawn
-localities.
+**Nomenclátor de localidades.** Los nombres de localidad de **2011** están validados
+contra el clasificador oficial del INE (615/615 localidades). El nomenclátor de
+localidades de **2023** es **provisional**: el INE aún no publicó la versión
+actualizada 2023, por lo que la resolución de nombres de localidad 2023 se apoya en la
+base 2011 y puede diferir en localidades nuevas o redelimitadas.
 
 ## Tests
 
@@ -211,53 +215,58 @@ localities.
 pytest
 ```
 
-The suite covers the security gate (`test_sql_guard.py`: injection attempts,
-row-level extraction attempts, table/column whitelisting, `COUNT(DISTINCT)`
-enforcement on keys, small-cell suppression), the map-level detection
-(`test_mapa.py`), department-name normalization (`test_normalizar.py`) and the
-`.sav` text repair (`test_reparar.py`).
+La batería cubre la compuerta de seguridad (`test_sql_guard.py`: intentos de
+inyección, intentos de extracción a nivel de fila, listas blancas de tabla/columna,
+exigencia de `COUNT(DISTINCT)` sobre las claves, supresión de celdas chicas), la
+detección de nivel de mapa (`test_mapa.py`), la normalización de nombres de
+departamento (`test_normalizar.py`) y la reparación de texto del `.sav`
+(`test_reparar.py`).
 
-## Why this exists
+## Por qué existe
 
-Most statistical offices in Latin America still disseminate census data through
-tools designed in the 1990s. This prototype shows that a safe, auditable,
-LLM-powered query layer over official microdata — with disclosure control
-enforced by a parser, not by trust in the model — can be built in a few hundred
-lines of Python.
+La mayoría de las oficinas de estadística de América Latina todavía difunden datos
+censales con herramientas diseñadas en los años 90. Este prototipo muestra que una
+capa de consulta segura, auditable y potenciada por LLM sobre microdatos oficiales
+—con el control de divulgación aplicado por un parser, no por confianza en el
+modelo— se puede construir en unos pocos cientos de líneas de Python.
 
-## Roadmap
+## Próximos pasos
 
-Development continues along three lines:
+El desarrollo continúa en tres direcciones:
 
-**Cross-census comparison (2011–2023).** The system will compute the same indicator
-in each census — each under its own counting and suppression rules — and compose the
-comparison with automatic methodological caveats. The centerpiece is an explicit,
-reviewable harmonization layer: a public file documenting, variable by variable, what
-is comparable across censuses, under which code mapping, and with which mandatory
-caveat. Comparisons that are not methodologically defensible (e.g., fine-grained
-geography redrawn between rounds) are not enabled. Harmonization is statistical
-judgment, not code: every entry requires an expert verdict before activation.
+**Comparación intercensal (2011–2023).** El sistema calculará el mismo indicador en
+ambos censos —cada uno con sus propias reglas de conteo y supresión— y compondrá la
+comparación con advertencias metodológicas automáticas. La pieza central es una capa
+de armonización explícita y revisable: un archivo público que documenta, variable por
+variable, qué es comparable entre censos, con qué mapeo de códigos y con qué nota
+obligatoria. Las comparaciones que no son metodológicamente defendibles (por ejemplo,
+geografía fina rediseñada entre rondas) no se habilitan. La armonización es un trabajo
+de criterio estadístico, no de código: cada entrada lleva un veredicto experto antes
+de activarse.
 
-**Exposure as an MCP server.** The same structural validation and suppression layer
-that protects the web interface can be exposed through the Model Context Protocol,
-allowing any AI assistant to query census microdata while receiving only publishable
-aggregates. The validator acts as a statistical disclosure firewall, independent of
-whichever model authors the query — extending AI-accessible public data ecosystems
-into the layer that open-data tooling does not reach.
+**Exposición como servidor MCP.** La misma capa de validación estructural y supresión
+que protege la interfaz web puede exponerse mediante el protocolo MCP (Model Context
+Protocol), permitiendo que cualquier asistente de IA consulte los microdatos censales
+recibiendo únicamente agregados publicables. El validador actúa como cortafuegos de
+revelación estadística, independiente del modelo que escriba la consulta. Esto
+integraría los microdatos censales al ecosistema de datos públicos accesibles por IA
+que ya se está construyendo en Uruguay, cubriendo la capa que las herramientas sobre
+datos abiertos no alcanzan.
 
-**New sources.** The architecture generates its schema, whitelist, and prompt from
-each source's official documentation, so adding other censuses from the region's 2020
-round — or household surveys — is a loading-and-configuration problem, not a rewrite.
-Planned extensions include chat-defined derived variables and additional bases.
+**Extensión a nuevas fuentes.** La arquitectura genera su esquema, su lista blanca y su
+prompt a partir de la documentación oficial de cada fuente, por lo que incorporar
+otros censos de la ronda 2020 de la región —o encuestas de hogares— es un problema de
+carga y configuración, no de reescritura. Entre las extensiones previstas: cálculo de
+variables derivadas por chat y ampliación de las bases disponibles.
 
-## Author
+## Autor
 
-Carlos Aloisio — sociologist, statistician and developer (Montevideo, UY).
-Builder of Uruguay's National Observatory on Sexual and Reproductive Health
-(AI-assisted evidence system, Ministry of Public Health / UNFPA, 2025–2026).
+Carlos Aloisio — sociólogo, estadístico y desarrollador (Montevideo, UY).
+Constructor del Observatorio Nacional de Salud Sexual y Reproductiva de Uruguay
+(sistema de evidencia asistido por IA, Ministerio de Salud Pública / UNFPA, 2025–2026).
 
-Contact: caloisio@gmail.com
+Contacto: caloisio@gmail.com
 
-## License
+## Licencia
 
 MIT
