@@ -23,3 +23,4 @@ e1_check*.py
 lanzar_*.sh
 uvi_test.log
 incident_*.txt
+healthcheck.sh
