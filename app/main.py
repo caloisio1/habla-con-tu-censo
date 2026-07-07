@@ -80,7 +80,27 @@ DERIVADAS, legibles, que DEBÉS PREFERIR sobre sus equivalentes crudas:
 TABLA localidades(codloc INTEGER, nombre TEXT, departamento TEXT): referencia.
   nombre en MAYÚSCULAS y SIN tilde ('PASO DE LOS TOROS','BELLA UNION'). Preguntas por
   una localidad -> JOIN localidades ON personas.codloc = localidades.codloc y filtro
-  por localidades.nombre."""
+  por localidades.nombre.
+
+TABLA paises(codigo INTEGER, nombre TEXT, nombre_oficial TEXT, alfa3 TEXT): nomenclátor
+  de países del INE. nombre en MAYÚSCULAS sin acento ('PARAGUAY','VENEZUELA','ESPAÑA',
+  'ARGENTINA','BRASIL','ESTADOS UNIDOS','ITALIA'). Se usa para las personas nacidas en el
+  exterior (ver LUGAR DE NACIMIENTO).
+
+LUGAR DE NACIMIENTO Y MIGRACIÓN INTERNA (bloque PERMI; el censo SÍ relevó lugar de nacimiento):
+- PERMI01 = lugar de nacimiento: 1=en esta localidad, 2=en otra localidad del mismo
+  departamento, 3=en otro departamento (del país), 4=en otro país, 8=no relevado.
+- Nacidos en el EXTERIOR (otro país): WHERE PERMI01=4. El país está en el CÓDIGO PERMI01_4;
+  para filtrar o desglosar por país hacé JOIN paises ON personas.PERMI01_4 = paises.codigo y
+  usá paises.nombre (ej.: nacidos en Paraguay -> WHERE PERMI01=4 AND paises.nombre='PARAGUAY').
+- DEPARTAMENTO de nacimiento: si PERMI01 IN (1,2) la persona nació en su departamento ACTUAL
+  de residencia (columna departamento); si PERMI01=3 nació en OTRO departamento, cuyo código
+  está en PERMI01_2 (texto con cero inicial). Códigos: 01=MONTEVIDEO 02=ARTIGAS 03=CANELONES
+  04=CERRO LARGO 05=COLONIA 06=DURAZNO 07=FLORES 08=FLORIDA 09=LAVALLEJA 10=MALDONADO
+  11=PAYSANDU 12=RIO NEGRO 13=RIVERA 14=ROCHA 15=SALTO 16=SAN JOSE 17=SORIANO 18=TACUAREMBO
+  19=TREINTA Y TRES.
+- PERMI06 = lugar de residencia anterior; PERMI07 = residencia 5 años antes (misma
+  codificación 1/2/3/4; el código de país está en PERMI06_4 / PERMI07_4)."""
 
 REGLAS = """Reglas estrictas:
 - Devolvé SOLO la consulta SQL (dialecto SQLite), sin explicaciones ni markdown.
@@ -109,6 +129,19 @@ celda sea suprimible, agregá el conteo válido como columna aparte con alias AS
 
 LOCALIDADES: preguntas por una localidad -> JOIN localidades por codloc y filtro por
 localidades.nombre en MAYÚSCULAS y SIN tilde.
+
+MIGRACIÓN Y LUGAR DE NACIMIENTO (usá el bloque PERMI y la tabla paises):
+- "nacidos en <PAÍS>" -> JOIN paises ON personas.PERMI01_4 = paises.codigo
+    WHERE PERMI01=4 AND paises.nombre='<PAÍS>' (nombre en MAYÚSCULAS sin acento).
+- "nacidos en el exterior" (total) -> COUNT(*) WHERE PERMI01=4.
+- "nacidos en el exterior por país" -> JOIN paises ... GROUP BY paises.nombre.
+- "nacidos en el exterior por departamento" (de residencia) -> WHERE PERMI01=4 GROUP BY departamento.
+- "nacidos en el departamento X que viven en Y" (matriz de migración interna):
+    WHERE departamento='Y' AND ( (PERMI01 IN (1,2) AND 'Y'='X')
+                                 OR (PERMI01=3 AND PERMI01_2='<código de X con cero inicial>') ).
+    Ej. Rivera->Montevideo: WHERE departamento='MONTEVIDEO' AND PERMI01=3 AND PERMI01_2='13'.
+- "personas que viven en un departamento distinto al que nacieron" (nacional) -> WHERE PERMI01=3.
+  Estas preguntas SÍ se pueden responder: NO devuelvas NO_RESPONDIBLE.
 
 PATRONES DE MAPA (desglose geográfico): la clave geográfica va como PRIMERA columna y la
 métrica como segunda.

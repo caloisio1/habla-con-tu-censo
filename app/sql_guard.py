@@ -38,10 +38,18 @@ UMBRAL_SUPRESION = 5
 # Techo de filas. 300 cubre el nivel geográfico más grande que se mapea.
 LIMITE_MAXIMO = 300
 
-TABLAS_PERMITIDAS = {"personas", "localidades"}
+TABLAS_PERMITIDAS = {"personas", "localidades", "paises"}
+
+# Columnas del nomenclátor de países (nacidos en el exterior: PERMI01_4/06_4/07_4).
+COLUMNAS_PAISES = {"codigo", "nombre", "nombre_oficial", "alfa3"}
+
+# Columnas de personas que referencian un código de país (JOIN válido a paises.codigo).
+_COLS_PAIS = {"permi01_4", "permi06_4", "permi07_4"}
 
 # Whitelist de columnas (todo en minúsculas; SQLite es case-insensitive).
-_COLUMNAS_VALIDAS = dicc.columnas_personas() | {c.lower() for c in dicc.COLUMNAS_LOCALIDADES}
+_COLUMNAS_VALIDAS = (dicc.columnas_personas()
+                     | {c.lower() for c in dicc.COLUMNAS_LOCALIDADES}
+                     | COLUMNAS_PAISES)
 
 # Identificadores de hogar/vivienda: reidentificantes.
 KEYS_RESTRINGIDAS = {"hogar_key", "vivienda_key"}
@@ -78,8 +86,9 @@ def _cols_de_scope_externo(nodo: exp.Expression, externo: exp.Select):
 
 
 def _validar_join(arbol: exp.Expression) -> None:
-    """Todo JOIN debe ser personas↔localidades por codloc (las tablas ya están
-    en la whitelist; acá se exige que la condición sea exclusivamente codloc)."""
+    """JOIN permitido solo con el nomenclátor: personas↔localidades por codloc, o
+    personas↔paises por un código de país (PERMI01_4/06_4/07_4 = paises.codigo).
+    Se exige que la condición use exclusivamente esas columnas (no reidentifica)."""
     for j in arbol.find_all(exp.Join):
         using = j.args.get("using")
         on = j.args.get("on")
@@ -89,9 +98,12 @@ def _validar_join(arbol: exp.Expression) -> None:
             cols = {c.name.lower() for c in on.find_all(exp.Column)}
         else:
             raise SQLNoSeguro("JOIN sin condición no permitido.")
-        if cols != {"codloc"}:
+        es_localidad = cols == {"codloc"}
+        es_pais = "codigo" in cols and cols <= ({"codigo"} | _COLS_PAIS)
+        if not (es_localidad or es_pais):
             raise SQLNoSeguro(
-                "JOIN solo permitido entre personas y localidades por codloc."
+                "JOIN solo permitido con el nomenclátor: localidades por codloc "
+                "o paises por PERMI01_4/PERMI06_4/PERMI07_4 = paises.codigo."
             )
 
 

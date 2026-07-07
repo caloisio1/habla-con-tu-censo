@@ -65,6 +65,21 @@ nombres y no con códigos pelados. <metrica> es SUM(W) redondeada (personas), CO
 (hogares), COUNT(*) (viviendas, consultando viviendas_2023) o el % según la pregunta. Las mismas columnas
 geográficas existen en viviendas_2023 (que también puede unirse al nomenclátor). geo_codigo (el código
 compuesto) es OBLIGATORIO para el mapa.
+LUGAR DE NACIMIENTO Y MIGRACIÓN INTERNA (el censo relevó lugar de nacimiento; estas preguntas SÍ se responden):
+- PERMI01 = lugar de nacimiento: 1=en este departamento, 3=en otro departamento, 4=en otro país.
+- Nacidos en el EXTERIOR: WHERE PERMI01=4; el país está en el código PERMI01_4. Para filtrar o
+  desglosar por país, JOIN paises ON personas_2023.PERMI01_4 = paises.codigo y usá paises.nombre
+  (MAYÚSCULAS sin acento: 'PARAGUAY','VENEZUELA','ESPAÑA'...). Métrica: SUM(W) + COUNT(*) AS n_crudo.
+  Ej.: nacidos en Venezuela -> WHERE PERMI01=4 AND paises.nombre='VENEZUELA'.
+- "nacidos en el exterior por país" -> JOIN paises ... GROUP BY paises.nombre (sin mapa).
+- "nacidos en el exterior por departamento de residencia" -> WHERE PERMI01=4, patrón de mapa por departamento.
+- DEPARTAMENTO de nacimiento: columna DEPTO_NACIM (texto SIN cero inicial: '1'..'19'). Códigos:
+  1=MONTEVIDEO 2=ARTIGAS 3=CANELONES 4=CERRO LARGO 5=COLONIA 6=DURAZNO 7=FLORES 8=FLORIDA 9=LAVALLEJA
+  10=MALDONADO 11=PAYSANDU 12=RIO NEGRO 13=RIVERA 14=ROCHA 15=SALTO 16=SAN JOSE 17=SORIANO 18=TACUAREMBO
+  19=TREINTA Y TRES. (La columna de RESIDENCIA DEPARTAMENTO sí lleva cero inicial: '01'..'19'.)
+- "nacidos en el departamento X que viven en Y": WHERE DEPARTAMENTO='<Y con cero>' AND DEPTO_NACIM='<X sin cero>'.
+  Ej. Rivera->Montevideo: WHERE DEPARTAMENTO='01' AND DEPTO_NACIM='13'.
+- "viven en un departamento distinto al que nacieron" (nacional): WHERE PERMI01=3.
 - Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE"""
 
 PROMPT_SQL = ("Sos un traductor de preguntas en español a SQL (SQLite) sobre el Censo 2023 "

@@ -51,3 +51,41 @@ por departamento/localidad).
 **Extensión futura:** cargar la **base de VIVIENDAS** del Censo 2011 (que sí
 incluye el stock de viviendas desocupadas) como tabla aparte, para poder responder
 preguntas sobre viviendas vacías, de uso temporal, en construcción, etc.
+
+## Lugar de nacimiento y migración (bloque `PERMI`)
+
+El censo relevó lugar de nacimiento y migración. Las variables (crudas del INE) son:
+`PERMI01` (lugar de nacimiento: 1/2=en el país actual, 3=otro departamento, 4=otro
+país), `PERMI01_2` (departamento de nacimiento, código '01'..'19'), `PERMI01_4`
+(**país** de nacimiento, código), y los análogos de residencia anterior (`PERMI06`) y
+de cinco años antes (`PERMI07`).
+
+- **Nomenclátor de países** (`paises`, ver `datos/paises.csv`): los códigos de país
+  siguen el **clasificador oficial del INE adaptado al Uruguay** (código numérico
+  ONU / ISO 3166-1). Se carga como tabla de referencia y las consultas por país se
+  resuelven con un JOIN `personas.PERMI01_4 = paises.codigo`, igual que `localidades`.
+  Total nacidos en el exterior 2011: **77.002** (coincide con los tabulados del INE).
+- **Códigos de 4 dígitos (solo 2011):** unos pocos orígenes usan un código de 4
+  dígitos = país base (ISO 3 díg) × 10 + subdivisión (p. ej. España 724 → 7241/7242;
+  Alemania 276 → 276x; Reino Unido 826 → 826x = las cuatro naciones del RU). Se
+  agrupan al país base en el nomenclátor (columna `nombre_oficial` marca `(cód. 2011)`).
+  Con esto la cobertura de país sube al **99,7%**; el resto (~0,3%: códigos 90xx e
+  "ignorado" 9999) queda como país no especificado. En el Censo 2023 los códigos ya
+  son de 3 dígitos y no requieren este ajuste.
+- **Departamento de nacimiento (matriz de migración interna):** 2011 lo reconstruye de
+  `PERMI01`/`PERMI01_2`; 2023 tiene la columna directa `DEPTO_NACIM`. Ojo: en 2023
+  `DEPARTAMENTO` (residencia) lleva cero inicial ('01'..'19') pero `DEPTO_NACIM` no
+  ('1'..'19').
+- **2023 · enumerados por registro (`FUENTE_EXT`=2):** ~12.305 personas no tienen
+  lugar de nacimiento relevado (100% faltante en `PERMI01`/`DEPTO_NACIM`). Se excluyen
+  naturalmente al filtrar; en porcentajes de nacimiento el denominador son los relevados
+  con cuestionario.
+
+## Nomenclátor de localidades
+
+- **2011:** validado contra el clasificador oficial del INE (*Localidades censales
+  2011*): 615/615 localidades presentes con nombres completos.
+- **2023:** el nomenclátor de localidades es **provisional** — a la fecha el INE no
+  publicó la versión actualizada para 2023, por lo que la resolución de nombres de
+  localidad 2023 se apoya en la base 2011 y puede diferir en localidades nuevas o
+  redelimitadas.

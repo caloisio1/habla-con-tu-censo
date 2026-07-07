@@ -1,5 +1,7 @@
 # Habla con tu Censo
 
+**English** · [Español](README.es.md)
+
 *Talk to your Census — natural-language interface over Uruguay's census microdata (2011 & 2023)*
 
 **Ask Uruguay's 2011 and 2023 Censuses questions in plain Spanish. Pick the
@@ -81,6 +83,11 @@ back into prose that cites the actual numbers.
   `localidades` table), Montevideo neighbourhood (`BARRIO85`) / CCZ, and census
   tract (`codsec`) — with **choropleth Leaflet maps** rendered for the mappable
   levels (department, census tract, Montevideo neighbourhood, CCZ).
+- **Place of birth and internal migration** — persons born abroad, by country
+  (resolved through the official INE country classifier, `datos/paises.csv`, joined
+  like `localidades`), and the internal migration matrix (born in department X,
+  living in Y). Country and birth-department codes come from the nomenclator, never
+  from the model's memory. See `datos/NOTAS_CALIDAD.md` for the coding details.
 
 ## Statistical disclosure control
 
@@ -100,7 +107,8 @@ on the parsed tree, not on text matching:
    not identifiable, disallowed table/column/function), it is **not executed**
    and no answer is improvised.
 4. **Defense-in-depth** — single `SELECT` statement only; table whitelist
-   (`personas`, `localidades`) with joins allowed only on `codloc`; column
+   (`personas`, `localidades`, `paises`) with joins allowed only on the nomenclator
+   keys (`codloc`, country code); column
    whitelist from the dictionary; re-identifying keys (`hogar_key`,
    `vivienda_key`) allowed in the outer projection only inside
    `COUNT(DISTINCT …)`; dangerous SQLite functions blocked; mandatory, capped
@@ -188,8 +196,14 @@ about **vacant / unoccupied dwellings** are out of scope there and return a clea
 message (`NO_RESPONDIBLE_VIVIENDAS`) rather than a wrong answer. The **2023**
 census has a dedicated dwellings table, so vacant-dwelling questions *are*
 answerable under the 2023 selector. Loading counts, the household/`PERID`
-consistency note, and the full 2011 scope limitation are documented in
-[`datos/NOTAS_CALIDAD.md`](datos/NOTAS_CALIDAD.md).
+consistency note, place-of-birth coding, and the full 2011 scope limitation are
+documented in [`datos/NOTAS_CALIDAD.md`](datos/NOTAS_CALIDAD.md).
+
+**Locality nomenclator.** The **2011** locality names are validated against the
+official INE classifier (615/615 localities). The **2023** locality nomenclator is
+**provisional**: the INE has not yet released the updated 2023 version, so 2023
+locality-name resolution leans on the 2011 base and may differ for new or redrawn
+localities.
 
 ## Tests
 
@@ -210,6 +224,31 @@ tools designed in the 1990s. This prototype shows that a safe, auditable,
 LLM-powered query layer over official microdata — with disclosure control
 enforced by a parser, not by trust in the model — can be built in a few hundred
 lines of Python.
+
+## Roadmap
+
+Development continues along three lines:
+
+**Cross-census comparison (2011–2023).** The system will compute the same indicator
+in each census — each under its own counting and suppression rules — and compose the
+comparison with automatic methodological caveats. The centerpiece is an explicit,
+reviewable harmonization layer: a public file documenting, variable by variable, what
+is comparable across censuses, under which code mapping, and with which mandatory
+caveat. Comparisons that are not methodologically defensible (e.g., fine-grained
+geography redrawn between rounds) are not enabled. Harmonization is statistical
+judgment, not code: every entry requires an expert verdict before activation.
+
+**Exposure as an MCP server.** The same structural validation and suppression layer
+that protects the web interface can be exposed through the Model Context Protocol,
+allowing any AI assistant to query census microdata while receiving only publishable
+aggregates. The validator acts as a statistical disclosure firewall, independent of
+whichever model authors the query — extending AI-accessible public data ecosystems
+into the layer that open-data tooling does not reach.
+
+**New sources.** The architecture generates its schema, whitelist, and prompt from
+each source's official documentation, so adding other censuses from the region's 2020
+round — or household surveys — is a loading-and-configuration problem, not a rewrite.
+Planned extensions include chat-defined derived variables and additional bases.
 
 ## Author
 

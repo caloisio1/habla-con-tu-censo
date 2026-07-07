@@ -23,9 +23,11 @@ LIMITE_MAXIMO = 300
 
 _COLS = json.load(open(os.path.join(os.path.dirname(__file__), "cols_2023.json")))
 FACT_TABLES = {"personas_2023", "viviendas_2023"}
-NOMENCLATOR = {"departamentos_2023", "localidades_2023", "barrios_mvd_2023"}
+# paises: nomenclátor de países para nacidos en el exterior (PERMI01_4/06_4/07_4).
+NOMENCLATOR = {"departamentos_2023", "localidades_2023", "barrios_mvd_2023", "paises"}
 TABLAS_PERMITIDAS = FACT_TABLES | NOMENCLATOR
-_COLUMNAS_VALIDAS = {c.lower() for cols in _COLS.values() for c in cols}
+_COLUMNAS_VALIDAS = ({c.lower() for cols in _COLS.values() for c in cols}
+                     | {"codigo", "nombre", "nombre_oficial", "alfa3"})
 
 KEYS_RESTRINGIDAS = {"vivienda_key", "hogar_key", "direccion_id", "vivid",
                      "hogid", "perid", "id_hogar"}
