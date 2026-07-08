@@ -11,6 +11,7 @@ from openai import OpenAI
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
 from sql_guard_2023 import validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
+import usage_log
 
 DB = os.environ.get("CENSO2023_DB", os.path.join(AQUI, "censo2023.db"))
 MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
@@ -103,6 +104,7 @@ def generar_sql(pregunta):
         model=MODELO, max_completion_tokens=1000,
         messages=[{"role": "system", "content": PROMPT_SQL},
                   {"role": "user", "content": pregunta}])
+    usage_log.registrar("2023", "sql", getattr(r, "usage", None))
     return r.choices[0].message.content.strip()
 
 
@@ -183,6 +185,7 @@ def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False):
         model=MODELO, reasoning_effort="low", max_completion_tokens=1600,
         messages=[{"role": "system", "content": sys_prompt},
                   {"role": "user", "content": f"Pregunta: {pregunta}\nSQL: {sql}\nResultados: {filas}"}])
+    usage_log.registrar("2023", "redactor", getattr(r, "usage", None))
     return r.choices[0].message.content.strip() + nota
 
 

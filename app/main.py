@@ -24,6 +24,7 @@ from app.sql_guard import (
     validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO,
 )
 import consultar_2023   # motor Censo 2023 (ponderado): interfaz preguntar(texto)
+import usage_log         # registro de métricas de tokens (solo métricas, sin contenido)
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
@@ -226,6 +227,7 @@ def generar_sql(pregunta: str) -> str:
             {"role": "user", "content": pregunta},
         ],
     )
+    usage_log.registrar("2011", "sql", getattr(r, "usage", None))
     return r.choices[0].message.content.strip()
 
 
@@ -346,6 +348,7 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
             },
         ],
     )
+    usage_log.registrar("2011", "redactor", getattr(r, "usage", None))
     return r.choices[0].message.content.strip() + nota
 
 

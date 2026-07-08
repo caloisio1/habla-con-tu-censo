@@ -24,3 +24,7 @@ lanzar_*.sh
 uvi_test.log
 incident_*.txt
 healthcheck.sh
+# Métricas de tokens (runtime) e informes de medición/verificación (deliverables locales)
+logs/
+usage*.jsonl
+informes/
