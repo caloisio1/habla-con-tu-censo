@@ -158,7 +158,7 @@ TABLA personas_2023 (SUM(W)):
 - W | PONDERADOR | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - ESTRATO | ESTRATO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - TR | TASA DE MUESTREO | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
-DERIVADAS: vivienda_key=DIRECCION_ID-'VIVID' (id de vivienda; NULL en situación de calle); hogar_key=DIRECCION_ID-VIVID-HOGID solo si UNIVERSO in (1,2); COUNT(DISTINCT) = hogares; asc_afro=1 si PERER01_1='1' (afrodescendiente), 0 si '2', NULL si perdido
+DERIVADAS: vivienda_key=DIRECCION_ID-'VIVID' (id de vivienda; NULL en situación de calle); hogar_key=DIRECCION_ID-VIVID-HOGID solo si UNIVERSO in (1,2); COUNT(DISTINCT) = hogares; asc_afro TEXT 'Si'/'No'/NULL: 'Si' si PERER01_1='1' (afrodescendiente), 'No' si '2', NULL si perdido
 
 TABLA viviendas_2023 (COUNT(*)):
 - DIRECCION_ID | IDENTIFICACIÓN DE LA DIRECCIÓN | 7777:NC; 8888:NR; 9898:IG; 9999:NRec

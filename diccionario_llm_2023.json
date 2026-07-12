@@ -14,7 +14,7 @@
    "derivadas": {
     "vivienda_key": "DIRECCION_ID-'VIVID' (id de vivienda; NULL en situación de calle)",
     "hogar_key": "DIRECCION_ID-VIVID-HOGID solo si UNIVERSO in (1,2); COUNT(DISTINCT) = hogares",
-    "asc_afro": "1 si PERER01_1='1' (afrodescendiente), 0 si '2', NULL si perdido"
+    "asc_afro": "TEXT 'Si'/'No'/NULL. 'Si' si PERER01_1='1' (afrodescendiente), 'No' si '2', NULL si perdido"
    },
    "variables": [
     {
