@@ -17,23 +17,29 @@ RUTA = os.environ.get("CENSO_USAGE_LOG", os.path.join(AQUI, "logs", "usage.jsonl
 _LOCK = threading.Lock()
 
 
-def registrar(censo, etapa, usage):
+def registrar(censo, etapa, usage, modelo=None, esfuerzo=None):
     """Agrega una línea con las métricas de una respuesta de la API OpenAI.
 
     `usage` es el objeto response.usage del SDK (o None). Solo métricas: NO se
-    registra ningún texto de la pregunta ni de la respuesta.
+    registra ningún texto de la pregunta ni de la respuesta. `modelo` y `esfuerzo`
+    (reasoning_effort) quedan asentados para poder costear cada etapa por separado.
     """
     try:
         pt = getattr(usage, "prompt_tokens", None)
         ct = getattr(usage, "completion_tokens", None)
         det = getattr(usage, "prompt_tokens_details", None)
         cached = getattr(det, "cached_tokens", None) if det is not None else None
+        det_c = getattr(usage, "completion_tokens_details", None)
+        razon = getattr(det_c, "reasoning_tokens", None) if det_c is not None else None
         linea = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "censo": censo,          # "2011" | "2023"
             "etapa": etapa,          # "sql" | "redactor"
+            "modelo": modelo,        # id del modelo usado en esta etapa
+            "esfuerzo": esfuerzo,    # reasoning_effort de esta etapa
             "prompt_tokens": pt,
-            "completion_tokens": ct,
+            "completion_tokens": ct,     # incluye los de razonamiento
+            "reasoning_tokens": razon,   # subconjunto de completion_tokens
             "cached_tokens": cached,
         }
         with _LOCK:

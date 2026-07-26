@@ -28,6 +28,14 @@ import usage_log         # registro de métricas de tokens (solo métricas, sin 
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
+# Configuración por ETAPA (igual que el motor 2023): el SQL razona (esfuerzo alto),
+# el redactor solo narra (esfuerzo 'none' = "instant"). gpt-5.5: none|low|medium|high.
+MODELO_SQL = os.environ.get("CENSO_MODELO_SQL", MODELO)
+MODELO_REDACTOR = os.environ.get("CENSO_MODELO_REDACTOR", MODELO)
+ESFUERZO_SQL = os.environ.get("CENSO_ESFUERZO_SQL", "high")
+ESFUERZO_REDACTOR = os.environ.get("CENSO_ESFUERZO_REDACTOR", "none")
+TOPE_SQL = int(os.environ.get("CENSO_TOPE_SQL", "4000"))
+TOPE_REDACTOR = int(os.environ.get("CENSO_TOPE_REDACTOR", "2000"))
 
 # Línea fija que acompaña las cifras de PERSONAS del Censo 2023 (estimaciones del
 # censo ponderado). Se agrega SOLO cuando la métrica es SUM(W) — no en viviendas
@@ -220,14 +228,15 @@ def normalizar_departamentos(sql: str) -> str:
 
 def generar_sql(pregunta: str) -> str:
     r = client.chat.completions.create(
-        model=MODELO,
-        max_completion_tokens=1000,
+        model=MODELO_SQL,
+        reasoning_effort=ESFUERZO_SQL,
+        max_completion_tokens=TOPE_SQL,
         messages=[
             {"role": "system", "content": PROMPT_SQL},
             {"role": "user", "content": pregunta},
         ],
     )
-    usage_log.registrar("2011", "sql", getattr(r, "usage", None))
+    usage_log.registrar("2011", "sql", getattr(r, "usage", None), MODELO_SQL, ESFUERZO_SQL)
     return r.choices[0].message.content.strip()
 
 
@@ -296,13 +305,13 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
         if truncado else ""
     )
     r = client.chat.completions.create(
-        model=MODELO,
+        model=MODELO_REDACTOR,
         # El redactor solo NARRA (no razona): con el razonamiento por defecto de
         # gpt-5.5 las preguntas de mapa consumían todo el presupuesto y devolvían
-        # respuesta VACÍA (finish=length). reasoning_effort='low' lo evita de raíz
+        # respuesta VACÍA (finish=length). Esfuerzo 'none' ("instant") lo evita de raíz
         # (y baja costo/latencia); el tope holgado es margen, el modelo corta al terminar.
-        reasoning_effort="low",
-        max_completion_tokens=2000,
+        reasoning_effort=ESFUERZO_REDACTOR,
+        max_completion_tokens=TOPE_REDACTOR,
         messages=[
             {
                 "role": "system",
@@ -348,7 +357,7 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
             },
         ],
     )
-    usage_log.registrar("2011", "redactor", getattr(r, "usage", None))
+    usage_log.registrar("2011", "redactor", getattr(r, "usage", None), MODELO_REDACTOR, ESFUERZO_REDACTOR)
     return r.choices[0].message.content.strip() + nota
 
 

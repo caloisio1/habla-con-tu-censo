@@ -15,6 +15,18 @@ import usage_log
 
 DB = os.environ.get("CENSO2023_DB", os.path.join(AQUI, "censo2023.db"))
 MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
+# Configuración por ETAPA (modelo + esfuerzo de razonamiento), sobreescribible por entorno.
+# El SQL es la etapa que RAZONA (traducir la pregunta al esquema): esfuerzo alto.
+# El redactor solo NARRA los resultados: esfuerzo 'none' ("instant"), sin tokens de
+# razonamiento, más barato y más rápido. gpt-5.5 acepta: none | low | medium | high.
+MODELO_SQL = os.environ.get("CENSO_MODELO_SQL", MODELO)
+MODELO_REDACTOR = os.environ.get("CENSO_MODELO_REDACTOR", MODELO)
+ESFUERZO_SQL = os.environ.get("CENSO_ESFUERZO_SQL", "high")
+ESFUERZO_REDACTOR = os.environ.get("CENSO_ESFUERZO_REDACTOR", "none")
+# Con esfuerzo alto el razonamiento consume presupuesto de salida: el tope del SQL sube
+# para que la consulta nunca salga vacía por finish_reason=length (incidente 2026-07-06).
+TOPE_SQL = int(os.environ.get("CENSO_TOPE_SQL", "4000"))
+TOPE_REDACTOR = int(os.environ.get("CENSO_TOPE_REDACTOR", "1600"))
 ESQUEMA = open(os.path.join(AQUI, "esquema_llm_2023.txt"), encoding="utf-8").read()
 # Timeout ACOTADO: sin él, una respuesta LLM colgada/medio-cerrada (CLOSE-WAIT) deja
 # el hilo worker clavado indefinidamente y wedge toda la app (incidente 2026-07-06).
@@ -101,10 +113,10 @@ _RX_SUMW = re.compile(r"\bsum\s*\(\s*[^)]*\bw\b", re.I)
 
 def generar_sql(pregunta):
     r = client.chat.completions.create(
-        model=MODELO, max_completion_tokens=1000,
+        model=MODELO_SQL, reasoning_effort=ESFUERZO_SQL, max_completion_tokens=TOPE_SQL,
         messages=[{"role": "system", "content": PROMPT_SQL},
                   {"role": "user", "content": pregunta}])
-    usage_log.registrar("2023", "sql", getattr(r, "usage", None))
+    usage_log.registrar("2023", "sql", getattr(r, "usage", None), MODELO_SQL, ESFUERZO_SQL)
     return r.choices[0].message.content.strip()
 
 
@@ -179,13 +191,14 @@ def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False):
            if leyenda else "")
     )
     r = client.chat.completions.create(
-        # El redactor solo NARRA: reasoning_effort='low' evita que el razonamiento de
-        # gpt-5.5 agote el presupuesto y devuelva respuesta vacía (finish=length) en
-        # preguntas de mapa; baja costo/latencia. El tope holgado es margen.
-        model=MODELO, reasoning_effort="low", max_completion_tokens=1600,
+        # El redactor solo NARRA: sin razonamiento (esfuerzo 'none' = "instant") no puede
+        # agotar el presupuesto y devolver respuesta vacía (finish=length) en preguntas de
+        # mapa; es lo más barato y rápido. El tope holgado es margen.
+        model=MODELO_REDACTOR, reasoning_effort=ESFUERZO_REDACTOR,
+        max_completion_tokens=TOPE_REDACTOR,
         messages=[{"role": "system", "content": sys_prompt},
                   {"role": "user", "content": f"Pregunta: {pregunta}\nSQL: {sql}\nResultados: {filas}"}])
-    usage_log.registrar("2023", "redactor", getattr(r, "usage", None))
+    usage_log.registrar("2023", "redactor", getattr(r, "usage", None), MODELO_REDACTOR, ESFUERZO_REDACTOR)
     return r.choices[0].message.content.strip() + nota
 
 
