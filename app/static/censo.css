@@ -4,55 +4,59 @@
 @font-face{font-family:Inter;font-style:normal;font-weight:600;font-display:swap;src:url("Inter-SemiBold.woff2") format("woff2");}
 @font-face{font-family:Inter;font-style:normal;font-weight:700;font-display:swap;src:url("Inter-Bold.woff2") format("woff2");}
 
-/* ---------- Paleta: petróleo profundo + acento cálido, neutros con sesgo teal ---------- */
+/* ---------- Paleta institucional INE: blanco, negro, azul y dorado ----------
+   Azul #015092 y dorado #FBCE01 son los colores del logotipo del Instituto
+   Nacional de Estadística, tomados del archivo original. El dorado NUNCA lleva
+   texto encima ni pinta datos (sobre blanco no alcanza el contraste de lectura):
+   es acento de estructura. El azul es el color de los datos y de la acción. */
 :root{
-  --ground:#F5F4F0; --surface:#FFFFFF; --surface-2:#EEEEE8; --inset:#F3F2EC;
-  --ink:#16211F; --ink-2:#52605C; --ink-3:#7C8884;
-  --line:#E2E4DE; --line-strong:#D2D5CE;
-  --petroleo:#0E4E4B; --petroleo-700:#0A3A38; --petroleo-600:#0F5B57;
-  --petroleo-50:#E6EFEE;
-  --calido:#BE6636; --calido-700:#A0552B; --calido-tint:#F6E9DF;
-  --warn:#8A5E12; --warn-bg:#FAF0D9; --warn-line:#E8D4A2;
-  --map-lo:#DCEBEA; --map-hi:#0A3A38; --map-null:#D7DAD4;
-  --shadow:0 1px 2px rgba(20,40,38,.05), 0 6px 20px -8px rgba(20,40,38,.12);
-  --focus:#0F5B57;
+  --ground:#FFFFFF; --surface:#FFFFFF; --surface-2:#F1F5F9; --inset:#F6F9FC;
+  --ink:#0B0F14; --ink-2:#48525E; --ink-3:#78828F;
+  --line:#E3E9F0; --line-strong:#CCD6E2;
+  --azul:#015092; --azul-700:#013A69; --azul-600:#0A66B0;
+  --azul-50:#E8F0F8;
+  --dorado:#FBCE01; --dorado-700:#8A6A00; --dorado-tint:#FFF8DC;
+  --warn:#8A6A00; --warn-bg:#FFFAE8; --warn-line:#F0DFA4;
+  --map-lo:#E8F0F8; --map-hi:#013A69; --map-null:#DDE3EA;
+  --shadow:0 1px 2px rgba(1,58,105,.06), 0 6px 20px -8px rgba(1,58,105,.16);
+  --focus:#0A66B0;
   --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
 }
 @media (prefers-color-scheme:dark){
   :root{
-    --ground:#0E1514; --surface:#16201E; --surface-2:#1E2A28; --inset:#111917;
-    --ink:#EAEEEC; --ink-2:#A8B4B0; --ink-3:#7C8884;
-    --line:#273331; --line-strong:#33413E;
-    --petroleo:#3FA69E; --petroleo-700:#12615D; --petroleo-600:#2E938B;
-    --petroleo-50:#16302E;
-    --calido:#E0965F; --calido-700:#C97B43; --calido-tint:#2A1E12;
-    --warn:#E6C578; --warn-bg:#241D0F; --warn-line:#463916;
-    --map-lo:#123B39; --map-hi:#8FD9D1; --map-null:#2A3634;
-    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -12px rgba(0,0,0,.55);
-    --focus:#3FA69E;
+    --ground:#0B0F14; --surface:#121821; --surface-2:#1A2331; --inset:#0F151D;
+    --ink:#ECF1F7; --ink-2:#A7B3C2; --ink-3:#7A8695;
+    --line:#233040; --line-strong:#32425A;
+    --azul:#4DA3E8; --azul-700:#0A66B0; --azul-600:#2E8BD8;
+    --azul-50:#12243A;
+    --dorado:#FFD84D; --dorado-700:#E0B400; --dorado-tint:#2A2208;
+    --warn:#FFD84D; --warn-bg:#241E08; --warn-line:#4A3E10;
+    --map-lo:#12314F; --map-hi:#8FC6F5; --map-null:#2A3340;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 10px 26px -12px rgba(0,0,0,.6);
+    --focus:#4DA3E8;
   }
 }
 :root[data-theme="light"]{
-  --ground:#F5F4F0; --surface:#FFFFFF; --surface-2:#EEEEE8; --inset:#F3F2EC;
-  --ink:#16211F; --ink-2:#52605C; --ink-3:#7C8884;
-  --line:#E2E4DE; --line-strong:#D2D5CE;
-  --petroleo:#0E4E4B; --petroleo-700:#0A3A38; --petroleo-600:#0F5B57; --petroleo-50:#E6EFEE;
-  --calido:#BE6636; --calido-700:#A0552B; --calido-tint:#F6E9DF;
-  --warn:#8A5E12; --warn-bg:#FAF0D9; --warn-line:#E8D4A2;
-  --map-lo:#DCEBEA; --map-hi:#0A3A38; --map-null:#D7DAD4;
-  --shadow:0 1px 2px rgba(20,40,38,.05), 0 6px 20px -8px rgba(20,40,38,.12);
-  --focus:#0F5B57;
+  --ground:#FFFFFF; --surface:#FFFFFF; --surface-2:#F1F5F9; --inset:#F6F9FC;
+  --ink:#0B0F14; --ink-2:#48525E; --ink-3:#78828F;
+  --line:#E3E9F0; --line-strong:#CCD6E2;
+  --azul:#015092; --azul-700:#013A69; --azul-600:#0A66B0; --azul-50:#E8F0F8;
+  --dorado:#FBCE01; --dorado-700:#8A6A00; --dorado-tint:#FFF8DC;
+  --warn:#8A6A00; --warn-bg:#FFFAE8; --warn-line:#F0DFA4;
+  --map-lo:#E8F0F8; --map-hi:#013A69; --map-null:#DDE3EA;
+  --shadow:0 1px 2px rgba(1,58,105,.06), 0 6px 20px -8px rgba(1,58,105,.16);
+  --focus:#0A66B0;
 }
 :root[data-theme="dark"]{
-  --ground:#0E1514; --surface:#16201E; --surface-2:#1E2A28; --inset:#111917;
-  --ink:#EAEEEC; --ink-2:#A8B4B0; --ink-3:#7C8884;
-  --line:#273331; --line-strong:#33413E;
-  --petroleo:#3FA69E; --petroleo-700:#12615D; --petroleo-600:#2E938B; --petroleo-50:#16302E;
-  --calido:#E0965F; --calido-700:#C97B43; --calido-tint:#2A1E12;
-  --warn:#E6C578; --warn-bg:#241D0F; --warn-line:#463916;
-  --map-lo:#123B39; --map-hi:#8FD9D1; --map-null:#2A3634;
-  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -12px rgba(0,0,0,.55);
-  --focus:#3FA69E;
+  --ground:#0B0F14; --surface:#121821; --surface-2:#1A2331; --inset:#0F151D;
+  --ink:#ECF1F7; --ink-2:#A7B3C2; --ink-3:#7A8695;
+  --line:#233040; --line-strong:#32425A;
+  --azul:#4DA3E8; --azul-700:#0A66B0; --azul-600:#2E8BD8; --azul-50:#12243A;
+  --dorado:#FFD84D; --dorado-700:#E0B400; --dorado-tint:#2A2208;
+  --warn:#FFD84D; --warn-bg:#241E08; --warn-line:#4A3E10;
+  --map-lo:#12314F; --map-hi:#8FC6F5; --map-null:#2A3340;
+  --shadow:0 1px 2px rgba(0,0,0,.35), 0 10px 26px -12px rgba(0,0,0,.6);
+  --focus:#4DA3E8;
 }
 
 *{box-sizing:border-box;}
@@ -65,22 +69,48 @@ body{
 }
 .wrap{max-width:780px; margin:0 auto; padding:0 20px;}
 
-a{color:var(--petroleo-600); text-decoration:none;}
-a:hover{color:var(--calido);}
+a{color:var(--azul-600); text-decoration:none;}
+a:hover{color:var(--dorado);}
 :focus-visible{outline:2.5px solid var(--focus); outline-offset:2px; border-radius:4px;}
 
 /* ---------- Header ---------- */
-header{border-bottom:1px solid var(--line); background:var(--surface);}
-.hd{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0;}
-.brand{display:flex; align-items:baseline; gap:10px; min-width:0;}
-.brand .mark{
-  font-weight:700; font-size:1.12rem; letter-spacing:-.02em; color:var(--ink);
-  white-space:nowrap;
+/* Filete dorado superior: el acento institucional, sin texto encima. */
+header{
+  border-bottom:1px solid var(--line); background:var(--surface);
+  border-top:3px solid var(--dorado);
 }
-.brand .mark .dot{color:var(--petroleo);}
+.hd{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 0;}
+.brand{display:flex; align-items:center; gap:14px; min-width:0;}
+/* Logotipo del INE, arriba a la izquierda. En modo oscuro va sobre una placa
+   blanca: el logo es un activo institucional y no se recolorea. */
+.logo-ine{height:38px; width:auto; display:block; flex-shrink:0;}
+.brand .sep{width:1px; height:26px; background:var(--line-strong); flex-shrink:0;}
+.brand .txt{display:flex; flex-direction:column; min-width:0; line-height:1.2;}
+.brand .mark{
+  font-weight:700; font-size:1.05rem; letter-spacing:-.02em; color:var(--ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.brand .mark .dot{color:var(--azul);}
 .brand .tag{
-  color:var(--ink-3); font-size:.82rem; white-space:nowrap; overflow:hidden;
+  color:var(--ink-3); font-size:.78rem; white-space:nowrap; overflow:hidden;
   text-overflow:ellipsis;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .logo-ine{
+    background:#fff; padding:5px 8px; border-radius:8px; height:48px;
+  }
+}
+:root[data-theme="dark"] .logo-ine{
+  background:#fff; padding:5px 8px; border-radius:8px; height:48px;
+}
+/* En pantallas angostas el logotipo carga con la identidad institucional y la
+   navegación queda en iconos (el nombre accesible va en aria-label). Si aun así
+   falta ancho, el nombre del producto se recorta antes que pisar la nav. */
+@media (max-width:560px){
+  .brand .sep,.brand .tag{display:none;}
+  .logo-ine{height:32px;}
+  .hd nav .nlbl{display:none;}
+  .hd nav a,.hd nav button{padding:7px 9px;}
 }
 .hd nav{display:flex; gap:6px; flex-shrink:0;}
 .hd nav a,.hd nav button{
@@ -91,48 +121,75 @@ header{border-bottom:1px solid var(--line); background:var(--surface);}
 .hd nav a:hover,.hd nav button:hover{background:var(--surface-2); color:var(--ink);}
 .hd nav svg{width:15px; height:15px;}
 
-/* ---------- Hero / buscador ---------- */
-.hero{padding:40px 0 26px; text-align:center; position:relative;}
-.hero::before{
-  content:""; position:absolute; inset:0 0 auto; height:220px; z-index:0; pointer-events:none;
-  background:radial-gradient(120% 90% at 50% -10%, var(--petroleo-50), transparent 62%);
+/* ---------- Portada: banda azul institucional + panel de consulta ----------
+   La banda da el registro institucional; el panel blanco monta sobre su borde
+   inferior, que es el gesto que ordena la página: lo primero que hacés es preguntar. */
+.hero{
+  background:var(--azul-700); color:#fff; padding:44px 0 96px; margin-bottom:-70px;
+  position:relative;
 }
-.hero > *{position:relative; z-index:1;}
+.hero::after{  /* filete dorado inferior de la banda */
+  content:""; position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--dorado);
+}
+.hero .wrap{max-width:820px;}
+.hero .kicker{
+  color:var(--dorado); font-size:.74rem; font-weight:600; text-transform:uppercase;
+  letter-spacing:.14em; margin:0 0 10px;
+}
 .hero h1{
-  font-size:clamp(1.55rem,4.4vw,2.05rem); line-height:1.12; letter-spacing:-.028em;
-  margin:0 0 8px; text-wrap:balance;
+  font-size:clamp(1.7rem,4.6vw,2.35rem); line-height:1.1; letter-spacing:-.03em;
+  margin:0 0 10px; text-wrap:balance; color:#fff;
 }
-.hero p.lead{color:var(--ink-2); margin:0 auto 24px; max-width:46ch; font-size:1rem;}
+.hero p.lead{color:rgba(255,255,255,.82); margin:0; max-width:54ch; font-size:1.02rem;}
+
+.panel{
+  position:relative; z-index:2; background:var(--surface); border:1px solid var(--line);
+  border-radius:16px; box-shadow:0 12px 36px -14px rgba(1,58,105,.35); padding:18px;
+  max-width:820px; margin:0 auto;
+}
+.panel .sublbl{
+  display:block; color:var(--ink-3); font-size:.72rem; text-transform:uppercase;
+  letter-spacing:.11em; margin-bottom:8px;
+}
 form{
-  display:flex; gap:8px; background:var(--surface); border:1px solid var(--line-strong);
-  border-radius:14px; padding:7px 7px 7px 8px; box-shadow:var(--shadow);
-  max-width:640px; margin:0 auto; transition:border-color .15s, box-shadow .15s;
+  display:flex; gap:10px; background:var(--surface); border:1.5px solid var(--line-strong);
+  border-radius:12px; padding:6px 6px 6px 8px; transition:border-color .15s, box-shadow .15s;
 }
-form:focus-within{border-color:var(--petroleo); box-shadow:0 0 0 3px var(--petroleo-50);}
-form .qi{display:flex; align-items:center; gap:9px; flex:1; min-width:0; padding-left:6px;}
-form .qi svg{width:18px; height:18px; color:var(--ink-3); flex-shrink:0;}
+form:focus-within{border-color:var(--azul); box-shadow:0 0 0 3px var(--azul-50);}
+form .qi{display:flex; align-items:center; gap:10px; flex:1; min-width:0; padding-left:6px;}
+form .qi svg{width:19px; height:19px; color:var(--ink-3); flex-shrink:0;}
 input#q{
   flex:1; min-width:0; border:0; background:none; color:var(--ink);
-  font:inherit; font-size:1.02rem; padding:9px 0;
+  font:inherit; font-size:1.05rem; padding:12px 0;
 }
 input#q::placeholder{color:var(--ink-3);}
 input#q:focus{outline:none;}
 button.ask{
-  font:inherit; font-weight:600; font-size:.98rem; color:#fff; background:var(--petroleo);
-  border:0; border-radius:9px; padding:11px 20px; cursor:pointer; white-space:nowrap;
+  font:inherit; font-weight:600; font-size:.98rem; color:#fff; background:var(--azul);
+  border:0; border-radius:9px; padding:12px 24px; cursor:pointer; white-space:nowrap;
   transition:background .15s;
 }
-button.ask:hover{background:var(--petroleo-700);}
+button.ask:hover{background:var(--azul-700);}
 button.ask:disabled{opacity:.6; cursor:default;}
 
-.ejemplos{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:16px auto 0; max-width:640px;}
-.ejemplos .lbl{width:100%; color:var(--ink-3); font-size:.76rem; text-transform:uppercase; letter-spacing:.09em; margin-bottom:1px;}
-.chip{
-  font:inherit; font-size:.85rem; color:var(--ink-2); background:var(--surface);
-  border:1px solid var(--line); border-radius:999px; padding:7px 14px; cursor:pointer;
-  transition:all .13s;
+/* Ejemplos: grilla de tarjetas, no píldoras sueltas */
+.ejemplos{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:22px auto 0; max-width:820px;}
+.ejemplos .lbl{
+  grid-column:1/-1; color:var(--ink-3); font-size:.72rem; text-transform:uppercase;
+  letter-spacing:.11em; margin-bottom:-2px;
 }
-.chip:hover{border-color:var(--petroleo); color:var(--petroleo-600); background:var(--petroleo-50);}
+.chip{
+  font:inherit; font-size:.9rem; text-align:left; color:var(--ink); background:var(--surface);
+  border:1px solid var(--line); border-left:3px solid var(--line-strong); border-radius:10px;
+  padding:13px 15px; cursor:pointer; transition:border-color .13s, background .13s, transform .13s;
+  display:flex; align-items:center; gap:10px; line-height:1.35;
+}
+.chip::after{
+  content:"→"; margin-left:auto; color:var(--ink-3); font-size:.95rem; transition:color .13s, transform .13s;
+}
+.chip:hover{border-color:var(--azul-50); border-left-color:var(--azul); background:var(--azul-50); transform:translateY(-1px);}
+.chip:hover::after{color:var(--azul); transform:translateX(2px);}
+@media (max-width:640px){ .ejemplos{grid-template-columns:1fr;} }
 
 /* ---------- Historial de tarjetas ---------- */
 #historial{display:flex; flex-direction:column; gap:20px; padding:14px 0 8px;}
@@ -144,12 +201,28 @@ button.ask:disabled{opacity:.6; cursor:default;}
 .card > .body{padding:18px 20px 4px;}
 .q-head{display:flex; align-items:flex-start; gap:12px; margin-bottom:12px;}
 .q-head .qmark{
-  flex-shrink:0; width:26px; height:26px; border-radius:8px; background:var(--petroleo-50);
-  color:var(--petroleo-600); display:flex; align-items:center; justify-content:center;
+  flex-shrink:0; width:26px; height:26px; border-radius:8px; background:var(--azul-50);
+  color:var(--azul-600); display:flex; align-items:center; justify-content:center;
   font-weight:700; font-size:.9rem; margin-top:1px;
 }
 .q-head .qtext{font-weight:600; font-size:1.04rem; line-height:1.35; letter-spacing:-.01em;}
 .q-head .qtime{margin-left:auto; color:var(--ink-3); font-size:.74rem; font-variant-numeric:tabular-nums; white-space:nowrap; padding-top:4px;}
+
+/* Cifra destacada: cuando la respuesta es UN número, se muestra como número.
+   Es la lectura que busca quien consulta un censo; el texto queda de apoyo. */
+.figura{
+  display:flex; align-items:baseline; flex-wrap:wrap; gap:10px;
+  border-left:3px solid var(--dorado); padding:2px 0 2px 16px; margin:4px 0 16px;
+}
+.figura .val{
+  font-size:clamp(1.9rem,5.5vw,2.6rem); font-weight:700; line-height:1;
+  letter-spacing:-.03em; color:var(--azul); font-variant-numeric:tabular-nums;
+}
+.figura .uni{color:var(--ink-2); font-size:.95rem;}
+.figura .apx{
+  color:var(--ink-3); font-size:.74rem; text-transform:uppercase; letter-spacing:.08em;
+  border:1px solid var(--line); border-radius:999px; padding:3px 9px; margin-left:auto;
+}
 
 /* respuesta markdown */
 .answer{color:var(--ink); font-size:.97rem;}
@@ -200,15 +273,15 @@ button.ask:disabled{opacity:.6; cursor:default;}
   font-variant-numeric:tabular-nums;
 }
 .pill.supr{color:var(--warn); background:var(--warn-bg); border-color:var(--warn-line); cursor:help;}
-.pill .k{width:6px; height:6px; border-radius:50%; background:var(--petroleo);}
+.pill .k{width:6px; height:6px; border-radius:50%; background:var(--azul);}
 .meta .spacer{flex:1;}
 .act{
   font:inherit; font-size:.79rem; color:var(--ink-2); background:none; border:1px solid var(--line);
   border-radius:8px; padding:6px 11px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
   transition:all .13s;
 }
-.act:hover{border-color:var(--petroleo); color:var(--petroleo-600);}
-.act.ok{border-color:var(--petroleo); color:var(--petroleo-600); background:var(--petroleo-50);}
+.act:hover{border-color:var(--azul); color:var(--azul-600);}
+.act.ok{border-color:var(--azul); color:var(--azul-600); background:var(--azul-50);}
 .act svg{width:14px; height:14px;}
 
 /* SQL desplegable */
@@ -231,14 +304,28 @@ details.sql summary:hover{color:var(--ink);}
 
 /* spinner / loading */
 .loader{display:flex; align-items:center; gap:12px; color:var(--ink-2); font-size:.95rem; padding:2px 0 8px;}
-.spin{width:18px; height:18px; border-radius:50%; border:2.5px solid var(--line-strong); border-top-color:var(--petroleo); animation:sp .7s linear infinite; flex-shrink:0;}
+.spin{width:18px; height:18px; border-radius:50%; border:2.5px solid var(--line-strong); border-top-color:var(--azul); animation:sp .7s linear infinite; flex-shrink:0;}
 @keyframes sp{to{transform:rotate(360deg);}}
 .loader .msg{transition:opacity .3s;}
 
-/* footer */
-footer{border-top:1px solid var(--line); margin-top:34px; padding:24px 0 40px; color:var(--ink-3); font-size:.82rem; line-height:1.7;}
-footer .fwrap{display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center;}
+/* footer institucional: tres columnas + línea legal */
+footer{
+  border-top:3px solid var(--dorado); background:var(--surface-2); margin-top:44px;
+  padding:30px 0 34px; color:var(--ink-2); font-size:.85rem; line-height:1.65;
+}
+footer .fcols{display:grid; grid-template-columns:repeat(3,1fr); gap:26px;}
+footer h3{
+  font-size:.72rem; text-transform:uppercase; letter-spacing:.11em; color:var(--ink-3);
+  margin:0 0 8px; font-weight:600;
+}
+footer p{margin:0;}
+footer b{color:var(--ink); font-weight:600;}
+footer .legal{
+  margin-top:24px; padding-top:16px; border-top:1px solid var(--line-strong);
+  color:var(--ink-3); font-size:.79rem; display:flex; flex-wrap:wrap; gap:6px 14px;
+}
 footer .sep{color:var(--line-strong);}
+@media (max-width:640px){ footer .fcols{grid-template-columns:1fr; gap:18px;} }
 
 /* modal cómo funciona */
 dialog{
@@ -253,7 +340,7 @@ ol.steps{list-style:none; counter-reset:s; margin:0; padding:0; display:flex; fl
 ol.steps li{counter-increment:s; display:flex; gap:13px; align-items:flex-start;}
 ol.steps li::before{
   content:counter(s); flex-shrink:0; width:25px; height:25px; border-radius:8px;
-  background:var(--petroleo-50); color:var(--petroleo-600); font-weight:700; font-size:.82rem;
+  background:var(--azul-50); color:var(--azul-600); font-weight:700; font-size:.82rem;
   display:flex; align-items:center; justify-content:center; margin-top:1px;
 }
 ol.steps b{font-weight:600;} ol.steps .d{color:var(--ink-2); font-size:.9rem;}

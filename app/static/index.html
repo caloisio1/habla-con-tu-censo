@@ -6,16 +6,16 @@
 <title>Habla con tu Censo — El Censo de Uruguay (2011 y 2023) en lenguaje natural</title>
 <meta name="description" content="Preguntale al Censo 2011 y al Censo 2023 (ponderado) del INE Uruguay en español. Solo resultados agregados; el SQL ejecutado se muestra siempre.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<link rel="stylesheet" href="/static/censo.css">
+<link rel="stylesheet" href="/static/censo.css?v=__V__">
 <style>
-.censo-sel{display:inline-flex;border:1px solid var(--line-strong);border-radius:10px;overflow:hidden;margin:0 auto 18px;background:var(--surface);}
+/* Selector de censo: pestañas dentro del panel de consulta. */
+.censo-sel{display:inline-flex;border:1px solid var(--line-strong);border-radius:9px;overflow:hidden;background:var(--surface);margin-bottom:12px;}
 .censo-sel input{position:absolute;opacity:0;width:0;height:0;}
-.censo-sel label{padding:8px 20px;font-size:.9rem;font-weight:600;cursor:pointer;color:var(--ink-2);}
+.censo-sel label{padding:8px 18px;font-size:.88rem;font-weight:600;cursor:pointer;color:var(--ink-2);transition:background .13s,color .13s;}
 .censo-sel label:first-of-type{border-right:1px solid var(--line);}
-.censo-sel input:checked + label{background:var(--petroleo);color:#fff;}
+.censo-sel label:hover{background:var(--azul-50);color:var(--azul-600);}
+.censo-sel input:checked + label{background:var(--azul);color:#fff;}
 .censo-sel input:focus-visible + label{outline:2.5px solid var(--focus);outline-offset:-2px;}
-.selrow{display:flex;flex-direction:column;align-items:center;gap:2px;}
-.selrow .sublbl{color:var(--ink-3);font-size:.76rem;text-transform:uppercase;letter-spacing:.09em;margin-bottom:4px;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -25,27 +25,39 @@
 <header>
   <div class="wrap hd">
     <div class="brand">
-      <span class="mark">Habla con tu Censo<span class="dot">.</span></span>
-      <span class="tag">El Censo de Uruguay, en lenguaje natural</span>
+      <img class="logo-ine" src="/static/logo_ine.png?v=__V__"
+           alt="Instituto Nacional de Estadística — Uruguay">
+      <span class="sep" aria-hidden="true"></span>
+      <span class="txt">
+        <span class="mark">Habla con tu Censo<span class="dot">.</span></span>
+        <span class="tag">El Censo de Uruguay, en lenguaje natural</span>
+      </span>
     </div>
     <nav>
-      <button type="button" id="btn-como">
+      <button type="button" id="btn-como" aria-label="Cómo funciona">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12" y2="17"/></svg>
-        Cómo funciona
+        <span class="nlbl">Cómo funciona</span>
       </button>
-      <a href="https://github.com/caloisio1/habla-con-tu-censo" target="_blank" rel="noopener">
+      <a href="https://github.com/caloisio1/habla-con-tu-censo" target="_blank" rel="noopener" aria-label="Código abierto en GitHub">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2A10 10 0 0 0 8.8 21.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.4-2.2-.2-4.6-1.1-4.6-4.9 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.8-2.4 4.7-4.6 4.9.3.3.6.9.6 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg>
-        GitHub
+        <span class="nlbl">GitHub</span>
       </a>
     </nav>
   </div>
 </header>
 
-<main class="wrap">
-  <section class="hero">
+<section class="hero">
+  <div class="wrap">
+    <p class="kicker">Censos de Uruguay · Microdatos oficiales del INE</p>
     <h1>Preguntá. El Censo responde con datos reales.</h1>
-    <p class="lead">Elegí el censo —2011 o 2023— y preguntá en español. Cada respuesta muestra el SQL que la generó.</p>
-    <div class="selrow"><span class="sublbl">Censo</span><div class="censo-sel" role="radiogroup" aria-label="Seleccionar censo"><input type="radio" name="censo" id="c2011" value="2011"><label for="c2011">Censo 2011</label><input type="radio" name="censo" id="c2023" value="2023" checked><label for="c2023">Censo 2023</label></div></div>
+    <p class="lead">Elegí el censo —2011 o 2023— y preguntá en español. Cada respuesta cita su fuente y muestra la consulta exacta que la generó.</p>
+  </div>
+</section>
+
+<main class="wrap">
+  <div class="panel">
+    <span class="sublbl">Censo a consultar</span>
+    <div class="censo-sel" role="radiogroup" aria-label="Seleccionar censo"><input type="radio" name="censo" id="c2011" value="2011"><label for="c2011">Censo 2011</label><input type="radio" name="censo" id="c2023" value="2023" checked><label for="c2023">Censo 2023</label></div>
     <form id="f">
       <div class="qi">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -53,22 +65,38 @@
       </div>
       <button class="ask" type="submit">Preguntar</button>
     </form>
-    <div class="ejemplos" aria-label="Ejemplos de preguntas">
-      <span class="lbl">Probá con un ejemplo</span>
-      <span id="chipbox"></span>
-    </div>
-  </section>
+  </div>
+
+  <div class="ejemplos" aria-label="Ejemplos de preguntas">
+    <span class="lbl">Probá con un ejemplo</span>
+    <span id="chipbox" style="display:contents"></span>
+  </div>
 
   <section id="historial" aria-live="polite" aria-label="Respuestas"></section>
 </main>
 
 <footer>
-  <div class="wrap fwrap">
-    <span>Datos: <b id="fuente-datos" style="color:var(--ink-2);font-weight:600">Censo 2023, INE Uruguay</b></span>
-    <span class="sep">·</span>
-    <span>Solo resultados agregados; las celdas con menos de 5 casos se suprimen automáticamente</span>
-    <span class="sep">·</span>
-    <a href="https://github.com/caloisio1/habla-con-tu-censo" target="_blank" rel="noopener">Código abierto</a>
+  <div class="wrap">
+    <div class="fcols">
+      <div>
+        <h3>Fuente de los datos</h3>
+        <p><b id="fuente-datos">Censo 2023, INE Uruguay</b><br>
+        Microdatos publicados por el Instituto Nacional de Estadística.</p>
+      </div>
+      <div>
+        <h3>Resguardo estadístico</h3>
+        <p>Solo se publican resultados agregados. Las celdas con menos de 5 casos
+        se suprimen automáticamente, en tablas y en mapas.</p>
+      </div>
+      <div>
+        <h3>Transparencia</h3>
+        <p>Cada respuesta muestra la consulta SQL ejecutada.<br>
+        <a href="https://github.com/caloisio1/habla-con-tu-censo" target="_blank" rel="noopener">Código abierto en GitHub</a></p>
+      </div>
+    </div>
+    <div class="legal">
+      <span>Las cifras de personas del Censo 2023 son estimaciones del censo ponderado; hogares y viviendas son conteos exactos.</span>
+    </div>
   </div>
 </footer>
 
@@ -236,6 +264,30 @@ function pill(texto, cls){
   return `<span class="pill ${cls||''}">${cls==='supr'?'':'<span class="k"></span>'}${texto}</span>`;
 }
 
+// Cifra destacada: cuando la respuesta es UNA sola fila con una métrica, se muestra
+// el número en grande. No aplica a mapas ni a desgloses (ahí el protagonista es la tabla).
+const CRUDOS = ['n_crudo','n','conteo_0','conteo_1','geo_codigo','codigo','codloc','codbarrio'];
+function cifraDestacada(j){
+  if (j.mapa || !Array.isArray(j.datos) || j.datos.length !== 1) return '';
+  const fila = j.datos[0];
+  const nums = Object.entries(fila).filter(([k,v]) =>
+    typeof v === 'number' && !CRUDOS.includes(k.toLowerCase()));
+  if (!nums.length) return '';
+  const esPct = k => /porcentaje|pct|porc|proporcion/i.test(k);
+  const par = nums.find(([k]) => esPct(k))
+           || nums.find(([k]) => /persona|poblacion|habitante|hogar|vivienda|mujer|varon|hombre|afro/i.test(k))
+           || nums[0];
+  const [clave, valor] = par;
+  const etiqueta = clave.replace(/_/g,' ').replace(/^porcentaje/,'porcentaje');
+  const texto = esPct(clave) ? `${fmt(valor)} %` : fmt(valor);
+  // La ponderación se lee del SQL: SUM(W) => estimación; el resto, conteo exacto.
+  const ponderada = /sum\s*\(\s*[^)]*\bw\b/i.test(j.sql || '');
+  const sello = ponderada ? 'Estimación ponderada' : 'Conteo exacto';
+  return `<div class="figura"><span class="val">${esc(texto)}</span>
+      <span class="uni">${esc(esPct(clave) ? etiqueta : etiqueta)}</span>
+      <span class="apx">${sello}</span></div>`;
+}
+
 async function rellenarOK(card, pregunta, j, censo){
   const id = ++uid;
   const tieneMapa = !!j.mapa;
@@ -253,6 +305,7 @@ async function rellenarOK(card, pregunta, j, censo){
         <span class="qtext">${esc(pregunta)}</span>
         <span class="qtime">${ahora()}</span>
       </div>
+      ${cifraDestacada(j)}
       <div class="answer" id="ans-${id}"></div>
     </div>
     ${tieneMapa ? `<div class="legend" id="leg-${id}"></div><div class="map" id="map-${id}" role="img" aria-label="Mapa coroplético del resultado"></div>` : ''}

@@ -14,7 +14,7 @@ import re
 import sqlite3
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from openai import OpenAI
@@ -488,6 +488,31 @@ def preguntar(p: Pregunta):
     return r
 
 
+INDEX = "app/static/index.html"
+VERSIONADOS = ("app/static/censo.css", "app/static/logo_ine.png")
+
+
+def _version_estaticos() -> str:
+    """Sello de versión de los estáticos: el mtime más reciente del CSS y del logo.
+
+    Sin esto el navegador aplica frescura heurística (no hay Cache-Control) y
+    puede servir una hoja de estilos vieja durante días después de un cambio de
+    diseño. El sello viaja como ?v= en el HTML, así una versión nueva es una URL
+    nueva y el navegador la pide sí o sí.
+    """
+    marcas = []
+    for f in VERSIONADOS:
+        try:
+            marcas.append(int(os.path.getmtime(f)))
+        except OSError:
+            pass
+    return str(max(marcas)) if marcas else "0"
+
+
 @app.get("/")
 def home():
-    return FileResponse("app/static/index.html")
+    with open(INDEX, encoding="utf-8") as fh:
+        html = fh.read().replace("__V__", _version_estaticos())
+    # no-cache = el navegador puede guardarlo, pero revalida siempre (304 barato).
+    # El HTML es el índice del diseño: si queda pegado, no hay ?v= que lo salve.
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
