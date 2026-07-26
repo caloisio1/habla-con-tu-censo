@@ -16,6 +16,8 @@ datos/*.db
 # Backups y artefactos locales de despliegue / pruebas
 *.bak-*
 *.bak.*
+*.bak_*
+*_backup.db
 backup_*/
 *.log
 regress.py
