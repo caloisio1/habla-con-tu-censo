@@ -156,12 +156,19 @@ def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False):
             "fueron suprimidas por confidencialidad." if suprimidas else "")
     leyenda = leyenda_codificaciones(sql)
     es_ponderada = bool(_RX_SUMW.search(sql or ""))
-    # (c) "aproximadamente"/"estimación" SOLO cuando la métrica es SUM(W) (personas).
-    # Viviendas y hogares son conteos exactos y se narran exactos.
+    # (c) Ninguna cifra se matiza en la frase. Las de personas salen del censo
+    # ponderado, pero son las cifras PUBLICADAS por el INE: decir "aproximadamente
+    # 619 personas" las presenta como una conjetura nuestra y no como el dato
+    # oficial que son. La ponderación se declara una vez, en la nota al pie que
+    # agrega main.py (PONDERACION_2023), que es donde corresponde: el método se
+    # documenta, no se repite como hedge en cada oración.
     if es_ponderada:
-        regla_cifra = ("\nLas cantidades de PERSONAS de esta consulta son ESTIMACIONES del censo "
-                       "PONDERADO del INE (SUM del ponderador W): redondealas y podés matizarlas "
-                       "como 'aproximadamente'/'estimación'.")
+        regla_cifra = ("\nLas cantidades de PERSONAS salen del censo ponderado del INE y son las "
+                       "cifras PUBLICADAS: redondealas y narralas COMO SON, en afirmativo. "
+                       "PROHIBIDO usar 'aproximadamente', 'alrededor de', 'unos/unas', 'cerca de', "
+                       "'estimación', 'estimado', 'se estima' o cualquier otro matiz de "
+                       "incertidumbre. Escribí 'viven 619 personas', no 'viven aproximadamente "
+                       "619 personas'.")
     else:
         regla_cifra = ("\nLas cifras de esta consulta son CONTEOS EXACTOS (viviendas u hogares): "
                        "narralas EXACTAS. NO uses 'aproximadamente', 'alrededor de', 'unos/unas' "
