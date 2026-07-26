@@ -1,0 +1,147 @@
+CENSO 1996 (VII Censo General de Población, III de Hogares y V de Viviendas, INE Uruguay).
+Censo COMPLETO, SIN ponderación: todas las cifras son conteos EXACTOS.
+(a) PERSONAS: COUNT(*) sobre personas_1996 (3.163.763 registros = la población del censo).
+(b) HOGARES: COUNT(DISTINCT hogar_key) sobre personas_1996 (975.056). NUNCA rearmes la clave
+    desde dpto/secc/segm/loc/vivienda/hogarviv: usá hogar_key, que ya viene materializada.
+(c) VIVIENDAS: COUNT(*) sobre viviendas_1996 (1.126.502, incluye 182.708 desocupadas).
+    Para viviendas OCUPADAS: WHERE condocup='1' (943.794).
+(d) PROHIBIDO unir personas_1996 con viviendas_1996. Si necesitás una variable de vivienda al
+    analizar personas, usá la copia que ya está en personas_1996 (tipviv, tenencia, higienico,
+    los artefactos del hogar, etc. viven en la tabla de personas).
+(e) Los códigos PERDIDOS de cada variable (marcados abajo) van SIEMPRE excluidos de conteos,
+    totales y denominadores. Los NULL también.
+(f) UNIVERSOS: muchas variables sólo se preguntaron a un subconjunto (3 años o más, 12 años o
+    más, mujeres de 15 o más, viviendas particulares ocupadas con moradores presentes). El
+    universo está escrito en la etiqueta de cada variable: respetalo en el denominador.
+(g) La geografía es por CÓDIGO TEXTO con ceros a la izquierda ('01', '020'). Para responder por
+    NOMBRE, unir al nomenclátor: personas_1996.dpto = cod_departamentos.dpto ; para localidad,
+    cod_localidades_1963_2023 ON (dpto, cod_1996 = loc).
+(h) OCUPACIÓN: cota70 y ciuo88 son códigos; para narrar con descripción unir a las tablas
+    cota70(codigo, descripcion) y cnuo96(codigo, descripcion). ciuo88='99999' es ocupación
+    ignorada: excluilo.
+Supresión de confidencialidad: SIEMPRE agregá COUNT(*) AS n_crudo por celda.
+
+
+TABLA personas_1996:
+- dpto | Código de departamento censal. Etiquetas en cod_departamentos. | 
+- secc | Código de sección censal. | 
+- segm | Código de segmento censal. Mínima unidad de publicación de microdatos. | 
+- loc | Código de localidad censal. Etiquetas en cod_localidades_1963_2023 (cod_1996). | 
+- vivienda | Número de orden de la vivienda dentro del segmento. | 
+- tipviv | Tipo de vivienda (B6 - Indique el tipo de vivienda) | 01=CASA; 02=APTO; 03=CUARTO; 04=LOCAL; 05=MOVIL; 06=OTRO PARTICU; 07=HOTEL; 08=HOSPITAL; 09=RES.ANCIANOS; 10=RES.ESTUDIANTES; 11=CASA PEONES; 12=ASILO; 13=OTRO COLE; 20=CAMINANTE; PERDIDOS: 15=IGNOPARTI, 16=IGNOCOLE
+- barrio | Código de barrio (sólo Montevideo). Etiquetas en cod_barrios_mvd. | 
+- ccz | Número de Centro Comunal Zonal (sólo Montevideo). | 
+- hogarviv | Número de orden del hogar dentro de la vivienda. 00 = hogar colectivo. | 
+- parentesco | Parentesco | 01=JEFE; 02=CONYUGE; 03=HIJO; 04=HIJO.CONYUGE; 05=YERNO; 06=NIETO; 07=PADRES; 08=OTRO PARIENTE; 09=SERV.DOM.FLIA; 10=NO PARIENTE; 11=HOG.COLECT
+- sexo | 2G-¿Es hombre o mujer? Universo: todas las personas. | 1=Hombre; 2=Mujer
+- edad | 3G-¿Cuántos años cumplidos tiene? Menores de 1 año: 00. Mayores de 99 años: 99 (tope superior). Universo: todas las personas. | 
+- jubopen | 4G-¿Es jubilado o pensionista? Universo: todas las personas. | 1=SI; 2=NO; PERDIDOS: 9=IGNORADO
+- saludtot | 5G-¿Tiene actualmente derechos vigentes en alguna institución para atender su salud, en servicios de cobertura total? Universo: todas las personas. | 1=MSP (carné vigente); 2=Mutualista, Coop. médica, etc.; 3=Sanidad militar; 4=Sanidad policial; 5=Otros de cobertura total; 6=No tiene; PERDIDOS: 9=IGNORADO
+- saludpar | 6G-¿Y en servicios de cobertura parcial? Universo: todas las personas. | 1=Asignaciones familiares; 2=Unidades móviles de emergencia; 3=Otros seguros parciales; 4=No tiene; PERDIDOS: 9=IGNORADO
+- habitaqui | 7G-¿En qué localidad o paraje vive habitualmente? Universo: todas las personas. | 1=Aquí
+- habdepc | 7G-Departamento o país donde vive habitualmente. Etiquetas en cod_departamentos y cod_localidad_1996. | 
+- hablocc | 7G-Localidad donde vive habitualmente. Etiquetas en cod_localidad_1996. | 
+- menor5 | 8G-¿En qué localidad o paraje vivía habitualmente hace 5 años en esta fecha? Universo: todas las personas. | 1=Menor de 5 años
+- hace5aqui | 8G-¿En qué localidad o paraje vivía habitualmente hace 5 años en esta fecha? Universo: todas las personas. | 2=Aquí
+- hac5depc | 8G-Departamento o país donde vivía hace 5 años. | 
+- hac5loc | 8G-Localidad donde vivía hace 5 años. | 
+- nacioaqui | 9G-¿En qué localidad o paraje pasó a vivir cuando nació? Universo: todas las personas. | 1=Aquí
+- nacdepc | 9G-Departamento o país donde pasó a vivir cuando nació. | 
+- naclocc | 9G-Localidad donde pasó a vivir cuando nació. | 
+- llegada | 10G-Si reside en Uruguay y nació en el extranjero, ¿en qué año llegó al Uruguay para vivir en él? Dos últimos dígitos del año (precedido de 19 en el formulario). | 
+- leeryesc | 11G-¿Sabe leer y escribir? (si sólo lee o sólo escribe, NO) Universo: personas de 3 años o más. | 1=SI; 2=NO; PERDIDOS: 9=IGNORADO
+- nivel | 12G-De los siguientes niveles de enseñanza, ¿cuál es el más alto al que asistió? Universo: personas de 3 años o más. | 1=Nunca asistió; 2=Preescolar; 3=Primaria; 4=Liceo o Ciclo Básico secundario; 5=Preparatorios o Secundaria, 2º ciclo; 6=Universidad; 7=Formación docente; 8=Carrera militar o policial; PERDIDOS: 9=IGNORADO
+- finalizo |  | 
+- ultimo | 14G-¿Cuántos años aprobó en ese nivel? Universo: personas de 3 años o más. | 0=0; 1=1; 2=2; 3=3; 4=4; 5=5; 6=6; 7=7; 8=8 o más; PERDIDOS: 9=IGNORADO
+- carrerc | 15G-¿Cuál es la orientación o carrera cursada? Codificada según el manual UY96EDUCCO. Sólo para quienes marcaron el grupo B en la pregunta 12. | 
+- tecnicos | 16G-¿Cursa o cursó estudios técnicos o comerciales, de 6 meses o más de duración? Universo: personas de 12 años o más. | 1=SI, en U.T.U.; 2=SI, en otro instituto público; 3=SI, en instituto privado; 4=NO
+- niveltec | 17G-Con respecto a ese curso, ¿actualmente ud... Universo: personas de 12 años o más. | 1=Asiste; 2=Abandonó los estudios; 3=Finalizó los estudios; PERDIDOS: 9=IGNORADO
+- fintec | 18G-¿Cuántos años aprobó en esos estudios? Universo: personas de 12 años o más. | 0=0; 1=1; 2=2; 3=3; 4=4; 5=5; 6=6; 7=7; 8=8 o más; PERDIDOS: 9=IGNORADO
+- tecnsc | 19G-¿Cuál es el estudio técnico o comercial cursado? Codificado según el manual UY96EDUCCO. | 
+- estado | 20G-¿Cuál es, de hecho, su estado conyugal actual? Universo: personas de 12 años o más. | 1=Unido/a; 2=Casado/a; 3=Divorciado/a; 4=Separado/a de unión o matrimonio; 5=Viudo/a de unión o matrimonio; 6=Soltero/a
+- trabajo | 21G-Durante la semana pasada, ¿trabajó al menos una hora? Universo: personas de 12 años o más. | 1=SI; 2=NO; PERDIDOS: 9=IGNORADO
+- sinpago | 22G-La semana pasada, ¿hizo algo en su casa para afuera, o ayudó a alguien en un negocio, chacra o trabajó aunque no recibiera un pago regular? Universo: personas de 12 años o más. | 1=SI; 2=NO; PERDIDOS: 9=IGNORADO
+- licencia | 23G-La semana pasada, ¿estuvo de licencia por enfermedad, vacaciones, suspendido, etc., pero tiene trabajo? Universo: personas de 12 años o más. | 1=SI; 2=NO; PERDIDOS: 9=IGNORADO
+- buscotrab | 24G-Durante las últimas cuatro semanas ¿buscó trabajo? Universo: personas de 12 años o más. | 1=SI; 2=NO; PERDIDOS: 9=IGNORADO
+- algunavez | 25G-¿Alguna vez trabajó? Universo: personas de 12 años o más. | 1=SI; 2=NO; PERDIDOS: 9=IGNORADO
+- cota70 | 26G-Ocupación, profesión u oficio que le proporciona (proporcionaba) los mayores ingresos, codificada en COTA70. Etiquetas en la tabla cota70. | 
+- ciuo88 | 26G-Ocupación codificada en CIUO-88 (adaptación uruguaya CNUO-95). Etiquetas en la tabla cnuo96. | 
+- ciur2 | 27G-¿A qué se dedica principalmente el lugar o establecimiento donde trabaja (trabajaba)? Rama de actividad, CIIU revisión 2. | 
+- ciur3 | 27G-Rama de actividad, CIIU revisión 3. | 
+- categoria | 28G-De las siguientes, ¿cuál es (era) su categoría en la ocupación que indicó? Universo: personas de 12 años o más. | 1=Patrón, con obreros o empleados a su cargo; 2=Obrero o empleado público; 3=Obrero o empleado privado; 4=Trabajador por cuenta propia; 5=Trabajador familiar no remunerado; 6=Miembro de cooperativa de producción; 7=Otro; PERDIDOS: 9=IGNORADO
+- hijosvivos | 29G-¿Cuántos hijos nacidos vivos ha tenido en total? Universo: mujeres de 15 años o más. | 00=Ninguno; 01=1; 02=2; 03=3; 04=4; 05=5; 06=6; 07=7; 08=8; 09=9; 10=10; 11=11; 12=12; 13=13; 14=14 o más; PERDIDOS: 15=No sabe
+- vivosactua | 30G-De ellos, ¿cuántos están vivos actualmente? Universo: mujeres de 15 años o más. | 00=Ninguno; 01=1; 02=2; 03=3; 04=4; 05=5; 06=6; 07=7; 08=8; 09=9; 10=10; 11=11; 12=12; 13=13; 14=14 o más; PERDIDOS: 15=No sabe
+- hijos12mes | 31G-¿Cuántos nacieron en los últimos doce meses? Universo: mujeres de 15 años o más. | 1=Uno; 2=Dos o más; 3=Ninguno
+- higienico | 1E-¿Este hogar dispone en esta vivienda de servicio higiénico (W.C., letrina, etc.)? Universo: hogares particulares. | 1=Sí, con descarga instantánea de agua; 2=Sí, pero sin descarga; 3=No dispone de servicio higiénico
+- usoservhig | 2E-El uso del servicio higiénico, ¿es... Universo: hogares particulares. | 1=Privado de este hogar; 2=Compartido con otros hogares
+- evacserhig | 3E-La evacuación del servicio higiénico ¿se realiza a... Universo: hogares particulares. | 1=Red general; 2=Fosa séptica, pozo negro; 3=Otro (hueco en el suelo, superficie, etc.)
+- lugarcocin | 4E-En este hogar ¿hay algún lugar apropiado para cocinar, con pileta y canilla? Universo: hogares particulares. | 1=Sí, privado de este hogar; 2=Sí, compartido con otros hogares; 3=No hay; PERDIDOS: 9=IGNORADO
+- fuentcoci | 5E-¿Cuál es la principal fuente de energía utilizada para cocinar? Universo: hogares particulares. | 1=Electricidad; 2=Supergás; 3=Querosene; 4=Gas de cañería; 5=Leña; 6=Otro; 7=Ninguna, no se cocina; PERDIDOS: 9=IGNORADO
+- calefaccio | 6E-¿Utiliza algún medio para calefaccionar ambientes? (sólo el principal) Universo: hogares particulares. | 1=Estufa, panel radiante o similar; 2=Acondicionador de aire; 3=Calefacción central; 4=Otro; 5=Ninguno
+- fuentcale | 7E-¿Cuál es la principal fuente de energía para calefaccionar los ambientes? Universo: hogares particulares. | 1=Electricidad; 2=Supergás; 3=Querosene; 4=Leña; 5=Gas oil; 6=Fuel oil; 7=Gas de cañería; 8=Otro
+- tenencia | 8E-Con respecto a esta vivienda, ¿este hogar es... Universo: hogares particulares. | 1=Propietario de la vivienda y el terreno; 2=Propietario de la vivienda, solamente; 3=Integra una cooperativa de vivienda; 4=Inquilino o arrendatario; 5=Ocupante por relación de dependencia (trabajo); 6=Ocupante por préstamo, cesión o permiso; 7=Ocupante sin permiso; 8=Otro; PERDIDOS: 9=IGNORADO
+- habdormir | 9E-¿Cuántas habitaciones utilizan en este hogar para dormir? Universo: hogares particulares. | 1=1; 2=2; 3=3; 4=4; 5=5; 6=6; 7=7; 8=8 o más
+- vehiculo | 10E-¿Tiene este hogar algún vehículo propio (auto o camioneta) sólo para uso particular? Universo: hogares particulares. | 1=No tiene; 2=Sí, uno; 3=Sí, más de uno; PERDIDOS: 9=IGNORADO
+- calefon | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿Calefón o termofón? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- calentador | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿Calentador instantáneo? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- refrisimpl | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿Refrigerador simple? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- refriconfr | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿Refrigerador con freezer? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- freezer | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿Freezer? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- tvcolor | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿T.V. color? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- tvbn | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿T.V. blanco y negro? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- telefono | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿Teléfono? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- microonda | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿Horno microondas? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- video | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿Video casetero? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- lavacomun | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿Lavarropa común? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- lavaprog | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿Lavarropa programable? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- pc | 11E-¿Tiene este hogar alguno de los siguientes artefactos? ¿Computadora? Universo: hogares particulares. | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- totalper | 13F-¿Cuántas personas en total se alojaron aquí anoche? Se completa sólo en la primera fila del hogar. | 
+- tothombres | 14F-De ese total, ¿cuántos son hombres? Se completa sólo en la primera fila del hogar. | 
+- totmujeres | 14F-De ese total, ¿cuántas son mujeres? Se completa sólo en la primera fila del hogar. | 
+- tipohogar |  | 
+- tipo85 |  | 
+- tipoacti |  | 
+- aestudio | Años de estudio. Se aplica a todas las personas de 3 años o más de edad. | 00=0 años de estudio; 01=1 año de estudio; 02=2 años de estudio; 03=3 años de estudio; 04=4 años de estudio; 05=5 años de estudio; 06=6 años de estudio; 07=7 años de estudio; 08=8 años de estudio; 09=9 años de estudio; 10=10 años de estudio; 11=11 años de estudio; 12=12 años de estudio; 13=13 años de estudio; 14=14 años de estudio; 15=15 años de estudio; 16=16 años de estudio; 17=17 años de estudio; 18=18 años de estudio; 19=19 años de estudio; 20=20 años de estudio; 21=21 años de estudio; PERDIDOS: 99=NS/NC
+- vivnbi |  | 
+- hacinbi |  | 
+- agponbi |  | 
+- evacnbi |  | 
+- enernbi |  | 
+- totnbi |  | 
+- cant_nbi |  | 
+- vivienda_key |  | 
+- hogar_key |  | 
+
+TABLA viviendas_1996:
+- dpto | Código de departamento censal. Etiquetas en cod_departamentos. | 
+- secc | Código de sección censal. | 
+- segm | Código de segmento censal. Mínima unidad de publicación de microdatos. | 
+- loc | Código de localidad censal. Etiquetas en cod_localidades_1963_2023 (cod_1996). | 
+- barrio | Código de barrio (sólo Montevideo). Etiquetas en cod_barrios_mvd. | 
+- ccz | Número de Centro Comunal Zonal (sólo Montevideo). | 
+- vivienda | Número de orden de la vivienda dentro del segmento. | 
+- hogarviv | Número de orden del hogar dentro de la vivienda. 00 = hogar colectivo. | 
+- tipviv | Tipo de vivienda (B6 - Indique el tipo de vivienda) | 01=CASA; 02=APTO; 03=CUARTO; 04=LOCAL; 05=MOVIL; 06=OTRO PARTICU; 07=HOTEL; 08=HOSPITAL; 09=RES.ANCIANOS; 10=RES.ESTUDIANTES; 11=CASA PEONES; 12=ASILO; 13=OTRO COLE; 20=CAMINANTE; PERDIDOS: 15=IGNOPARTI, 16=IGNOCOLE
+- condocup | Condición de ocupación (B7 - Indique si la vivienda está ocupada o desocupada) | 1=OCUP.MOR.PRES; 2=OCUP.MOR.AUSENT; 3=DESOC.TEMPORADA; 4=DESOC.CONSTRUCC.; 5=ALQUILER; 6=OTRA RAZON
+- paredes | 8C-¿Cuál es el material predominante de las paredes exteriores? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 1=MAMPOSTERIA; 2=MADERA; 3=BARRO; 4=LATA; 5=OTRO; PERDIDOS: 9=IGNORADO
+- techos | 9C-¿Cuál es el material predominante de los techos? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 1=PLANCHADA; 2=CON CIELORRASO; 3=SIN CIELORRASO; 4=PAJA; 5=LATA; 6=OTRO; PERDIDOS: 9=IGNORADO
+- pisos | 10C-¿Cuál es el material predominante de los pisos? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 1=Tierra o cascote suelto; 2=Hormigón, portland alisado, piedras o ladrillos; 3=Madera, baldosas, parquet, linóleo, etc.; 4=Otro; PERDIDOS: 9=IGNORADO
+- origenagua | 11C-¿Cuál es el origen del agua de la vivienda, utilizada para beber y cocinar? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 1=RED GRAL; 2=POZO; 3=ALJIBE; 4=OTRO; PERDIDOS: 9=IGNORADO
+- llegadaagu | 12C-¿Cómo llega el agua a la vivienda? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 1=CAÑERIA DENTRO; 2=CAÑERIA FUERA; 3=OTROS MEDIOS; PERDIDOS: 9=IGNORADO
+- alute | 13C-¿Tiene esta vivienda alguno de los siguientes servicios de alumbrado eléctrico? ¿De UTE? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- alcargador | 13C-¿Tiene esta vivienda alguno de los siguientes servicios de alumbrado eléctrico? ¿Cargador de batería? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- algrupo | 13C-¿Tiene esta vivienda alguno de los siguientes servicios de alumbrado eléctrico? ¿Grupo electrógeno propio? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- alotro | 13C-¿Tiene esta vivienda alguno de los siguientes servicios de alumbrado eléctrico? ¿Otro eléctrico? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 1=TIENE; 2=NO TIENE; PERDIDOS: 9=IGNORADO
+- habresi | 14C-Sin considerar el o los baños, ni la habitación exclusiva para cocinar y los depósitos, ¿cuántas habitaciones tiene en total esta vivienda utilizadas con fines residenciales? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 1=1 habitación; 2=2 habitaciónes; 3=3 habitaciónes; 4=4 habitaciónes; 5=5 habitaciónes; 6=6 habitaciónes; 7=7 habitaciónes; 8=8 habitaciónes; 9=9 o más
+- habnoresi | 14C-Sin considerar el o los baños, ni la habitación exclusiva para cocinar y los depósitos, ¿cuántas habitaciones tiene en total esta vivienda utilizadas con fines no residenciales? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 0=Ninguna; 1=1 habitación; 2=2 habitaciónes; 3=3 habitaciónes; 4=4 habitaciónes; 5=5 habitaciónes; 6=6 habitaciónes; 7=7 habitaciónes; 8=8 habitaciónes; 9=9 o más
+- nhogar | D16-En esta vivienda: ¿cuántos hogares (grupo de personas) tienen presupuestos separados, al menos para la comida? Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 
+- tipoviv | Categoría de la vivienda. Variable DERIVADA de paredes, techos y pisos (generada por Concor). Universo: viviendas particulares ocupadas con moradores presentes (sólo 1er hogar u hogar único). | 01=PESADOS TECH/PAR; 02=PES PAR/LIV TECH; 03=PES PAR_TECH/PNR; 04=PES PAR/L/TEC/PN; 05=LIV PAR_TECH/P_R; 06=LIV PAR_TECH/PNR; 07=BARR/TECHLIV PR; 08=BARR/TECHLIV PNR; 09=MAT DESECHO; 10=OTROS Y SIN ESPE
+- vivienda_key |  | 
+
+NOMENCLÁTOR (solo para JOIN por nombre, nunca como tabla de hechos):
+- cod_departamentos(dpto, nombre, iso)
+- cod_localidades_1963_2023(dpto, cod_2023, iso, nom_2023, cod_2011, nom_2011, cod_2004, nom_2004, cod_1996, nom_1996, cod_1985, nom_1985, cod_6375, nom_6375)
+- cod_localidad_1996(cod_loc, nombre, cod_continente)
+- cod_barrios_mvd(dpto, barrio, nombre)
+- cnuo96(codigo, descripcion)
+- cota70(codigo, descripcion)

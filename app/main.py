@@ -24,6 +24,11 @@ from app.sql_guard import (
     validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO,
 )
 import consultar_2023   # motor Censo 2023 (ponderado): interfaz preguntar(texto)
+import consultar_1996   # motor Censo 1996 (completo, sin ponderar)
+import consultar_2004   # motor Censo 2004 Fase 1 (conteo, sin ponderar)
+
+# Censos históricos: misma interfaz preguntar(texto), sin ponderación ni mapa.
+MOTORES_HISTORICOS = {"1996": consultar_1996, "2004": consultar_2004}
 import usage_log         # registro de métricas de tokens (solo métricas, sin contenido)
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
@@ -478,6 +483,13 @@ def preguntar(p: Pregunta):
     selector del frontend (por defecto 2023)."""
     if p.censo == "2011":
         return responder_2011(p.texto)
+
+    # 1996 y 2004: censos completos sin ponderación, conteos exactos. No devuelven
+    # mapa (la app no tiene geometrías de esos marcos censales, ver motor_historico).
+    if p.censo in MOTORES_HISTORICOS:
+        r = MOTORES_HISTORICOS[p.censo].preguntar(p.texto)
+        r.pop("veredicto", None)
+        return r
 
     # Censo 2023 (ponderado). La línea de ponderación se agrega SOLO cuando la
     # métrica es SUM(W) (personas); viviendas y hogares son conteos exactos (regla c).

@@ -1,0 +1,63 @@
+CENSO 2004 FASE 1 (Conteo de Población y Viviendas, INE Uruguay).
+Censo de CONTEO, SIN ponderación: todas las cifras son conteos EXACTOS.
+Releva SOLO geografía, vivienda, hogar, sexo y edad. NO tiene educación, ocupación,
+migración ni ascendencia: si la pregunta requiere alguna de esas, devolvé NO_RESPONDIBLE.
+Hay UNA sola tabla, censo2004, con una fila por PERSONA y banderas de registro:
+(a) PERSONAS: COUNT(*) ... WHERE per=1   (3.241.003)
+(b) HOGARES:  COUNT(*) ... WHERE hog=1   (1.065.677)
+(c) VIVIENDAS:COUNT(*) ... WHERE viv=1   (1.279.741)
+    Las tres banderas marcan exactamente una fila por unidad: NUNCA cuentes personas sin
+    filtrar per=1, ni viviendas sin viv=1, porque la tabla repite los datos de la vivienda
+    en cada persona.
+(d) El 0 significa NO APLICA, no una categoría: tipviv_p=0 en viviendas colectivas,
+    tipviv_c=0 en particulares, sexo=0 en filas que no son de persona. Excluilo.
+(e) El código 9 en tipviv_p y desocupada es un centinela no documentado (sin dato): excluilo.
+(f) La geografía es por CÓDIGO TEXTO con ceros a la izquierda ('01', '020'). Los nombres ya
+    vienen en la tabla (nom_dpto, nom_loc, nom_barrio) en MAYÚSCULAS y SIN tildes.
+Supresión de confidencialidad: SIEMPRE agregá COUNT(*) AS n_crudo por celda.
+
+
+TABLA censo2004:
+- dpto | Código de departamento | 
+- secc | Código de sección censal | 
+- segm | Código de segmento censal | 
+- loc | Código de localidad | 
+- urb_rur | Tipo de área de ubicación de la vivienda | U=Vivienda ubicada en área amanzanada; R=Vivienda ubicada en área no amanzanada
+- barrio | Código de barrio (solo Montevideo) | 
+- nom_dpto | Nombre de departamento | 
+- nom_loc | Nombre de localidad censal | 
+- nom_barrio | Nombre de barrio (solo Montevideo) | 
+- ccz | Número de Centro Comunal Zonal (solo Montevideo) | 
+- secpol | Número de seccional policial | 
+- asentamien | Ubicación de la vivienda respecto de un asentamiento irregular | 0=Vivienda ubicada en área que no es asentamiento irregular; 1=Vivienda ubicada en área de asentamiento irregular
+- id_viv | Identificador de vivienda | 
+- uso_viv | Clase de vivienda | 1=Vivienda particular; 2=Vivienda colectiva
+- tipviv_p | Tipo de vivienda particular | 1=Casa; 2=Apartamento; 3=En local no destinado a vivienda; 4=Otro tipo de vivienda particular
+- nhogarp | Cantidad de hogares particulares en la vivienda | 
+- desocupada | Motivo de desocupación de la vivienda | 1=Vivienda desocupada para alquilar o vender; 2=Vivienda desocupada terminando de construir o reparar; 3=Vivienda desocupada de uso temporal; 4=Vivienda desocupada por otras causas
+- tipviv_c | Tipo de vivienda colectiva | 1=Hotel o similar; 2=Hospital o sanatorio (con internación); 3=Residencial de ancianos; 4=Residencial de estudiantes; 5=Casa de peones; 6=Internado religioso; 7=Establecimiento de reclusión; 8=Asilo; 9=Cuartel militar o policial; 10=Otro tipo de vivienda colectiva
+- habitual_c | Presencia habitual de personas que integran el hogar colectivo | 1=Actualmente viven aquí en forma habitual personas que integran el hogar colectivo; 2=Actualmente no viven aquí en forma habitual personas que integran el hogar colectivo
+- habitual_n | Presencia habitual de personas que no integran el hogar colectivo | 1=Actualmente viven aquí en forma habitual personas que no integran el hogar colectivo; 2=Actualmente no viven aquí en forma habitual personas que no integran el hogar colectivo
+- nfondo_com | Cantidad de hogares particulares en vivienda colectiva | 
+- viv_hog | Cantidad de hogares en la vivienda | 
+- viv_pers | Cantidad de personas en la vivienda | 
+- viv_homb | Cantidad de hombres en la vivienda | 
+- viv_muj | Cantidad de mujeres en la vivienda | 
+- tipohogar | Tipo de hogar | P=Hogar particular; C=Hogar colectivo
+- nhogar | Identificador de hogar en la vivienda | 
+- hog_pers | Cantidad de personas en el hogar | 
+- hog_homb | Cantidad de hombres en el hogar | 
+- hog_muj | Cantidad de mujeres en el hogar | 
+- nro_person | Identificador de la persona en el hogar | 
+- sexo | Sexo de la persona | 1=Hombre; 2=Mujer
+- edad | Edad de la persona, en años cumplidos | 
+- viv | Indicador de registro de vivienda | 0=Registro de vivienda = No; 1=Registro de vivienda = Sí
+- hog | Indicador de registro de hogar | 0=Registro de hogar = No; 1=Registro de hogar = Sí
+- per | Indicador de registro de persona | 0=Registro de persona = No; 1=Registro de persona = Sí
+- fuente |  | 
+
+NOMENCLÁTOR (solo para JOIN por nombre, nunca como tabla de hechos):
+- cod_departamentos(dpto, nombre, iso)
+- cod_localidades_1963_2023(dpto, cod_2023, iso, nom_2023, cod_2011, nom_2011, cod_2004, nom_2004, cod_1996, nom_1996, cod_1985, nom_1985, cod_6375, nom_6375)
+- ref_localidades_2004(cod_ine, dpto, nom_dpto, nom_loc, poblacion, densidad)
+- cod_barrios_mvd(dpto, barrio, nombre)

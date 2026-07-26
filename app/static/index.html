@@ -12,7 +12,7 @@
 .censo-sel{display:inline-flex;border:1px solid var(--line-strong);border-radius:9px;overflow:hidden;background:var(--surface);margin-bottom:12px;}
 .censo-sel input{position:absolute;opacity:0;width:0;height:0;}
 .censo-sel label{padding:8px 18px;font-size:.88rem;font-weight:600;cursor:pointer;color:var(--ink-2);transition:background .13s,color .13s;}
-.censo-sel label:first-of-type{border-right:1px solid var(--line);}
+.censo-sel label:not(:last-of-type){border-right:1px solid var(--line);}
 .censo-sel label:hover{background:var(--azul-50);color:var(--azul-600);}
 .censo-sel input:checked + label{background:var(--azul);color:#fff;}
 .censo-sel input:focus-visible + label{outline:2.5px solid var(--focus);outline-offset:-2px;}
@@ -50,14 +50,14 @@
   <div class="wrap">
     <p class="kicker">Censos de Uruguay · Microdatos oficiales del INE</p>
     <h1>Preguntá. El Censo responde con datos reales.</h1>
-    <p class="lead">Elegí el censo —2011 o 2023— y preguntá en español. Cada respuesta cita su fuente y muestra la consulta exacta que la generó.</p>
+    <p class="lead">Elegí el censo —1996, 2004, 2011 o 2023— y preguntá en español. Cada respuesta cita su fuente y muestra la consulta exacta que la generó.</p>
   </div>
 </section>
 
 <main class="wrap">
   <div class="panel">
     <span class="sublbl">Censo a consultar</span>
-    <div class="censo-sel" role="radiogroup" aria-label="Seleccionar censo"><input type="radio" name="censo" id="c2011" value="2011"><label for="c2011">Censo 2011</label><input type="radio" name="censo" id="c2023" value="2023" checked><label for="c2023">Censo 2023</label></div>
+    <div class="censo-sel" role="radiogroup" aria-label="Seleccionar censo"><input type="radio" name="censo" id="c1996" value="1996"><label for="c1996">Censo 1996</label><input type="radio" name="censo" id="c2004" value="2004"><label for="c2004">Censo 2004</label><input type="radio" name="censo" id="c2011" value="2011"><label for="c2011">Censo 2011</label><input type="radio" name="censo" id="c2023" value="2023" checked><label for="c2023">Censo 2023</label></div>
     <form id="f">
       <div class="qi">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -107,7 +107,7 @@
       <h2>Cómo funciona</h2>
       <p class="msub">Una respuesta auditable en cuatro pasos.</p>
       <ol class="steps">
-        <li><div><b>Tu pregunta</b> <span class="d">— la escribís en español, como hablarías con una persona, y elegís el censo (2011 o 2023).</span></div></li>
+        <li><div><b>Tu pregunta</b> <span class="d">— la escribís en español, como hablarías con una persona, y elegís el censo (1996, 2004, 2011 o 2023).</span></div></li>
         <li><div><b>SQL validado</b> <span class="d">— se traduce a una consulta SQL que pasa por un guardrail de seguridad antes de ejecutarse.</span></div></li>
         <li><div><b>Datos reales</b> <span class="d">— se corre sobre los microdatos del censo elegido; las celdas con menos de 5 casos se suprimen.</span></div></li>
         <li><div><b>Respuesta auditable</b> <span class="d">— se redacta citando los números y siempre podés ver el SQL exacto que se ejecutó.</span></div></li>
@@ -297,7 +297,7 @@ async function rellenarOK(card, pregunta, j, censo){
   let metaPills = '';
   metaPills += pill(`${nFilas.toLocaleString('es-UY')} ${nFilas===1?'fila':'filas'}`);
   if (supr) metaPills += `<span class="pill supr" title="${SUPR_MSG}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" stroke-linecap="round" stroke-linejoin="round"/></svg>${supr} ${supr===1?'celda suprimida':'celdas suprimidas'}</span>`;
-  metaPills += pill(`Censo ${censo === '2011' ? '2011' : '2023'} · INE`);
+  metaPills += pill(`Censo ${censo}${censo === '2004' ? ' Fase 1' : ''} · INE`);
 
   card.innerHTML = `<div class="body">
       <div class="q-head">
