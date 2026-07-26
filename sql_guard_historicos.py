@@ -73,7 +73,31 @@ class Guard:
             yield c
 
     @staticmethod
-    def _tablas_por_ambito(arbol):
+    def _ctes(arbol):
+        """Mapa nombre de CTE -> tablas reales que consulta su cuerpo.
+
+        Un CTE no es una tabla: es un nombre para una subconsulta. Hay que
+        permitirlo (el modelo los usa para calcular porcentajes) pero SIN perder
+        de vista qué tablas hay abajo, porque si no un `WITH x AS (SELECT ...
+        FROM personas_1996) SELECT ... FROM x JOIN viviendas_1996` esquivaría la
+        regla de universos distintos.
+        """
+        m = {}
+        for cte in arbol.find_all(exp.CTE):
+            nombre = (cte.alias or "").lower()
+            if nombre:
+                m[nombre] = {t.name.lower() for t in cte.find_all(exp.Table)}
+        # un CTE puede apoyarse en otro: se expande hasta estabilizar
+        for _ in range(len(m)):
+            for nombre, tablas in m.items():
+                expandido = set()
+                for t in tablas:
+                    expandido |= m.get(t, {t})
+                m[nombre] = expandido
+        return m
+
+    @staticmethod
+    def _tablas_por_ambito(arbol, ctes=None):
         """Tablas que cuelgan del FROM/JOIN de cada SELECT, por separado.
 
         Sirve para distinguir un JOIN real (dos tablas en el mismo ámbito) de dos
@@ -92,9 +116,51 @@ class Guard:
             for j in sel.args.get("joins") or []:
                 aqui |= {t.name.lower() for t in j.find_all(exp.Table)
                          if t.find_ancestor(exp.Select) is sel}
+            if ctes:
+                expandido = set()
+                for t in aqui:
+                    expandido |= ctes.get(t, {t})
+                aqui = expandido
             if aqui:
                 ambitos.append(aqui)
         return ambitos
+
+    @staticmethod
+    def _resolver_group_by(arbol, group_exprs):
+        """Expande el GROUP BY a las expresiones reales de la proyección.
+
+        `GROUP BY 1` (ordinal) y `GROUP BY <alias de salida>` son SQL válido y
+        agrupan igual que nombrar la columna, pero si se comparan literalmente
+        contra la proyección no coinciden con nada y la consulta se rechaza por
+        'proyección no agregada'. El LLM alterna entre las tres formas, así que
+        sin esto el rechazo aparece de forma intermitente sobre consultas
+        correctas.
+
+        Devuelve las expresiones originales MÁS las que resuelven ordinales y
+        alias; nunca quita nada, así que no relaja ninguna comprobación.
+        """
+        proyecciones = list(arbol.expressions)
+        por_alias = {p.alias.lower(): p.this for p in proyecciones
+                     if isinstance(p, exp.Alias) and p.alias}
+        resueltas = list(group_exprs)
+        for g in group_exprs:
+            # ordinal: GROUP BY 1 -> primera columna de la proyección
+            if isinstance(g, exp.Literal) and g.is_int:
+                i = int(g.name) - 1
+                if 0 <= i < len(proyecciones):
+                    p = proyecciones[i]
+                    resueltas.append(p.this if isinstance(p, exp.Alias) else p)
+            # alias de salida: GROUP BY codigo -> la expresión que lo produce
+            elif isinstance(g, exp.Column) and not g.table:
+                destino = por_alias.get(g.name.lower())
+                if destino is not None:
+                    resueltas.append(destino)
+        # las columnas que cuelgan de lo resuelto también quedan cubiertas
+        extra = []
+        for r in resueltas:
+            if not isinstance(r, exp.Column):
+                extra.extend(r.find_all(exp.Column))
+        return resueltas + extra
 
     @staticmethod
     def _alias_de_tablas(arbol):
@@ -149,10 +215,13 @@ class Guard:
                 raise SQLNoSeguro(
                     "SELECT * prohibido: los microdatos solo se consultan agregados.")
 
+        ctes = self._ctes(arbol)
         tablas = {t.name.lower() for t in arbol.find_all(exp.Table)}
         if not tablas:
             raise SQLNoSeguro("No se detectó tabla de origen.")
         for t in tablas:
+            if t in ctes:
+                continue   # nombre de CTE: lo que importa son las tablas de su cuerpo
             if t not in self.tablas_permitidas:
                 raise SQLNoSeguro("Tabla no permitida: %s" % t)
 
@@ -161,7 +230,7 @@ class Guard:
         # filas cruzando universos distintos). Dos subconsultas independientes
         # —"cuántos hogares y cuántas viviendas desocupadas"— son dos conteos lado
         # a lado, no una mezcla, y sí se permiten.
-        for scope in self._tablas_por_ambito(arbol):
+        for scope in self._tablas_por_ambito(arbol, ctes):
             for par in self.pares_prohibidos:
                 if par <= scope:
                     raise SQLNoSeguro(
@@ -187,7 +256,7 @@ class Guard:
         # nomenclátor sin agregar (son lookup, no microdato)
         alias_tab = self._alias_de_tablas(arbol)
         grupo = arbol.args.get("group")
-        group_exprs = grupo.expressions if grupo else []
+        group_exprs = self._resolver_group_by(arbol, grupo.expressions if grupo else [])
         group_nombres = {g.name.lower() for g in group_exprs if isinstance(g, exp.Column)}
         group_sql = {g.sql(dialect="sqlite").lower() for g in group_exprs}
         for proj in arbol.expressions:

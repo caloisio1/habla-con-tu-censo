@@ -355,12 +355,14 @@ function rellenarAviso(card, pregunta, j){
 
 function censoSel(){ return document.querySelector('input[name="censo"]:checked').value; }
 const CHIPS = {
+  '1996': ['¿Cómo se distribuye la población por nivel educativo?','¿Qué porcentaje de hogares tenía computadora?','¿Cuántas viviendas estaban desocupadas?','¿Cuántas personas vivían en cada departamento?'],
+  '2004': ['¿Cuántas personas vivían en cada departamento?','¿Cuántas personas vivían en asentamientos irregulares?','¿Cuántas viviendas estaban desocupadas y por qué motivo?','¿Cuál es la distribución de la población por sexo?'],
   '2011': ['¿Cuánta gente vive en Paso de los Toros?','Porcentaje de afrodescendientes por departamento','Porcentaje de niños de 5 años o menos por barrio de Montevideo','Cantidad de hogares con 2 o más NBI por sección censal'],
   '2023': ['¿Cuántas personas viven en Paso de los Toros?','¿Qué porcentaje de la población es afrodescendiente?','¿Cuántas viviendas desocupadas hay?','Porcentaje de afrodescendientes por barrio de Montevideo'],
 };
 function renderChips(){
   const box = document.getElementById('chipbox'); box.innerHTML='';
-  CHIPS[censoSel()].forEach(t => { const b=document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=t; b.onclick=()=>preguntar(t); box.appendChild(b); });
+  (CHIPS[censoSel()] || []).forEach(t => { const b=document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=t; b.onclick=()=>preguntar(t); box.appendChild(b); });
 }
 async function preguntar(texto){
   const { card, stop } = tarjetaLoading(texto);
@@ -393,7 +395,7 @@ f.onsubmit = e => {
 // El rótulo de fuente del footer sigue al censo seleccionado.
 function sincronizarFuente(){
   const b = document.getElementById('fuente-datos');
-  if (b) b.textContent = `Censo ${censoSel()}, INE Uruguay`;
+  if (b) b.textContent = `Censo ${censoSel()}${censoSel() === '2004' ? ' Fase 1' : ''}, INE Uruguay`;
 }
 renderChips();
 sincronizarFuente();

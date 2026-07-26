@@ -70,6 +70,8 @@ SYS_REDACTA_BASE = (
     "NO narres las banderas de registro (per, viv, hog) ni las claves internas: son la "
     "mecánica de la tabla, no una característica de la población. Decí 'personas', "
     "'viviendas' u 'hogares' a secas.\n"
+    "Los PORCENTAJES redondealos a un decimal (por ejemplo 6,1%), nunca los escribas con "
+    "todos los decimales que trae el cálculo.\n"
     "NO comentes sobre mapas: este censo no tiene mapas en la aplicación. Nunca digas que "
     "no podés mostrar un mapa ni que faltan geometrías; simplemente no lo menciones."
 )

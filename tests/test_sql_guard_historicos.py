@@ -16,7 +16,8 @@ from sql_guard_historicos import (GUARD_1996, GUARD_2004, SQLNoSeguro,
 
 def _ok(guard, sql):
     seguro, conteos = guard.validar(sql)
-    assert seguro.upper().startswith("SELECT")
+    # una consulta válida puede empezar con WITH (CTE) además de con SELECT
+    assert seguro.upper().startswith(("SELECT", "WITH"))
     return seguro, conteos
 
 
@@ -140,3 +141,69 @@ def test_supresion_descarta_la_fila_entera():
     assert suprimidas == 1
     assert len(seguras) == 1
     assert all(f["n_crudo"] >= UMBRAL_SUPRESION for f in seguras)
+
+
+# --- GROUP BY por ordinal y por alias --------------------------------------
+# El LLM alterna entre nombrar la columna, usar el ordinal y usar el alias de
+# salida. Las tres agrupan igual; si el guard solo entiende la primera, rechaza
+# consultas correctas de forma INTERMITENTE, que es lo peor para depurar.
+
+def test_group_by_por_ordinal():
+    _ok(GUARD_1996, "SELECT nivel AS codigo, COUNT(*) AS n_crudo FROM personas_1996 GROUP BY 1")
+
+
+def test_group_by_por_alias_de_salida():
+    _ok(GUARD_1996, "SELECT nivel AS codigo, COUNT(*) AS n_crudo FROM personas_1996 "
+                    "GROUP BY codigo")
+
+
+def test_group_by_expresion_case():
+    _ok(GUARD_1996, "SELECT CASE nivel WHEN '1' THEN 'a' END AS etq, COUNT(*) AS n_crudo "
+                    "FROM personas_1996 GROUP BY CASE nivel WHEN '1' THEN 'a' END")
+
+
+def test_caso_real_ordinal_con_case_y_ventana():
+    _ok(GUARD_1996,
+        "SELECT nivel AS codigo_nivel, CASE nivel WHEN '1' THEN 'Nunca asistió' END AS etq, "
+        "COUNT(*) AS personas, 100.0 * COUNT(*) / SUM(COUNT(*)) OVER () AS porcentaje, "
+        "COUNT(*) AS n_crudo FROM personas_1996 GROUP BY 1")
+
+
+def test_resolver_el_group_by_no_afloja_el_control():
+    """Resolver ordinales no puede habilitar columnas realmente sin agrupar."""
+    _rechaza(GUARD_1996, "SELECT nivel, edad, COUNT(*) AS n_crudo FROM personas_1996 "
+                         "GROUP BY nivel")
+    _rechaza(GUARD_1996, "SELECT edad AS e, sexo AS s, COUNT(*) AS n_crudo "
+                         "FROM personas_1996 GROUP BY 1")
+
+
+# --- CTE (WITH) ------------------------------------------------------------
+# El modelo usa CTEs para calcular porcentajes. Un CTE no es una tabla: hay que
+# permitir el nombre pero seguir mirando qué tablas consulta su cuerpo, porque
+# si no se convierte en la puerta de atrás para mezclar universos.
+
+def test_cte_legitimo_para_porcentaje():
+    _ok(GUARD_1996,
+        "WITH hogares AS (SELECT hogar_key, MAX(pc) AS pc FROM personas_1996 GROUP BY hogar_key) "
+        "SELECT 100.0 * SUM(CASE WHEN pc = '1' THEN 1 ELSE 0 END) / COUNT(*) AS porcentaje, "
+        "COUNT(*) AS n_crudo FROM hogares")
+
+
+def test_cte_no_puede_esquivar_la_regla_de_universos():
+    _rechaza(GUARD_1996,
+             "WITH x AS (SELECT vivienda_key FROM personas_1996) "
+             "SELECT COUNT(*) AS n_crudo FROM x "
+             "JOIN viviendas_1996 v ON x.vivienda_key = v.vivienda_key")
+
+
+def test_cte_encadenado_tampoco():
+    _rechaza(GUARD_1996,
+             "WITH a AS (SELECT vivienda_key FROM personas_1996), "
+             "b AS (SELECT vivienda_key FROM a) "
+             "SELECT COUNT(*) AS n_crudo FROM b "
+             "JOIN viviendas_1996 v ON b.vivienda_key = v.vivienda_key")
+
+
+def test_cte_sobre_tabla_no_permitida():
+    _rechaza(GUARD_1996,
+             "WITH x AS (SELECT * FROM dominios_observados) SELECT COUNT(*) AS n_crudo FROM x")
