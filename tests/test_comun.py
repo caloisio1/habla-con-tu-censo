@@ -395,3 +395,112 @@ def test_el_criterio_etario_tambien_se_garantiza():
 def test_sin_interpretacion_ni_criterio_el_texto_queda_igual():
     from comun import pipeline
     assert pipeline.asegurar_declaracion("Hay 100 personas.", [], {}) == "Hay 100 personas."
+
+
+# ── caché de respuestas ──────────────────────────────────────────────────
+def test_la_cache_ignora_mayusculas_y_espacios_pero_no_el_censo():
+    from comun import cache
+    cache.vaciar()
+    cache.guardar(cache.SQL_DE_PREGUNTA, "2023", "¿cuánta gente vive en salto?", "SELECT 1")
+    assert cache.obtener(cache.SQL_DE_PREGUNTA, "2023", "¿Cuánta gente vive en Salto?  ") == "SELECT 1"
+    assert cache.obtener(cache.SQL_DE_PREGUNTA, "2011", "¿cuánta gente vive en salto?") is None
+
+
+def test_la_clave_del_nivel_B_es_el_sql_resuelto_no_el_texto_escrito():
+    """'Chamiso' y 'Chamizo' producen el MISMO SQL después del resolver, así que
+    comparten entrada de caché. Es la regla que pedía el encargo."""
+    from comun import cache
+    cache.vaciar()
+    base = ("SELECT SUM(W) AS personas, COUNT(*) AS n_crudo FROM personas_2023 p "
+            "JOIN localidades_2023 l ON (p.DEPARTAMENTO||p.LOCALIDAD)=l.codloc "
+            "WHERE l.nombre='%s'")
+    from comun.sql_entidades import canonizar
+    sql_a, _, _ = resolver_en_sql(base % "CHAMISO", "2023")
+    sql_b, _, _ = resolver_en_sql(base % "CHAMIZO", "2023")
+    assert sql_a != sql_b                      # llegan con distinto formato
+    assert canonizar(sql_a) == canonizar(sql_b)
+    assert cache.clave(cache.RESULTADO_DE_SQL, "2023", canonizar(sql_a)) == \
+        cache.clave(cache.RESULTADO_DE_SQL, "2023", canonizar(sql_b))
+
+
+def test_la_cache_desaloja_al_llegar_al_tope():
+    from comun import cache
+    cache.vaciar()
+    tope = cache.MAX_ENTRADAS
+    for i in range(tope + 5):
+        cache.guardar(cache.SQL_DE_PREGUNTA, "2023", "pregunta %d" % i, "SELECT %d" % i)
+    assert cache.metricas()["entradas"] == tope
+    assert cache.metricas()["desalojos"] == 5
+
+
+def test_no_se_cachea_un_no_respondible():
+    from comun import cache, pipeline
+    cache.vaciar()
+    pipeline.recordar_sql("¿algo raro?", "2023", {}, "NO_RESPONDIBLE")
+    assert pipeline.sql_cacheado("¿algo raro?", "2023", {}) is None
+
+
+# ── precalentado de la caché ─────────────────────────────────────────────
+def test_los_chips_del_backend_y_del_frontend_no_pueden_divergir():
+    """Precalentar preguntas que la interfaz no muestra no sirve de nada, y al
+    revés deja chips fríos. Las dos listas tienen que ser la misma."""
+    import json as _json
+    import re as _re
+    from comun import precalentar
+
+    ruta = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "app", "static", "index.html")
+    with open(ruta, encoding="utf-8") as fh:
+        html = fh.read()
+    bloque = _re.search(r"const CHIPS = (\{.*?\n\});", html, _re.S).group(1)
+    # el literal JS usa comillas simples y una coma final: se normaliza a JSON
+    bloque = bloque.replace("'", '"')
+    bloque = _re.sub(r",(\s*[}\]])", r"\1", bloque)
+    del_frontend = _json.loads(bloque)
+
+    assert del_frontend == precalentar.CHIPS
+
+
+def test_el_precalentado_cubre_los_cuatro_censos_y_empieza_por_2023():
+    from comun import precalentar
+    pares = precalentar.preguntas()
+    assert len(pares) == 16
+    assert {c for c, _ in pares} == {"1996", "2004", "2011", "2023"}
+    assert pares[0][0] == "2023"      # el censo por defecto de la interfaz
+
+
+def test_la_cache_no_guarda_las_opciones_porque_dependen_de_la_pregunta():
+    """Dos preguntas distintas ejecutan el MISMO SQL para Salto: una debe ofrecer
+    el chip de la ciudad y la otra no, porque ya aclaró que quería el
+    departamento. Cachear las opciones bajo la clave del SQL le daría a una las
+    de la otra, según cuál llegara primero."""
+    from comun import cache, pipeline
+    cache.vaciar()
+    sql = "SELECT 1 AS personas"
+    pipeline.recordar_resultado(sql, "2023",
+                                {"ok": True, "respuesta": "x", "opciones": [{"texto": "chip"}]})
+    sin = pipeline.resultado_cacheado(sql, "2023")
+    assert "opciones" not in sin
+    con = pipeline.resultado_cacheado(sql, "2023", [{"texto": "el mío"}])
+    assert con["opciones"] == [{"texto": "el mío"}]
+
+
+@pytest.mark.parametrize("censo,sql", [
+    ("2004", "SELECT COUNT(*) AS personas FROM censo2004 WHERE per = 1 AND dpto = '15'"),
+    ("1996", "SELECT COUNT(*) AS personas FROM personas_1996 WHERE dpto = '15'"),
+    ("2023", "SELECT ROUND(SUM(W)) AS personas FROM personas_2023 WHERE DEPARTAMENTO = '15'"),
+])
+def test_la_colision_se_detecta_aunque_el_sql_filtre_por_codigo(censo, sql):
+    """El modelo a veces filtra por código en vez de por nombre ('dpto = 15'), y
+    entonces no hay literal de nombre que resolver. La entidad hay que
+    reconocerla igual, o la lectura elegida vuelve a ser silenciosa."""
+    nuevo, interp, alternativas = resolver_en_sql(sql, censo, "¿Cuántas personas hay en Salto?")
+    assert nuevo == sql                       # un código no se reescribe
+    assert "Salto (departamento)" in interp
+    assert len(alternativas) == 1
+
+
+def test_un_codigo_sin_colision_no_declara_ni_ofrece_nada():
+    sql = "SELECT ROUND(SUM(W)) AS personas FROM personas_2023 WHERE DEPARTAMENTO = '09'"
+    nuevo, interp, alternativas = resolver_en_sql(sql, "2023", "¿Cuántas personas hay?")
+    assert (nuevo, interp, alternativas) == (sql, [], [])

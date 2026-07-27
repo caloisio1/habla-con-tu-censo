@@ -15,8 +15,9 @@ Orden de una consulta, con el paso compartido entre paréntesis:
   6. supresión de celdas chicas         -> (sobre_filas) distingue vacío de suprimido
   7. el redactor narra                  -> (nota_final) declara interpretación y criterio
 """
-from comun import edad, indicadores, rechazos, supresion
-from comun.sql_entidades import EntidadNoResuelta, preparar_1996, resolver_en_sql
+from comun import cache, edad, indicadores, rechazos, supresion
+from comun.sql_entidades import (EntidadNoResuelta, canonizar, preparar_1996,
+                                 resolver_en_sql)
 
 # Columna de edad de cada censo: es lo único que cambia entre motores para el
 # criterio etario.
@@ -48,6 +49,50 @@ def mensaje_usuario(texto, contexto):
     """
     instr = (contexto or {}).get("instruccion_edad") or ""
     return (instr + "\n\n" + texto) if instr else texto
+
+
+def sql_cacheado(pregunta, censo, contexto):
+    """SQL ya generado para esta misma pregunta, o None.
+
+    Ahorra la llamada CARA (la que razona). Devuelve el SQL CRUDO: el post-paso de
+    entidades, el guard y la supresión se siguen ejecutando igual.
+    """
+    return cache.obtener(cache.SQL_DE_PREGUNTA, censo, mensaje_usuario(pregunta, contexto))
+
+
+def recordar_sql(pregunta, censo, contexto, sql):
+    if sql and not sql.strip().startswith("NO_RESPONDIBLE"):
+        cache.guardar(cache.SQL_DE_PREGUNTA, censo,
+                      mensaje_usuario(pregunta, contexto), sql)
+
+
+# Lo que NO se cachea con el resultado: las opciones dependen de la PREGUNTA,
+# no del SQL. "¿Cuánta gente vive en Salto?" y "¿...en el departamento de Salto?"
+# ejecutan el MISMO SQL, pero la primera debe ofrecer el chip de la ciudad y la
+# segunda no —el usuario ya aclaró—. Guardarlas bajo la clave del SQL le daría a
+# una el chip de la otra, según cuál llegara primero.
+_POR_PREGUNTA = ("opciones",)
+
+
+def resultado_cacheado(sql_seguro, censo, alternativas=()):
+    """Filas y texto ya calculados para este SQL, o None.
+
+    La clave es el SQL CANONIZADO: dos consultas equivalentes que llegan con
+    distinto formato comparten entrada. Las opciones se vuelven a adjuntar con
+    las de ESTA consulta, no con las de la que llenó la caché.
+    """
+    guardado = cache.obtener(cache.RESULTADO_DE_SQL, censo, canonizar(sql_seguro))
+    if guardado is None:
+        return None
+    salida = dict(guardado)
+    if alternativas:
+        salida["opciones"] = list(alternativas)
+    return salida
+
+
+def recordar_resultado(sql_seguro, censo, valor):
+    limpio = {k: v for k, v in valor.items() if k not in _POR_PREGUNTA}
+    cache.guardar(cache.RESULTADO_DE_SQL, censo, canonizar(sql_seguro), limpio)
 
 
 def sobre_sql(sql, censo, pregunta=None):

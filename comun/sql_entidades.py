@@ -59,6 +59,40 @@ COLUMNAS_NOMBRE = {
     },
 }
 
+# Columnas que llevan el CÓDIGO de una entidad, no su nombre. El modelo a veces
+# filtra por código —"WHERE dpto = '15'" en vez de "WHERE nom_dpto = 'SALTO'"—, y
+# entonces no hay ningún literal de nombre que resolver. El código es inequívoco,
+# así que no se reescribe nada; pero la entidad sí hay que reconocerla, para poder
+# declarar cuál se leyó y ofrecer la otra lectura cuando el nombre colisiona
+# (Salto departamento contra Salto ciudad).
+COLUMNAS_CODIGO = {
+    "2023": {("personas_2023", "departamento"): nom.DEPARTAMENTO,
+             ("viviendas_2023", "departamento"): nom.DEPARTAMENTO,
+             ("departamentos_2023", "codigo"): nom.DEPARTAMENTO,
+             ("localidades_2023", "codloc"): nom.LOCALIDAD},
+    "2011": {("localidades", "codloc"): nom.LOCALIDAD,
+             ("personas", "codloc"): nom.LOCALIDAD},
+    "2004": {("censo2004", "dpto"): nom.DEPARTAMENTO,
+             ("cod_departamentos", "dpto"): nom.DEPARTAMENTO},
+    "1996": {("personas_1996", "dpto"): nom.DEPARTAMENTO,
+             ("viviendas_1996", "dpto"): nom.DEPARTAMENTO,
+             ("cod_departamentos", "dpto"): nom.DEPARTAMENTO},
+}
+
+
+def _por_codigo(literal, tipo, censo):
+    """Entidad de ese tipo cuyo código es el literal, o None.
+
+    Compara sin ceros a la izquierda: el mismo departamento aparece como '15' o
+    como '015' según la tabla.
+    """
+    clave = str(literal).strip().lstrip("0") or "0"
+    for e in nom.catalogo(censo, tipo):
+        if str(e.codigo).strip().lstrip("0") == clave:
+            return e
+    return None
+
+
 # Tablas de nomenclátor de localidades: si el alias apunta a una de ellas y la
 # columna se llama `nombre`, el tipo es localidad.
 TABLAS_LOCALIDAD = {"2023": {"localidades_2023"}, "2011": {"localidades"},
@@ -104,8 +138,13 @@ def _tipo_de(columna, tabla_real, censo):
     return None
 
 
-def _literales(arbol, censo):
-    """[(nodo_literal, tipo_de_entidad)] de las comparaciones que hay que resolver."""
+def _literales(arbol, censo, mapa=None, por_defecto=True):
+    """[(nodo_literal, tipo_de_entidad)] de las comparaciones que hay que mirar.
+
+    `mapa` permite reusar el recorrido para las columnas de CÓDIGO en vez de las
+    de nombre; sin él se usan las de nombre.
+    """
+    mapa = COLUMNAS_NOMBRE.get(censo, {}) if mapa is None else mapa
     alias = _alias_a_tabla(arbol)
     salida = []
     for cmp_ in list(arbol.find_all(exp.EQ)) + list(arbol.find_all(exp.In)):
@@ -115,11 +154,11 @@ def _literales(arbol, censo):
         tabla_real = alias.get((col.table or "").lower(), col.table or "")
         if not col.table:
             # sin calificar: se acepta solo si el nombre de columna es inequívoco
-            candidatos = {t for (tb, c), t in COLUMNAS_NOMBRE.get(censo, {}).items()
-                          if c == col.name.lower()}
+            candidatos = {t for (tb, c), t in mapa.items() if c == col.name.lower()}
             tipo = candidatos.pop() if len(candidatos) == 1 else None
         else:
-            tipo = _tipo_de(col.name, tabla_real, censo)
+            tipo = (mapa.get(((tabla_real or "").lower(), col.name.lower()))
+                    or (_tipo_de(col.name, tabla_real, censo) if por_defecto else None))
         if tipo is None:
             continue
         valores = ([cmp_.expression] if isinstance(cmp_, exp.EQ)
@@ -189,6 +228,21 @@ def resolver_en_sql(sql, censo, pregunta=None):
                     escrito, censo, r.censos_alternativos, r.sugerencias, tipo))
 
             raise EntidadNoResuelta(rechazos.no_encontrada(escrito, r.sugerencias, tipo))
+
+        # Entidades referidas por CÓDIGO: no se reescribe nada (el código es
+        # inequívoco), pero si el nombre colisiona entre tipos hay que declarar
+        # cuál se leyó y ofrecer la otra, igual que con los nombres.
+        if declarado is None:
+            for literal, tipo in _literales(arbol, censo, COLUMNAS_CODIGO.get(censo, {}),
+                                            por_defecto=False):
+                entidad = _por_codigo(literal.this, tipo, censo)
+                if entidad is None:
+                    continue
+                choque = [o for o in colision_entre_tipos(entidad.nombre, censo)
+                          if o.tipo != entidad.tipo]
+                if choque:
+                    interpretaciones.append(_frase_tipo(entidad))
+                    alternativas.extend(choque)
 
     salida = sql if not cambiado else " ".join(a.sql(dialect="sqlite") for a in arboles)
     return salida, interpretaciones, _chips(alternativas, censo)
@@ -315,3 +369,24 @@ def preparar_1996(sql):
     renombrado = _normalizar_columnas_1996(sql)
     nuevo, hubo = deduplicar_nomenclator(renombrado, "1996")
     return nuevo, hubo
+
+
+def canonizar(sql):
+    """Forma canónica de un SQL, para comparar dos consultas equivalentes.
+
+    Hace falta porque el post-paso solo re-renderiza el SQL cuando reescribió algo:
+    "Chamiso" (reescrito) y "Chamizo" (intacto) ejecutan exactamente lo mismo pero
+    llegan con distinto formato. Sin canonizar, la caché los trataría como consultas
+    distintas y la regla del encargo —clave por entidad resuelta, no por texto
+    escrito— no se cumpliría.
+
+    Si el SQL no parsea se devuelve tal cual: la caché degrada a fallo, nunca a un
+    resultado equivocado.
+    """
+    try:
+        arboles = [a for a in sqlglot.parse(sql, read="sqlite") if a is not None]
+    except Exception:
+        return sql
+    if not arboles:
+        return sql
+    return " ".join(a.sql(dialect="sqlite") for a in arboles)

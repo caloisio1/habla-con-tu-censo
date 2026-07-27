@@ -320,7 +320,12 @@ class Motor:
             registro.no_respondible(self.censo, texto, corta.get("motivo", "ambigua"))
             return dict(corta, veredicto=corta.get("motivo", "AMBIGUA"))
 
-        sql_crudo = self.generar_sql(texto, contexto)
+        # Nivel A: si esta misma pregunta ya se tradujo, se ahorra la llamada que
+        # razona (la cara). El SQL igual pasa por el post-paso y por el guard.
+        sql_crudo = pipeline.sql_cacheado(texto, self.censo, contexto)
+        if sql_crudo is None:
+            sql_crudo = self.generar_sql(texto, contexto)
+            pipeline.recordar_sql(texto, self.censo, contexto, sql_crudo)
         if sql_crudo.strip() == "NO_RESPONDIBLE":
             registro.no_respondible(self.censo, texto)
             return {"ok": False, "sql": None, "veredicto": "NO_RESPONDIBLE",
@@ -343,6 +348,12 @@ class Motor:
             registro.rechazo(self.censo, texto, e, sql_crudo)
             return {"ok": False, "sql": sql_crudo, "veredicto": "RECHAZADO: %s" % e,
                     "respuesta": "Consulta rechazada por seguridad: %s" % e}
+
+        # Nivel B: si este SQL exacto ya se ejecutó y redactó, no se repite ni la
+        # consulta a la base ni la llamada al redactor.
+        listo = pipeline.resultado_cacheado(sql_seguro, self.censo, alternativas)
+        if listo is not None:
+            return dict(listo, sql=sql_seguro, veredicto="OK")
 
         con = sqlite3.connect("file:%s?mode=ro" % self.db, uri=True)
         con.row_factory = sqlite3.Row
@@ -377,4 +388,5 @@ class Motor:
         mapa = self.construir_mapa(sql_seguro, filas, suprimidas)
         if mapa:
             respuesta["mapa"] = mapa
+        pipeline.recordar_resultado(sql_seguro, self.censo, respuesta)
         return respuesta

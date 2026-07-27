@@ -12,6 +12,7 @@ if a query fails validation or a cell is too small, the system says so.
 import os
 import re
 import sqlite3
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
@@ -31,7 +32,7 @@ import consultar_2004   # motor Censo 2004 Fase 1 (conteo, sin ponderar)
 MOTORES_HISTORICOS = {"1996": consultar_1996, "2004": consultar_2004}
 import usage_log         # registro de métricas de tokens (solo métricas, sin contenido)
 import registro          # rastro de las consultas rechazadas (pregunta + SQL + motivo)
-from comun import perdidos, pipeline, rechazos, sinonimos  # módulo compartido por los cuatro motores
+from comun import perdidos, pipeline, precalentar, rechazos, sinonimos  # módulo compartido
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
@@ -56,7 +57,25 @@ _RX_SUMW = re.compile(r"\bsum\s*\(\s*[^)]*\bw\b", re.I)
 # thread indefinitely and freezes the app (incident 2026-07-06). 60s per request
 # (connect/read/write/pool) + bounded retries.
 client = OpenAI(timeout=60.0, max_retries=2)  # requires OPENAI_API_KEY in environment
-app = FastAPI(title="Habla con tu Censo")
+
+
+@asynccontextmanager
+async def ciclo_de_vida(_app):
+    """Al arrancar, deja las preguntas de ejemplo listas en la caché.
+
+    Corre en segundo plano y nunca bloquea: si falla, el servicio atiende igual,
+    solo que el primer clic en un chip paga el tiempo completo.
+    """
+    precalentar.arrancar({
+        "1996": consultar_1996.preguntar,
+        "2004": consultar_2004.preguntar,
+        "2011": responder_2011,
+        "2023": consultar_2023.preguntar,
+    })
+    yield
+
+
+app = FastAPI(title="Habla con tu Censo", lifespan=ciclo_de_vida)
 
 # Sirve los geojson de mapas (relativo a la página, funciona tras nginx /censo/).
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -442,7 +461,11 @@ def responder_2011(texto: str) -> dict:
         registro.no_respondible("2011", texto, corta.get("motivo", "ambigua"))
         return corta
 
-    sql_crudo = generar_sql(texto, contexto)
+    # Nivel A de caché: ahorra la llamada que razona. El guard corre igual.
+    sql_crudo = pipeline.sql_cacheado(texto, "2011", contexto)
+    if sql_crudo is None:
+        sql_crudo = generar_sql(texto, contexto)
+        pipeline.recordar_sql(texto, "2011", contexto, sql_crudo)
 
     if sql_crudo == "NO_RESPONDIBLE_VIVIENDAS":
         registro.no_respondible("2011", texto, "viviendas desocupadas")
@@ -471,6 +494,11 @@ def responder_2011(texto: str) -> dict:
         # The guardrail fired: we do NOT execute, we do NOT improvise an answer.
         registro.rechazo("2011", texto, e, sql_crudo)
         return {"ok": False, "respuesta": f"Consulta rechazada por seguridad: {e}"}
+
+    # Nivel B: mismo SQL ya ejecutado y redactado -> ni base ni redactor.
+    listo = pipeline.resultado_cacheado(sql_seguro, "2011", alternativas)
+    if listo is not None:
+        return dict(listo, sql=sql_seguro)
 
     with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True) as con:
         con.row_factory = sqlite3.Row
@@ -505,6 +533,7 @@ def responder_2011(texto: str) -> dict:
         mapa["suprimidas"] = suprimidas   # suprimidas ya no están en datos
         respuesta["mapa"] = mapa
 
+    pipeline.recordar_resultado(sql_seguro, "2011", respuesta)
     return respuesta
 
 

@@ -293,7 +293,12 @@ def preguntar(texto, verbose=False):
         registro.no_respondible("2023", texto, corta.get("motivo", "ambigua"))
         return dict(corta, veredicto=corta.get("motivo", "AMBIGUA"))
 
-    sql_crudo = generar_sql(texto, contexto)
+    # Nivel A de caché: ahorra la llamada que razona. El SQL igual pasa por el
+    # post-paso de entidades y por el guard.
+    sql_crudo = pipeline.sql_cacheado(texto, "2023", contexto)
+    if sql_crudo is None:
+        sql_crudo = generar_sql(texto, contexto)
+        pipeline.recordar_sql(texto, "2023", contexto, sql_crudo)
     if sql_crudo.strip() == "NO_RESPONDIBLE":
         registro.no_respondible("2023", texto)
         return {"ok": False, "respuesta": "Esa pregunta no puede responderse con las variables disponibles.",
@@ -314,6 +319,11 @@ def preguntar(texto, verbose=False):
         registro.rechazo("2023", texto, e, sql_crudo)
         return {"ok": False, "respuesta": f"Consulta rechazada por seguridad: {e}",
                 "sql": sql_crudo, "veredicto": f"RECHAZADO: {e}"}
+
+    # Nivel B: mismo SQL ya ejecutado y redactado -> ni base ni redactor.
+    listo = pipeline.resultado_cacheado(sql_seguro, "2023", alternativas)
+    if listo is not None:
+        return dict(listo, sql=sql_seguro, veredicto="OK")
 
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
@@ -350,6 +360,7 @@ def preguntar(texto, verbose=False):
                 f"recorte parcial). Acotá la pregunta a un ámbito menor —un departamento o una sección— para verlo._")
         else:
             resultado["mapa"] = mapa
+    pipeline.recordar_resultado(sql_seguro, "2023", resultado)
     return resultado
 
 
