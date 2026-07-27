@@ -85,6 +85,158 @@ def _cols_de_scope_externo(nodo: exp.Expression, externo: exp.Select):
         yield c
 
 
+def _resolver_group_by(sel: exp.Select, group_exprs: list) -> list:
+    """Expande el GROUP BY a las expresiones reales de la proyección.
+
+    `GROUP BY 1` (ordinal) y `GROUP BY <alias de salida>` son SQL válido y
+    agrupan igual que nombrar la columna, pero comparados literalmente contra la
+    proyección no coinciden con nada y la consulta se rechaza por 'proyección no
+    agregada'. El LLM alterna entre las tres formas, así que sin esto el rechazo
+    aparece de forma intermitente sobre consultas correctas.
+
+    Solo agrega expresiones; nunca quita, así que no relaja ninguna comprobación.
+    """
+    proyecciones = list(sel.expressions)
+    por_alias = {p.alias.lower(): p.this for p in proyecciones
+                 if isinstance(p, exp.Alias) and p.alias}
+    resueltas = list(group_exprs)
+    for g in group_exprs:
+        if isinstance(g, exp.Literal) and g.is_int:          # GROUP BY 1
+            i = int(g.name) - 1
+            if 0 <= i < len(proyecciones):
+                p = proyecciones[i]
+                resueltas.append(p.this if isinstance(p, exp.Alias) else p)
+        elif isinstance(g, exp.Column) and not g.table:      # GROUP BY <alias>
+            destino = por_alias.get(g.name.lower())
+            if destino is not None:
+                resueltas.append(destino)
+    extra = []
+    for r in resueltas:
+        if not isinstance(r, exp.Column):
+            extra.extend(r.find_all(exp.Column))
+    return resueltas + extra
+
+
+def _ctes(arbol: exp.Expression) -> dict:
+    """Mapa nombre de CTE -> tablas reales que consulta su cuerpo.
+
+    Un CTE no es una tabla: es un nombre para una subconsulta. Hay que permitirlo
+    (el modelo los usa para calcular porcentajes) sin perder de vista qué tablas
+    hay abajo, porque el whitelist de tablas se sigue aplicando sobre esas.
+    """
+    m = {}
+    for cte in arbol.find_all(exp.CTE):
+        nombre = (cte.alias or "").lower()
+        if nombre:
+            m[nombre] = {tb.name.lower() for tb in cte.find_all(exp.Table)}
+    for _ in range(len(m)):            # un CTE puede apoyarse en otro
+        for nombre, tablas in m.items():
+            expandido = set()
+            for tb in tablas:
+                expandido |= m.get(tb, {tb})
+            m[nombre] = expandido
+    return m
+
+
+def _mapa_ctes(arbol: exp.Select) -> dict:
+    """nombre de CTE -> su SELECT (el cuerpo), tomado del WITH de la raíz."""
+    cuerpos = {}
+    con = arbol.args.get("with_") or arbol.args.get("with")
+    if con:
+        for cte in con.expressions:
+            if isinstance(cte.this, exp.Select):
+                cuerpos[cte.alias_or_name.lower()] = cte.this
+    return cuerpos
+
+
+def _cuerpos_de_fuentes(sel: exp.Select, ctes: dict):
+    """Los SELECT que alimentan a `sel`: cuerpos de los CTE que cita y
+    subconsultas derivadas del FROM/JOIN. None si alguna fuente NO es uno de
+    esos —o sea, si el ámbito lee la tabla de personas directamente, que es
+    cuando la proyección sí puede estar devolviendo personas."""
+    fuentes = []
+    frm = sel.args.get("from_") or sel.args.get("from")
+    if frm is not None:
+        fuentes.append(frm.this)
+    for j in sel.args.get("joins") or []:
+        fuentes.append(j.this)
+    if not fuentes:
+        return None
+    cuerpos = []
+    for f in fuentes:
+        if isinstance(f, exp.Subquery):
+            cuerpo = f.this
+        elif isinstance(f, exp.Table):
+            cuerpo = ctes.get(f.name.lower())
+        else:
+            return None
+        if not isinstance(cuerpo, exp.Select):
+            return None
+        cuerpos.append(cuerpo)
+    return cuerpos
+
+
+def _col_libre(sel: exp.Select):
+    """Primera columna de la proyección de `sel` que no está agregada ni en su
+    GROUP BY; None si están todas cubiertas."""
+    grupo = sel.args.get("group")
+    group_exprs = _resolver_group_by(sel, grupo.expressions if grupo else [])
+    group_nombres = {g.name.lower() for g in group_exprs if isinstance(g, exp.Column)}
+    group_sql = {g.sql(dialect="sqlite").lower() for g in group_exprs}
+    for proj in sel.expressions:
+        for c in _cols_de_scope_externo(proj, sel):
+            if c.name.lower() in group_nombres:
+                continue
+            if c.sql(dialect="sqlite").lower() in group_sql:
+                continue
+            return c
+    return None
+
+
+def _es_scope_agregado(sel, ctes: dict, prof: int = 0) -> bool:
+    """¿Las filas que devuelve `sel` son celdas agregadas y no personas?
+
+    Lo son si resume (GROUP BY, o una sola fila de agregados) y ninguna columna
+    de su proyección se escapa de ese resumen; o si lo que él lee ya venía
+    agregado (cadenas de CTE)."""
+    if prof > 4 or not isinstance(sel, exp.Select):
+        return False
+    resume = bool(sel.args.get("group")) or any(sel.find_all(exp.AggFunc))
+    if resume and _col_libre(sel) is None:
+        return True
+    cuerpos = _cuerpos_de_fuentes(sel, ctes)
+    return bool(cuerpos) and all(_es_scope_agregado(c, ctes, prof + 1) for c in cuerpos)
+
+
+def _fuentes_ya_agregadas(sel: exp.Select, ctes: dict) -> bool:
+    cuerpos = _cuerpos_de_fuentes(sel, ctes)
+    return bool(cuerpos) and all(_es_scope_agregado(c, ctes) for c in cuerpos)
+
+
+def _nombres_conteo(sel, ctes: dict, prof: int = 0) -> set:
+    """Nombres de salida de `sel` que son un COUNT, propagando por los CTE.
+
+    Sin esto, cuando el conteo crudo se calcula en un CTE y la consulta de salida
+    solo lo arrastra, no se identifica ninguna columna de conteo y la supresión
+    de celdas chicas dejaría de aplicarse EN SILENCIO."""
+    if prof > 4 or not isinstance(sel, exp.Select):
+        return set()
+    heredados = set()
+    for cuerpo in (_cuerpos_de_fuentes(sel, ctes) or []):
+        heredados |= _nombres_conteo(cuerpo, ctes, prof + 1)
+    salida = set()
+    for p in sel.expressions:
+        interno = p.this if isinstance(p, exp.Alias) else p
+        nombre = p.alias if isinstance(p, exp.Alias) else getattr(p, "name", "")
+        if not nombre:
+            continue
+        if isinstance(interno, exp.Count):
+            salida.add(nombre.lower())
+        elif isinstance(interno, exp.Column) and interno.name.lower() in heredados:
+            salida.add(nombre.lower())
+    return salida
+
+
 def _validar_join(arbol: exp.Expression) -> None:
     """JOIN permitido solo con el nomenclátor: personas↔localidades por codloc, o
     personas↔paises por un código de país (PERMI01_4/06_4/07_4 = paises.codigo).
@@ -158,10 +310,13 @@ def validar(sql: str) -> tuple[str, list[str]]:
             )
 
     # 3. Tablas whitelisted + JOIN solo personas↔localidades por codloc.
+    nombres_cte = _ctes(arbol)
     tablas = list(arbol.find_all(exp.Table))
     if not tablas:
         raise SQLNoSeguro("No se detectó tabla de origen.")
     for t in tablas:
+        if t.name.lower() in nombres_cte:
+            continue   # nombre de CTE: lo que importa son las tablas de su cuerpo
         if t.name.lower() not in TABLAS_PERMITIDAS:
             raise SQLNoSeguro(f"Tabla no permitida: {t.name}")
     _validar_join(arbol)
@@ -187,20 +342,17 @@ def validar(sql: str) -> tuple[str, list[str]]:
 
     # 6. Solo agregados: cada columna libre de la proyección externa debe estar
     #    en el GROUP BY. (Núcleo del control: nunca filas individuales.)
-    grupo = arbol.args.get("group")
-    group_exprs = grupo.expressions if grupo else []
-    group_nombres = {g.name.lower() for g in group_exprs if isinstance(g, exp.Column)}
-    group_sql = {g.sql(dialect="sqlite").lower() for g in group_exprs}
-    for proj in arbol.expressions:
-        for c in _cols_de_scope_externo(proj, arbol):
-            if c.name.lower() in group_nombres:
-                continue
-            if c.sql(dialect="sqlite").lower() in group_sql:
-                continue
-            raise SQLNoSeguro(
-                f"Proyección no agregada: la columna '{c.name}' no está agregada "
-                "ni en el GROUP BY (devolvería filas individuales)."
-            )
+    ctes_cuerpos = _mapa_ctes(arbol)
+    libre = _col_libre(arbol)
+    # Una columna suelta NO es una persona si la fila que la trae ya es una celda
+    # agregada: es el caso del CTE que cuenta y la consulta de salida que solo
+    # calcula el porcentaje sobre ese conteo.
+    salida_desde_agregado = libre is not None and _fuentes_ya_agregadas(arbol, ctes_cuerpos)
+    if libre is not None and not salida_desde_agregado:
+        raise SQLNoSeguro(
+            f"Proyección no agregada: la columna '{libre.name}' no está agregada "
+            "ni en el GROUP BY (devolvería filas individuales)."
+        )
 
     # 7. hogar_key / vivienda_key en la proyección externa: solo COUNT(DISTINCT).
     for proj in arbol.expressions:
@@ -222,8 +374,27 @@ def validar(sql: str) -> tuple[str, list[str]]:
     # 8. Supresión estructural: identificar columnas de conteo (fail-closed).
     try:
         columnas_conteo = _identificar_conteos(arbol)
+        if salida_desde_agregado:
+            heredados = set()
+            for cuerpo in (_cuerpos_de_fuentes(arbol, ctes_cuerpos) or []):
+                heredados |= _nombres_conteo(cuerpo, ctes_cuerpos)
+            for p in arbol.expressions:
+                interno = p.this if isinstance(p, exp.Alias) else p
+                nombre = p.alias if isinstance(p, exp.Alias) else getattr(p, "name", "")
+                if (nombre and isinstance(interno, exp.Column)
+                        and interno.name.lower() in heredados
+                        and nombre not in columnas_conteo):
+                    columnas_conteo.append(nombre)
     except Exception as e:
         raise SQLNoSeguro(f"No se pudieron identificar los conteos: {e}")
+
+    # El conteo crudo tiene que llegar a la salida: si no, no hay con qué
+    # suprimir las celdas chicas y se rechaza (fail-closed).
+    if salida_desde_agregado and not columnas_conteo:
+        raise SQLNoSeguro(
+            "La consulta arrastra celdas ya agregadas pero no expone el conteo "
+            "crudo: sin él no puede aplicarse la supresión."
+        )
 
     # 9. LIMIT obligatorio y acotado.
     arbol = _aplicar_limite(arbol)

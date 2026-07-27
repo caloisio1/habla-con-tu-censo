@@ -30,6 +30,7 @@ import consultar_2004   # motor Censo 2004 Fase 1 (conteo, sin ponderar)
 # Censos históricos: misma interfaz preguntar(texto), sin ponderación ni mapa.
 MOTORES_HISTORICOS = {"1996": consultar_1996, "2004": consultar_2004}
 import usage_log         # registro de métricas de tokens (solo métricas, sin contenido)
+import registro          # rastro de las consultas rechazadas (pregunta + SQL + motivo)
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
@@ -335,6 +336,9 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
                     "NO escribas ninguna nota, aclaración ni frase sobre celdas suprimidas, "
                     "confidencialidad o secreto estadístico: el sistema agrega esa nota "
                     "automáticamente al final; no la escribas vos ni la repitas.\n"
+                    "Formato de las cifras (español rioplatense): separador de miles con PUNTO —escribí 323.114, nunca 323114— y decimales con coma. NO le pongas separador a los años ('Censo 2023', no 'Censo 2.023') ni a los códigos de sección, localidad o barrio.\n"
+                    "PRESENTACIÓN: si los resultados traen MÁS DE UNA FILA, presentalos SIEMPRE en una TABLA markdown (encabezado + una fila por categoría), NUNCA como lista con viñetas ni enumerados en prosa. Con una sola fila, narrala en una oración.\n"
+                    "NOMBRES PROPIOS: en la base los departamentos, localidades y barrios están en MAYÚSCULAS y sin tildes; escribilos con mayúscula inicial y acentuación correcta —Montevideo, Paysandú, Río Negro, San José, Tacuarembó, Treinta y Tres, Cerro Largo, Paso de los Toros, Bella Unión—, nunca en mayúsculas sostenidas. Las preposiciones y artículos internos van en minúscula (Paso de los Toros, Treinta y Tres).\n"
                     "Las cifras del Censo 2011 son CONTEOS EXACTOS de los microdatos: NO uses "
                     "'aproximadamente', 'alrededor de', 'unos/unas' ni 'estimación' para "
                     "presentarlas (fuera del contexto metodológico general de omisión censal).\n"
@@ -425,9 +429,11 @@ def responder_2011(texto: str) -> dict:
     sql_crudo = generar_sql(texto)
 
     if sql_crudo == "NO_RESPONDIBLE_VIVIENDAS":
+        registro.no_respondible("2011", texto, "viviendas desocupadas")
         return {"ok": False, "respuesta": MENSAJE_VIVIENDAS_DESOCUPADAS}
 
     if sql_crudo == "NO_RESPONDIBLE":
+        registro.no_respondible("2011", texto)
         return {
             "ok": False,
             "respuesta": "Esa pregunta no puede responderse con las variables disponibles.",
@@ -439,6 +445,7 @@ def responder_2011(texto: str) -> dict:
         sql_seguro, columnas_conteo = validar(sql_crudo)
     except SQLNoSeguro as e:
         # The guardrail fired: we do NOT execute, we do NOT improvise an answer.
+        registro.rechazo("2011", texto, e, sql_crudo)
         return {"ok": False, "respuesta": f"Consulta rechazada por seguridad: {e}"}
 
     with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True) as con:
@@ -501,7 +508,12 @@ def preguntar(p: Pregunta):
 
 
 INDEX = "app/static/index.html"
-VERSIONADOS = ("app/static/censo.css", "app/static/logo_ine.png")
+VERSIONADOS = (
+    "app/static/censo.css",
+    "app/static/logo_ine.png",
+    "app/static/logo_censo.png",
+    "app/static/logo_censo_dark.png",
+)
 
 
 def _version_estaticos() -> str:

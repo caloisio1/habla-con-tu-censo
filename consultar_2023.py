@@ -11,6 +11,7 @@ from openai import OpenAI
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
 from sql_guard_2023 import validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
+import registro
 import usage_log
 
 DB = os.environ.get("CENSO2023_DB", os.path.join(AQUI, "censo2023.db"))
@@ -103,7 +104,10 @@ SYS_REDACTA = (
     "Fuente: 'Censo 2023, INE Uruguay'. Si es un porcentaje con perdidos, aclaralo "
     "(denominador = casos con respuesta válida). Si la variable no la captan los registros "
     "administrativos (FUENTE_EXT=2), aclarar que el denominador son los relevados con "
-    "cuestionario. No inventes cifras."
+    "cuestionario. No inventes cifras.\n"
+    "Formato de las cifras (español rioplatense): separador de miles con PUNTO —escribí 323.114, nunca 323114— y decimales con coma. NO le pongas separador a los años ('Censo 2023', no 'Censo 2.023') ni a los códigos de sección, localidad o barrio.\n"
+    "PRESENTACIÓN: si los resultados traen MÁS DE UNA FILA, presentalos SIEMPRE en una TABLA markdown (encabezado + una fila por categoría), NUNCA como lista con viñetas ni enumerados en prosa. Con una sola fila, narrala en una oración.\n"
+    "NOMBRES PROPIOS: en la base los departamentos, localidades y barrios están en MAYÚSCULAS y sin tildes; escribilos con mayúscula inicial y acentuación correcta —Montevideo, Paysandú, Río Negro, San José, Tacuarembó, Treinta y Tres, Cerro Largo, Paso de los Toros, Bella Unión—, nunca en mayúsculas sostenidas. Las preposiciones y artículos internos van en minúscula (Paso de los Toros, Treinta y Tres)."
 )
 
 # La cifra de personas del Censo 2023 es SUM(W) (censo ponderado): una estimación.
@@ -274,11 +278,13 @@ def construir_mapa_2023(filas, columnas_conteo, suprimidas, sql=""):
 def preguntar(texto, verbose=False):
     sql_crudo = generar_sql(texto)
     if sql_crudo.strip() == "NO_RESPONDIBLE":
+        registro.no_respondible("2023", texto)
         return {"ok": False, "respuesta": "Esa pregunta no puede responderse con las variables disponibles.",
                 "sql": None, "veredicto": "NO_RESPONDIBLE"}
     try:
         sql_seguro, columnas_conteo = validar(sql_crudo)
     except SQLNoSeguro as e:
+        registro.rechazo("2023", texto, e, sql_crudo)
         return {"ok": False, "respuesta": f"Consulta rechazada por seguridad: {e}",
                 "sql": sql_crudo, "veredicto": f"RECHAZADO: {e}"}
 

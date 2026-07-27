@@ -163,6 +163,47 @@ class Guard:
         return resueltas + extra
 
     @staticmethod
+    def _mapa_ctes(arbol):
+        """nombre de CTE -> su SELECT (el cuerpo), tomado del WITH de la raíz."""
+        cuerpos = {}
+        con = arbol.args.get("with_") or arbol.args.get("with")
+        if con:
+            for cte in con.expressions:
+                if isinstance(cte.this, exp.Select):
+                    cuerpos[cte.alias_or_name.lower()] = cte.this
+        return cuerpos
+
+    @staticmethod
+    def _cuerpos_de_fuentes(sel, ctes):
+        """Los SELECT que alimentan a `sel`: cuerpos de los CTE que cita y
+        subconsultas derivadas del FROM/JOIN.
+
+        Devuelve None si alguna fuente NO es uno de esos —es decir, si el ámbito
+        lee una tabla de hechos directamente—, que es el caso en que la
+        proyección sí puede estar devolviendo personas.
+        """
+        fuentes = []
+        frm = sel.args.get("from_") or sel.args.get("from")
+        if frm is not None:
+            fuentes.append(frm.this)
+        for j in sel.args.get("joins") or []:
+            fuentes.append(j.this)
+        if not fuentes:
+            return None
+        cuerpos = []
+        for f in fuentes:
+            if isinstance(f, exp.Subquery):
+                cuerpo = f.this
+            elif isinstance(f, exp.Table):
+                cuerpo = ctes.get(f.name.lower())
+            else:
+                return None
+            if not isinstance(cuerpo, exp.Select):
+                return None
+            cuerpos.append(cuerpo)
+        return cuerpos
+
+    @staticmethod
     def _alias_de_tablas(arbol):
         m = {}
         for t in arbol.find_all(exp.Table):
@@ -184,6 +225,72 @@ class Guard:
         if n > LIMITE_MAXIMO:
             raise SQLNoSeguro("LIMIT excede el máximo de %d." % LIMITE_MAXIMO)
         return arbol
+
+    def _col_libre(self, sel):
+        """Primera columna de la proyección de `sel` que no está agregada ni en su
+        GROUP BY; None si están todas cubiertas. Las columnas del nomenclátor no
+        cuentan: son lookup (nombre de un código), no microdato."""
+        alias_tab = self._alias_de_tablas(sel)
+        grupo = sel.args.get("group")
+        group_exprs = self._resolver_group_by(sel, grupo.expressions if grupo else [])
+        group_nombres = {g.name.lower() for g in group_exprs if isinstance(g, exp.Column)}
+        group_sql = {g.sql(dialect="sqlite").lower() for g in group_exprs}
+        for proj in sel.expressions:
+            for c in self._cols_scope_externo(proj, sel):
+                if c.name.lower() in group_nombres:
+                    continue
+                if c.sql(dialect="sqlite").lower() in group_sql:
+                    continue
+                if c.table and alias_tab.get(c.table.lower()) in self.nomenclator:
+                    continue
+                return c
+        return None
+
+    def _es_scope_agregado(self, sel, ctes, prof=0):
+        """¿Las filas que devuelve `sel` son celdas agregadas y no personas?
+
+        Lo son si resume (GROUP BY, o una única fila de agregados) y además
+        ninguna columna de su proyección se escapa de ese resumen. Es la misma
+        exigencia que se le hace a la consulta de salida, aplicada a la fuente.
+        """
+        if prof > 4 or not isinstance(sel, exp.Select):
+            return False
+        resume = bool(sel.args.get("group")) or any(sel.find_all(exp.AggFunc))
+        if resume and self._col_libre(sel) is None:
+            return True
+        # no agrega por sí mismo (o se le escapa una columna): solo sirve si lo
+        # que él lee ya venía agregado (cadenas de CTE)
+        cuerpos = self._cuerpos_de_fuentes(sel, ctes)
+        return bool(cuerpos) and all(
+            self._es_scope_agregado(c, ctes, prof + 1) for c in cuerpos)
+
+    def _fuentes_ya_agregadas(self, sel, ctes):
+        cuerpos = self._cuerpos_de_fuentes(sel, ctes)
+        return bool(cuerpos) and all(self._es_scope_agregado(c, ctes) for c in cuerpos)
+
+    def _nombres_conteo(self, sel, ctes, prof=0):
+        """Nombres de salida de `sel` que son un COUNT, propagando por los CTE.
+
+        Sin esto, cuando el conteo crudo se calcula en un CTE y la consulta de
+        salida solo lo arrastra, no se identifica ninguna columna de conteo y la
+        supresión de celdas chicas se dejaría de aplicar EN SILENCIO.
+        """
+        if prof > 4 or not isinstance(sel, exp.Select):
+            return set()
+        heredados = set()
+        for cuerpo in (self._cuerpos_de_fuentes(sel, ctes) or []):
+            heredados |= self._nombres_conteo(cuerpo, ctes, prof + 1)
+        salida = set()
+        for p in sel.expressions:
+            interno = p.this if isinstance(p, exp.Alias) else p
+            nombre = p.alias if isinstance(p, exp.Alias) else getattr(p, "name", "")
+            if not nombre:
+                continue
+            if isinstance(interno, exp.Count):
+                salida.add(nombre.lower())
+            elif isinstance(interno, exp.Column) and interno.name.lower() in heredados:
+                salida.add(nombre.lower())
+        return salida
 
     @staticmethod
     def _identificar_conteos(arbol):
@@ -254,22 +361,17 @@ class Guard:
 
         # solo agregados en la proyección externa; se permiten columnas del
         # nomenclátor sin agregar (son lookup, no microdato)
-        alias_tab = self._alias_de_tablas(arbol)
-        grupo = arbol.args.get("group")
-        group_exprs = self._resolver_group_by(arbol, grupo.expressions if grupo else [])
-        group_nombres = {g.name.lower() for g in group_exprs if isinstance(g, exp.Column)}
-        group_sql = {g.sql(dialect="sqlite").lower() for g in group_exprs}
-        for proj in arbol.expressions:
-            for c in self._cols_scope_externo(proj, arbol):
-                if c.name.lower() in group_nombres:
-                    continue
-                if c.sql(dialect="sqlite").lower() in group_sql:
-                    continue
-                if c.table and alias_tab.get(c.table.lower()) in self.nomenclator:
-                    continue
-                raise SQLNoSeguro(
-                    "Proyección no agregada: la columna '%s' no está agregada ni en el "
-                    "GROUP BY." % c.name)
+        ctes_cuerpos = self._mapa_ctes(arbol)
+        libre = self._col_libre(arbol)
+        # una columna suelta NO es una persona si la fila que la trae ya es una
+        # celda agregada: es el caso del CTE que cuenta y la consulta de salida
+        # que solo calcula el porcentaje sobre ese conteo.
+        salida_desde_agregado = libre is not None and self._fuentes_ya_agregadas(
+            arbol, ctes_cuerpos)
+        if libre is not None and not salida_desde_agregado:
+            raise SQLNoSeguro(
+                "Proyección no agregada: la columna '%s' no está agregada ni en el "
+                "GROUP BY." % libre.name)
 
         for proj in arbol.expressions:
             for c in proj.find_all(exp.Column):
@@ -286,8 +388,26 @@ class Guard:
 
         try:
             columnas_conteo = self._identificar_conteos(arbol)
+            if salida_desde_agregado:
+                heredados = set()
+                for cuerpo in (self._cuerpos_de_fuentes(arbol, ctes_cuerpos) or []):
+                    heredados |= self._nombres_conteo(cuerpo, ctes_cuerpos)
+                for p in arbol.expressions:
+                    interno = p.this if isinstance(p, exp.Alias) else p
+                    nombre = p.alias if isinstance(p, exp.Alias) else getattr(p, "name", "")
+                    if (nombre and isinstance(interno, exp.Column)
+                            and interno.name.lower() in heredados
+                            and nombre not in columnas_conteo):
+                        columnas_conteo.append(nombre)
         except Exception as e:
             raise SQLNoSeguro("No se pudieron identificar los conteos: %s" % e)
+
+        # el conteo crudo tiene que llegar a la salida: si no, no hay con qué
+        # suprimir las celdas chicas y la consulta se rechaza (fail-closed)
+        if salida_desde_agregado and not columnas_conteo:
+            raise SQLNoSeguro(
+                "La consulta arrastra celdas ya agregadas pero no expone el conteo "
+                "crudo: sin él no puede aplicarse la supresión.")
 
         arbol = self._aplicar_limite(arbol)
         return arbol.sql(dialect="sqlite", comments=False), columnas_conteo

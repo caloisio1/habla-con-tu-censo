@@ -215,3 +215,59 @@ def test_fail_closed_sin_ningun_conteo_rechazado():
     # Sin COUNT no hay forma de controlar divulgación -> rechazar (fail-closed).
     with pytest.raises(SQLNoSeguro):
         validar("SELECT departamento, AVG(edad) AS edad_media FROM personas GROUP BY departamento")
+
+
+# --- El porcentaje calculado sobre un CTE ya agregado -----------------------
+# El modelo cuenta en un CTE y la consulta de salida solo arrastra la celda para
+# sacar el porcentaje: la columna del corte no está en ningún GROUP BY externo
+# porque la fila ya es una celda, no una persona. Antes se rechazaba.
+
+def test_cte_agregado_permite_columna_suelta_en_la_salida():
+    _sql, conteos = validar(
+        "WITH t AS (SELECT departamento, COUNT(*) AS personas FROM personas GROUP BY departamento) "
+        "SELECT departamento, personas, 100.0 * personas / (SELECT SUM(personas) FROM t) AS pct "
+        "FROM t"
+    )
+    assert [c.lower() for c in conteos] == ["personas"]  # la supresión sigue teniendo con qué
+
+
+def test_cte_sin_agregar_no_pasa():
+    with pytest.raises(SQLNoSeguro):
+        validar("WITH t AS (SELECT departamento, edad FROM personas) "
+                "SELECT departamento, edad, COUNT(*) AS n FROM t")
+
+
+def test_cte_con_columna_fuera_del_group_by_no_pasa():
+    with pytest.raises(SQLNoSeguro):
+        validar("WITH t AS (SELECT departamento, edad, COUNT(*) AS c FROM personas "
+                "GROUP BY departamento) SELECT departamento, edad, c FROM t")
+
+
+def test_cte_agregado_sin_conteo_en_la_salida_no_pasa():
+    with pytest.raises(SQLNoSeguro):
+        validar("WITH t AS (SELECT departamento, COUNT(*) AS c FROM personas GROUP BY departamento) "
+                "SELECT departamento, 100.0 * c / (SELECT SUM(c) FROM t) AS pct FROM t")
+
+
+def test_cte_no_habilita_tablas_fuera_del_whitelist():
+    with pytest.raises(SQLNoSeguro):
+        validar("WITH t AS (SELECT a FROM sqlite_master) SELECT a, COUNT(*) AS n FROM t GROUP BY a")
+
+
+def test_hogar_key_sigue_prohibido_en_la_salida_via_cte():
+    with pytest.raises(SQLNoSeguro):
+        validar("WITH t AS (SELECT hogar_key, COUNT(*) AS c FROM personas GROUP BY hogar_key) "
+                "SELECT hogar_key, c FROM t")
+
+
+# --- GROUP BY por ordinal o por alias de salida -----------------------------
+# Son SQL válido y el modelo alterna entre las tres formas; compararlas
+# literalmente contra la proyección hacía aparecer rechazos intermitentes.
+
+def test_group_by_ordinal():
+    _ok("SELECT departamento, COUNT(*) AS personas FROM personas GROUP BY 1")
+
+
+def test_group_by_alias_de_salida():
+    _ok("SELECT CASE sexo WHEN 1 THEN 'H' ELSE 'M' END AS s, COUNT(*) AS personas "
+        "FROM personas GROUP BY s")

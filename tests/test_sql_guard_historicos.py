@@ -207,3 +207,46 @@ def test_cte_encadenado_tampoco():
 def test_cte_sobre_tabla_no_permitida():
     _rechaza(GUARD_1996,
              "WITH x AS (SELECT * FROM dominios_observados) SELECT COUNT(*) AS n_crudo FROM x")
+
+
+# --- El porcentaje calculado sobre un CTE ya agregado -----------------------
+# Rechazo falso reportado en prod: "¿Cómo se distribuye la población por nivel
+# educativo?" en 1996. El modelo cuenta en un CTE y la consulta de salida solo
+# arrastra la celda para sacar el porcentaje; la columna del corte no está en
+# ningún GROUP BY externo porque ya no hace falta: la fila es una celda, no una
+# persona.
+
+def test_cte_agregado_permite_columna_suelta_en_la_salida():
+    _sql, conteos = GUARD_1996.validar(
+        "WITH conteo AS (SELECT nivel, COUNT(*) AS personas FROM personas_1996 GROUP BY nivel) "
+        "SELECT nivel, personas, 100.0 * personas / (SELECT SUM(personas) FROM conteo) AS pct "
+        "FROM conteo")
+    # la supresión tiene que seguir teniendo con qué trabajar
+    assert [c.lower() for c in conteos] == ["personas"]
+
+
+def test_cadena_de_cte_agregados_tambien():
+    _ok(GUARD_1996,
+        "WITH t AS (SELECT nivel, COUNT(*) AS c FROM personas_1996 GROUP BY nivel), "
+        "u AS (SELECT nivel, c FROM t) SELECT nivel, c AS personas FROM u")
+
+
+def test_cte_sin_agregar_no_pasa():
+    _rechaza(GUARD_1996,
+             "WITH t AS (SELECT nivel, edad FROM personas_1996) "
+             "SELECT nivel, edad, COUNT(*) AS n_crudo FROM t")
+
+
+def test_cte_con_columna_fuera_del_group_by_no_pasa():
+    # SQLite dejaría pasar `edad` (bare column) y devolvería la de una persona
+    # cualquiera del grupo: eso es microdato.
+    _rechaza(GUARD_1996,
+             "WITH t AS (SELECT nivel, edad, COUNT(*) AS c FROM personas_1996 GROUP BY nivel) "
+             "SELECT nivel, edad, c FROM t")
+
+
+def test_cte_agregado_sin_conteo_en_la_salida_no_pasa():
+    # sin el n crudo a la salida no hay con qué suprimir celdas chicas
+    _rechaza(GUARD_1996,
+             "WITH t AS (SELECT nivel, COUNT(*) AS c FROM personas_1996 GROUP BY nivel) "
+             "SELECT nivel, 100.0 * c / (SELECT SUM(c) FROM t) AS pct FROM t")
