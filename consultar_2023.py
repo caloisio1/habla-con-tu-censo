@@ -13,6 +13,7 @@ sys.path.insert(0, AQUI)
 from sql_guard_2023 import validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
 import registro
 import usage_log
+from comun import pipeline, rechazos, sinonimos
 
 DB = os.environ.get("CENSO2023_DB", os.path.join(AQUI, "censo2023.db"))
 MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
@@ -96,8 +97,13 @@ LUGAR DE NACIMIENTO Y MIGRACIÓN INTERNA (el censo relevó lugar de nacimiento; 
 - "viven en un departamento distinto al que nacieron" (nacional): WHERE PERMI01=3.
 - Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE"""
 
+# El glosario sale del módulo compartido: los cuatro censos leen la MISMA tabla de
+# sinónimos que usa el resolver, así "NBI" o "jefatura" no se interpretan distinto
+# según el censo elegido.
+GLOSARIO = ("\n\nGLOSARIO (sinónimos de uso corriente, compartido por los cuatro censos): "
+            + sinonimos.glosario_para_prompt())
 PROMPT_SQL = ("Sos un traductor de preguntas en español a SQL (SQLite) sobre el Censo 2023 "
-              "de Uruguay (versión ponderada).\n\n" + ESQUEMA + "\n\n" + REGLAS)
+              "de Uruguay (versión ponderada).\n\n" + ESQUEMA + "\n\n" + REGLAS + GLOSARIO)
 
 SYS_REDACTA = (
     "Respondé la pregunta usando EXCLUSIVAMENTE los datos provistos. Sé breve y preciso. "
@@ -115,11 +121,12 @@ SYS_REDACTA = (
 _RX_SUMW = re.compile(r"\bsum\s*\(\s*[^)]*\bw\b", re.I)
 
 
-def generar_sql(pregunta):
+def generar_sql(pregunta, contexto=None):
     r = client.chat.completions.create(
         model=MODELO_SQL, reasoning_effort=ESFUERZO_SQL, max_completion_tokens=TOPE_SQL,
         messages=[{"role": "system", "content": PROMPT_SQL},
-                  {"role": "user", "content": pregunta}])
+                  {"role": "user",
+                   "content": pipeline.mensaje_usuario(pregunta, contexto)}])
     usage_log.registrar("2023", "sql", getattr(r, "usage", None), MODELO_SQL, ESFUERZO_SQL)
     return r.choices[0].message.content.strip()
 
@@ -153,7 +160,8 @@ def leyenda_codificaciones(sql):
     return "\n".join(out)
 
 
-def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False):
+def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False,
+             interpretaciones=(), contexto=None):
     unidad = unidad_conteo(columnas_conteo)
     palabra = unidad if unidad in ("hogares", "viviendas") else "registros"
     nota = (f"\nNota: {suprimidas} celda(s) con menos de {UMBRAL_SUPRESION} {palabra} "
@@ -200,6 +208,7 @@ def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False):
         + aviso_trunc
         + (("\nCodificaciones de esta consulta (respetalas al narrar):\n" + leyenda)
            if leyenda else "")
+        + pipeline.instruccion_redactor(interpretaciones, contexto)
     )
     r = client.chat.completions.create(
         # El redactor solo NARRA: sin razonamiento (esfuerzo 'none' = "instant") no puede
@@ -210,7 +219,9 @@ def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False):
         messages=[{"role": "system", "content": sys_prompt},
                   {"role": "user", "content": f"Pregunta: {pregunta}\nSQL: {sql}\nResultados: {filas}"}])
     usage_log.registrar("2023", "redactor", getattr(r, "usage", None), MODELO_REDACTOR, ESFUERZO_REDACTOR)
-    return r.choices[0].message.content.strip() + nota
+    texto = pipeline.asegurar_declaracion(r.choices[0].message.content.strip(),
+                                          interpretaciones, contexto)
+    return texto + nota
 
 
 def _ocultar_n_crudo(filas, columnas_conteo):
@@ -276,11 +287,27 @@ def construir_mapa_2023(filas, columnas_conteo, suprimidas, sql=""):
 
 
 def preguntar(texto, verbose=False):
-    sql_crudo = generar_sql(texto)
+    # Indicador ambiguo o variable no relevada: se resuelve SIN llamar al modelo.
+    corta, contexto = pipeline.antes(texto, "2023")
+    if corta is not None:
+        registro.no_respondible("2023", texto, corta.get("motivo", "ambigua"))
+        return dict(corta, veredicto=corta.get("motivo", "AMBIGUA"))
+
+    sql_crudo = generar_sql(texto, contexto)
     if sql_crudo.strip() == "NO_RESPONDIBLE":
         registro.no_respondible("2023", texto)
         return {"ok": False, "respuesta": "Esa pregunta no puede responderse con las variables disponibles.",
                 "sql": None, "veredicto": "NO_RESPONDIBLE"}
+
+    # Entidades nombradas: resuelve, reescribe o pregunta. Nunca rotula como
+    # confidencialidad lo que es un nombre no reconocido.
+    try:
+        sql_crudo, interpretaciones, alternativas = pipeline.sobre_sql(
+            sql_crudo, "2023", texto)
+    except pipeline.EntidadNoResuelta as e:
+        registro.no_respondible("2023", texto, e.rechazo.codigo)
+        return dict(rechazos.a_respuesta(e.rechazo, sql=None), veredicto=e.rechazo.codigo)
+
     try:
         sql_seguro, columnas_conteo = validar(sql_crudo)
     except SQLNoSeguro as e:
@@ -294,18 +321,23 @@ def preguntar(texto, verbose=False):
     con.close()
     n_geo_raw = len(filas)   # filas antes de supresión: detecta si el mapa quedó truncado por el LIMIT
 
-    filas, suprimidas = suprimir_celdas_chicas(filas, columnas_conteo)
-    if not filas:
-        return {"ok": False, "sql": sql_seguro, "veredicto": "OK",
-                "respuesta": "La consulta no devolvió resultados publicables"
-                             + (" (celdas suprimidas por confidencialidad)." if suprimidas else "."),
-                "celdas_suprimidas": suprimidas}
+    # Supresión con la regla corregida (1 <= n < 5): un conteo CERO no es un
+    # secreto estadístico, es la ausencia de casos, y se dice como tal.
+    filas, suprimidas, vacias, rechazo = pipeline.sobre_filas(
+        filas, columnas_conteo, unidad_conteo(columnas_conteo))
+    if rechazo is not None:
+        return dict(rechazos.a_respuesta(rechazo, sql=sql_seguro),
+                    veredicto="OK", celdas_suprimidas=suprimidas)
 
     salida = _ocultar_n_crudo(filas, columnas_conteo)
     resultado = {"ok": True, "sql": sql_seguro, "veredicto": "OK",
                  "respuesta": redactar(texto, sql_seguro, filas, suprimidas, columnas_conteo,
-                                       truncado=n_geo_raw >= LIMITE_MAXIMO),
+                                       truncado=n_geo_raw >= LIMITE_MAXIMO,
+                                       interpretaciones=interpretaciones, contexto=contexto),
                  "datos": salida, "celdas_suprimidas": suprimidas}
+    # Otras lecturas posibles del nombre consultado: se ofrecen junto a la respuesta.
+    if alternativas:
+        resultado["opciones"] = alternativas
     mapa = construir_mapa_2023(filas, columnas_conteo, suprimidas, sql_seguro)
     if mapa and mapa["datos"]:
         # Anti-truncamiento: nunca mostrar un mapa nacional recortado en silencio.

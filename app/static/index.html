@@ -350,6 +350,7 @@ async function rellenarOK(card, pregunta, j, censo){
       <div class="answer" id="ans-${id}"></div>
     </div>
     ${tieneMapa ? `<div class="legend" id="leg-${id}"></div><div class="map" id="map-${id}" role="img" aria-label="Mapa coroplético del resultado"></div>` : ''}
+    ${opcionesHTML(j)}
     <div class="meta">
       ${metaPills}
       <span class="spacer"></span>
@@ -363,6 +364,7 @@ async function rellenarOK(card, pregunta, j, censo){
   envolverTablas(ans);
   normalizarNombres(ans);
 
+  conectarOpciones(card, pregunta, j);
   card.querySelector('.copy-ans').onclick = e => copiar(e.currentTarget, j.respuesta || '');
   const cs = card.querySelector('.copysql'); if (cs) cs.onclick = e => copiar(e.currentTarget, j.sql);
 
@@ -377,6 +379,38 @@ async function rellenarOK(card, pregunta, j, censo){
   }
 }
 
+// Opciones de desambiguación: el backend NO elige por el usuario, manda las
+// alternativas y acá se dibujan como chips clickeables. Cada chip vuelve a
+// preguntar con el texto preciso, así la consulta que se ejecuta es explícita.
+function opcionesHTML(j){
+  if (!Array.isArray(j.opciones) || !j.opciones.length) return '';
+  const items = j.opciones.map((o,i) =>
+    `<button type="button" class="chip opt" data-i="${i}">${esc(o.texto)}${
+      o.detalle ? `<span class="d"> · ${esc(o.detalle)}</span>` : ''}</button>`).join('');
+  return `<div class="opciones" role="group" aria-label="Opciones para precisar la consulta">${items}</div>`;
+}
+
+// Sugerencias de "¿quisiste decir...?": mismo mecanismo, sin detalle.
+function sugerenciasHTML(j){
+  if (!Array.isArray(j.sugerencias) || !j.sugerencias.length) return '';
+  const items = j.sugerencias.map((t,i) =>
+    `<button type="button" class="chip sug" data-s="${i}">${esc(t)}</button>`).join('');
+  return `<div class="opciones" role="group" aria-label="Sugerencias">${items}</div>`;
+}
+
+function conectarOpciones(card, pregunta, j){
+  card.querySelectorAll('.chip.opt').forEach(b => {
+    const o = j.opciones[+b.dataset.i];
+    // Si la opción trae su propia pregunta (desambiguación de indicador) se usa
+    // tal cual; si no, se reescribe la original con la entidad precisa.
+    b.onclick = () => preguntar(o.pregunta || `${pregunta} (${o.texto}${o.detalle ? ', ' + o.detalle : ''})`);
+  });
+  card.querySelectorAll('.chip.sug').forEach(b => {
+    const t = j.sugerencias[+b.dataset.s];
+    b.onclick = () => preguntar(`${pregunta}`.replace(/\?$/, '') + ` — ${t}`);
+  });
+}
+
 function rellenarAviso(card, pregunta, j){
   card.classList.add('warn');
   card.innerHTML = `<div class="body">
@@ -389,10 +423,13 @@ function rellenarAviso(card, pregunta, j){
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <div class="answer">${marked.parse(j.respuesta || 'No se pudo responder la consulta.')}</div>
       </div>
+      ${opcionesHTML(j)}
+      ${sugerenciasHTML(j)}
     </div>
     ${j.sql ? `<details class="sql"><summary><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="9 6 15 12 9 18"/></svg> Ver SQL ejecutado</summary>
       <div class="sql-body"><div class="sql-bar"><button class="act copysql" type="button">${ICO_COPY} Copiar</button></div><pre>${esc(j.sql)}</pre></div></details>` : ''}`;
   const cs = card.querySelector('.copysql'); if (cs) cs.onclick = e => copiar(e.currentTarget, j.sql);
+  conectarOpciones(card, pregunta, j);
 }
 
 function censoSel(){ return document.querySelector('input[name="censo"]:checked').value; }

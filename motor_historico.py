@@ -31,8 +31,8 @@ from openai import OpenAI
 
 import usage_log
 import registro
-from sql_guard_historicos import (SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO,
-                                  suprimir_celdas_chicas)
+from sql_guard_historicos import SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
+from comun import pipeline, rechazos, sinonimos
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
@@ -151,19 +151,22 @@ class Motor:
         self.esquema = open(os.path.join(AQUI, esquema), encoding="utf-8").read()
         self.prompt_sql = (
             "Sos un traductor de preguntas en español a SQL (SQLite) sobre el Censo %s "
-            "de Uruguay.\n\n%s\n\n%s\n%s" % (censo, self.esquema, REGLAS_COMUNES, reglas))
+            "de Uruguay.\n\n%s\n\n%s\n%s\n\nGLOSARIO (sinónimos de uso corriente, "
+            "compartido por los cuatro censos): %s"
+            % (censo, self.esquema, REGLAS_COMUNES, reglas, sinonimos.glosario_para_prompt()))
         # Líneas "- NOMBRE | etiqueta | códigos" para inyectarle al redactor solo la
         # codificación de las variables que aparecen en el SQL, no las ~110.
         self._lineas = [ln.strip() for ln in self.esquema.splitlines()
                         if ln.lstrip().startswith("- ")]
 
     # -- etapas LLM -------------------------------------------------------
-    def generar_sql(self, pregunta):
+    def generar_sql(self, pregunta, contexto=None):
         r = client.chat.completions.create(
             model=MODELO_SQL, reasoning_effort=ESFUERZO_SQL,
             max_completion_tokens=TOPE_SQL,
             messages=[{"role": "system", "content": self.prompt_sql},
-                      {"role": "user", "content": pregunta}])
+                      {"role": "user",
+                       "content": pipeline.mensaje_usuario(pregunta, contexto)}])
         usage_log.registrar(self.censo, "sql", getattr(r, "usage", None),
                             MODELO_SQL, ESFUERZO_SQL)
         return r.choices[0].message.content.strip()
@@ -193,7 +196,8 @@ class Motor:
             return "viviendas"
         return self.unidad_por_defecto
 
-    def redactar(self, pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False):
+    def redactar(self, pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False,
+                 interpretaciones=(), contexto=None):
         unidad = self.unidad_conteo(columnas_conteo, sql)
         nota = ("\nNota: %d celda(s) con menos de %d %s fueron suprimidas por "
                 "confidencialidad." % (suprimidas, UMBRAL_SUPRESION, unidad)
@@ -211,6 +215,7 @@ class Motor:
             + aviso_trunc
             + (("\nCodificaciones de esta consulta (respetalas al narrar):\n" + leyenda)
                if leyenda else "")
+            + pipeline.instruccion_redactor(interpretaciones, contexto)
         )
         r = client.chat.completions.create(
             model=MODELO_REDACTOR, reasoning_effort=ESFUERZO_REDACTOR,
@@ -221,7 +226,9 @@ class Motor:
                                   % (pregunta, sql, filas)}])
         usage_log.registrar(self.censo, "redactor", getattr(r, "usage", None),
                             MODELO_REDACTOR, ESFUERZO_REDACTOR)
-        return r.choices[0].message.content.strip() + nota
+        texto = pipeline.asegurar_declaracion(
+            r.choices[0].message.content.strip(), interpretaciones, contexto)
+        return texto + nota
 
     # -- mapa -------------------------------------------------------------
     @staticmethod
@@ -305,12 +312,31 @@ class Motor:
         return [{k: v for k, v in f.items() if k.lower() not in quitar} for f in filas]
 
     def preguntar(self, texto):
-        sql_crudo = self.generar_sql(texto)
+        # 1. Indicador ambiguo o variable no relevada: se responde SIN llamar al
+        #    modelo. Es el paso más barato del pipeline y el que evita inventar
+        #    una definición por el usuario.
+        corta, contexto = pipeline.antes(texto, self.censo)
+        if corta is not None:
+            registro.no_respondible(self.censo, texto, corta.get("motivo", "ambigua"))
+            return dict(corta, veredicto=corta.get("motivo", "AMBIGUA"))
+
+        sql_crudo = self.generar_sql(texto, contexto)
         if sql_crudo.strip() == "NO_RESPONDIBLE":
             registro.no_respondible(self.censo, texto)
             return {"ok": False, "sql": None, "veredicto": "NO_RESPONDIBLE",
                     "respuesta": "Esa pregunta no puede responderse con las variables "
                                  "disponibles del Censo %s." % self.censo}
+
+        # 2. Entidades nombradas y nomenclátor cruzado. Puede terminar acá si hay
+        #    que preguntar, y nunca se rotula como confidencialidad.
+        try:
+            sql_crudo, interpretaciones, alternativas = pipeline.sobre_sql(
+                sql_crudo, self.censo, texto)
+        except pipeline.EntidadNoResuelta as e:
+            registro.no_respondible(self.censo, texto, e.rechazo.codigo)
+            return dict(rechazos.a_respuesta(e.rechazo, sql=None),
+                        veredicto=e.rechazo.codigo)
+
         try:
             sql_seguro, columnas_conteo = self.guard.validar(sql_crudo)
         except SQLNoSeguro as e:
@@ -326,20 +352,26 @@ class Motor:
             con.close()
         n_raw = len(filas)
 
-        filas, suprimidas = suprimir_celdas_chicas(filas, columnas_conteo)
-        if not filas:
-            return {"ok": False, "sql": sql_seguro, "veredicto": "OK",
-                    "celdas_suprimidas": suprimidas,
-                    "respuesta": "La consulta no devolvió resultados publicables"
-                                 + (" (celdas suprimidas por confidencialidad)."
-                                    if suprimidas else ".")}
+        # 3. Supresión con la regla corregida: el cero NO es confidencialidad.
+        unidad = self.unidad_conteo(columnas_conteo, sql_seguro)
+        filas, suprimidas, vacias, rechazo = pipeline.sobre_filas(
+            filas, columnas_conteo, unidad)
+        if rechazo is not None:
+            return dict(rechazos.a_respuesta(rechazo, sql=sql_seguro),
+                        veredicto="OK", celdas_suprimidas=suprimidas)
 
         respuesta = {"ok": True, "sql": sql_seguro, "veredicto": "OK",
                      "respuesta": self.redactar(texto, sql_seguro, filas, suprimidas,
                                                 columnas_conteo,
-                                                truncado=n_raw >= LIMITE_MAXIMO),
+                                                truncado=n_raw >= LIMITE_MAXIMO,
+                                                interpretaciones=interpretaciones,
+                                                contexto=contexto),
                      "datos": self._ocultar_n_crudo(filas, columnas_conteo),
                      "celdas_suprimidas": suprimidas}
+        # Otras lecturas posibles del nombre consultado (departamento vs ciudad):
+        # se ofrecen junto a la respuesta, no en lugar de ella.
+        if alternativas:
+            respuesta["opciones"] = alternativas
         # El mapa se arma con las filas YA suprimidas: lo que no se publica en la
         # tabla tampoco se pinta.
         mapa = self.construir_mapa(sql_seguro, filas, suprimidas)

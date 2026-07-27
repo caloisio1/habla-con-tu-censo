@@ -31,6 +31,7 @@ import consultar_2004   # motor Censo 2004 Fase 1 (conteo, sin ponderar)
 MOTORES_HISTORICOS = {"1996": consultar_1996, "2004": consultar_2004}
 import usage_log         # registro de métricas de tokens (solo métricas, sin contenido)
 import registro          # rastro de las consultas rechazadas (pregunta + SQL + motivo)
+from comun import perdidos, pipeline, rechazos, sinonimos  # módulo compartido por los cuatro motores
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
@@ -202,6 +203,10 @@ VARIABLES CRUDAS DEL INE (nombre | etiqueta | códigos). Usá el CÓDIGO, no la 
 {dicc.esquema_variables()}
 
 {REGLAS}
+
+GLOSARIO (sinónimos de uso corriente, compartido por los cuatro censos): {sinonimos.glosario_para_prompt()}
+
+{perdidos.bloque_para_prompt("2011")}
 """
 
 
@@ -232,14 +237,14 @@ def normalizar_departamentos(sql: str) -> str:
     return sql
 
 
-def generar_sql(pregunta: str) -> str:
+def generar_sql(pregunta: str, contexto: dict | None = None) -> str:
     r = client.chat.completions.create(
         model=MODELO_SQL,
         reasoning_effort=ESFUERZO_SQL,
         max_completion_tokens=TOPE_SQL,
         messages=[
             {"role": "system", "content": PROMPT_SQL},
-            {"role": "user", "content": pregunta},
+            {"role": "user", "content": pipeline.mensaje_usuario(pregunta, contexto)},
         ],
     )
     usage_log.registrar("2011", "sql", getattr(r, "usage", None), MODELO_SQL, ESFUERZO_SQL)
@@ -295,7 +300,8 @@ def leyenda_codificaciones(sql: str, columnas_conteo: list) -> str:
 
 
 def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
-                       columnas_conteo: list, truncado: bool = False) -> str:
+                       columnas_conteo: list, truncado: bool = False,
+                       interpretaciones=(), contexto: dict | None = None) -> str:
     unidad = unidad_conteo(columnas_conteo)
     nota = (
         f"\nNota: {suprimidas} celda(s) con menos de {UMBRAL_SUPRESION} {unidad} "
@@ -351,6 +357,7 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
                     "CODIFICACIONES de esta consulta (respetalas al narrar; p. ej. una "
                     "variable topeada en 3 significa '3 o más'):\n"
                     + leyenda_codificaciones(sql, columnas_conteo) + "\n"
+                    + perdidos.leyenda_para_redactor("2011", sql) + "\n"
                     "Contexto metodológico (usalo solo si es pertinente): el Censo 2011 "
                     "fue el primer censo de derecho de Uruguay (cuenta a las personas en "
                     "su residencia habitual), con fecha de referencia 4 de octubre de 2011. "
@@ -358,6 +365,7 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
                     "imputadas en viviendas con moradores ausentes): 3.286.314; total "
                     "residente estimada (omisión 3,06%): 3.390.077. Los datos consultados "
                     "son los microdatos publicados, que pueden incluir personas imputadas."
+                    + pipeline.instruccion_redactor(interpretaciones, contexto)
                 ),
             },
             {
@@ -367,7 +375,9 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
         ],
     )
     usage_log.registrar("2011", "redactor", getattr(r, "usage", None), MODELO_REDACTOR, ESFUERZO_REDACTOR)
-    return r.choices[0].message.content.strip() + nota
+    texto = pipeline.asegurar_declaracion(r.choices[0].message.content.strip(),
+                                          interpretaciones, contexto)
+    return texto + nota
 
 
 # Columna geográfica del GROUP BY -> nivel de mapa. Orden = prioridad.
@@ -426,7 +436,13 @@ def construir_mapa(sql: str, filas: list) -> dict | None:
 def responder_2011(texto: str) -> dict:
     """Pipeline del motor 2011 (lo usa el servicio unificado cuando el selector elige 2011).
     Abre censo.db en SOLO LECTURA (la app nunca escribe la base)."""
-    sql_crudo = generar_sql(texto)
+    # Indicador ambiguo o variable no relevada: respuesta barata, sin llamar al modelo.
+    corta, contexto = pipeline.antes(texto, "2011")
+    if corta is not None:
+        registro.no_respondible("2011", texto, corta.get("motivo", "ambigua"))
+        return corta
+
+    sql_crudo = generar_sql(texto, contexto)
 
     if sql_crudo == "NO_RESPONDIBLE_VIVIENDAS":
         registro.no_respondible("2011", texto, "viviendas desocupadas")
@@ -440,6 +456,14 @@ def responder_2011(texto: str) -> dict:
         }
 
     sql_crudo = normalizar_departamentos(sql_crudo)
+
+    # Entidades nombradas: resuelve, reescribe o pregunta (nunca "confidencialidad").
+    try:
+        sql_crudo, interpretaciones, alternativas = pipeline.sobre_sql(
+            sql_crudo, "2011", texto)
+    except pipeline.EntidadNoResuelta as e:
+        registro.no_respondible("2011", texto, e.rechazo.codigo)
+        return rechazos.a_respuesta(e.rechazo, sql=None)
 
     try:
         sql_seguro, columnas_conteo = validar(sql_crudo)
@@ -456,25 +480,25 @@ def responder_2011(texto: str) -> dict:
     # recortado -> se avisa al redactor para que no narre extremos como universales (d).
     truncado = len(filas) >= LIMITE_MAXIMO
 
-    filas, suprimidas = suprimir_celdas_chicas(filas, columnas_conteo)
-
-    if not filas:
-        return {
-            "ok": False,
-            "respuesta": (
-                "La consulta no devolvió resultados publicables"
-                + (" (celdas suprimidas por confidencialidad)." if suprimidas else ".")
-            ),
-            "sql": sql_seguro,
-        }
+    # Supresión con la regla corregida: el conteo CERO no es confidencialidad.
+    filas, suprimidas, vacias, rechazo = pipeline.sobre_filas(
+        filas, columnas_conteo, unidad_conteo(columnas_conteo))
+    if rechazo is not None:
+        return dict(rechazos.a_respuesta(rechazo, sql=sql_seguro),
+                    celdas_suprimidas=suprimidas)
 
     respuesta = {
         "ok": True,
-        "respuesta": redactar_respuesta(texto, sql_seguro, filas, suprimidas, columnas_conteo, truncado),
+        "respuesta": redactar_respuesta(texto, sql_seguro, filas, suprimidas, columnas_conteo,
+                                        truncado, interpretaciones, contexto),
         "sql": sql_seguro,   # transparency: the executed SQL is always shown
         "datos": filas,
         "celdas_suprimidas": suprimidas,
     }
+
+    # Otras lecturas posibles del nombre consultado: se ofrecen junto a la respuesta.
+    if alternativas:
+        respuesta["opciones"] = alternativas
 
     mapa = construir_mapa(sql_seguro, filas)
     if mapa:

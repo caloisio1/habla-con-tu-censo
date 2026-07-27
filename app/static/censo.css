@@ -390,3 +390,11 @@ dialog{position:fixed; inset:0; margin:auto;}
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001ms !important; transition-duration:.001ms !important;}
 }
+
+/* Opciones de desambiguación y sugerencias: el sistema no elige por el usuario,
+   ofrece alternativas. Se dibujan dentro de la tarjeta de aviso, debajo del texto. */
+.opciones{display:flex;flex-wrap:wrap;gap:8px;padding:0 18px 16px 52px}
+.opciones .chip{text-align:left;white-space:normal;line-height:1.35}
+.opciones .chip .d{opacity:.65;font-weight:400}
+.opciones .chip.sug{font-style:italic}
+@media (max-width:640px){.opciones{padding-left:18px}}
