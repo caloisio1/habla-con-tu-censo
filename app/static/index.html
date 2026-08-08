@@ -394,9 +394,140 @@ function cifraDestacada(j){
       <span class="apx">${sello}</span></div>`;
 }
 
+/* ---- Gráfico de barras: la salida que faltaba ----------------------------
+   La app YA elegía la salida por la FORMA del resultado: una sola fila con una
+   métrica sale como cifra grande (cifraDestacada) y un desglose geográfico sale
+   como mapa. Faltaba el caso más común: un desglose por una variable NO
+   geográfica —tramos de edad, nivel educativo— que hoy se lee como párrafo y
+   tabla, cuando la forma natural es una barra por categoría.
+
+   LA DECISIÓN ES DETERMINISTA Y VIVE ACÁ, en la capa de presentación, por la
+   misma razón por la que el guard es determinista: el modelo ya eligió QUÉ
+   consultar; no tiene que elegir además CÓMO se dibuja. Misma pregunta, mismo
+   gráfico, siempre. No se toca el backend: se grafican los datos que
+   /preguntar ya venía devolviendo en j.datos.
+
+   NO REEMPLAZA A LA TABLA. La tabla del texto sigue estando y es la que tiene
+   todos los valores: el gráfico muestra la forma, la tabla las cifras. Por eso
+   acá solo se rotula el extremo y el resto se lee al pasar el mouse o con el
+   teclado, en vez de estampar un número sobre cada barra. */
+
+// Columnas que son CÓDIGOS internos, no etiquetas para mostrar. Ojo con qué se
+// mete acá: 'nivel' parece de sistema pero es el nombre de una categoría real
+// (nivel educativo), y excluirla apagaba el gráfico justo en uno de los casos
+// que más lo pide. 'geo_nombre' tampoco va: es un nombre legible.
+const CAT_CODIGO = /^(geo_codigo|codigo|cod|codloc|codbarrio|id)$/i;
+const RX_PCT = /porcentaje|pct|porc|proporcion/i;
+
+// Elige la serie a dibujar, o null si el resultado no tiene forma de gráfico.
+function serieGrafico(j){
+  if (j.mapa) return null;                       // el mapa YA es la salida visual
+  if (!Array.isArray(j.datos)) return null;
+  const filas = j.datos;
+  // Una barra sola no es un gráfico (es la cifra grande) y más de 40 no se lee.
+  if (filas.length < 3 || filas.length > 40) return null;
+
+  const claves = Object.keys(filas[0] || {});
+  const numerica = k => filas.some(f => typeof f[k] === 'number');
+  // Categoría: la primera columna de texto que no sea un código interno.
+  const cat = claves.find(k => !CAT_CODIGO.test(k) && !numerica(k) &&
+                               filas.some(f => typeof f[k] === 'string'));
+  if (!cat) return null;
+  // Códigos con cero a la izquierda ('01','03'): son códigos, no etiquetas.
+  const etiquetas = filas.map(f => f[cat]);
+  if (etiquetas.every(e => /^0\d$/.test(String(e || '')))) return null;
+
+  // Métrica: misma prioridad que la cifra grande, para que las dos salidas
+  // destaquen SIEMPRE lo mismo y no se contradigan dentro de la misma tarjeta.
+  const nums = claves.filter(k => numerica(k) && !CRUDOS.includes(k.toLowerCase()));
+  if (!nums.length) return null;
+  const met = nums.find(k => RX_PCT.test(k))
+           || nums.find(k => /persona|poblacion|habitante|hogar|vivienda|mujer|varon|hombre|afro/i.test(k))
+           || nums[0];
+
+  let datos = filas.map(f => ({
+    etiqueta: capitalizarNombre(String(f[cat] ?? '')) || String(f[cat] ?? '—'),
+    // null = celda suprimida por confidencialidad. No es cero: se dibuja vacía.
+    valor: typeof f[met] === 'number' ? f[met] : null,
+  }));
+  if (!datos.some(d => d.valor !== null)) return null;
+
+  // ¿La categoría tiene orden propio? Los tramos de edad y los años SÍ ('0-4',
+  // '5-9', '1996'): reordenarlos por tamaño destruiría la distribución, que es
+  // justamente lo que el gráfico tiene que mostrar. Las nominales (nivel
+  // educativo, departamento) se ordenan de mayor a menor, que se lee mejor.
+  const ordinal = datos.filter(d => /^\d/.test(d.etiqueta)).length >= datos.length * 0.7;
+  if (!ordinal) datos = datos.slice().sort((a,b) => (b.valor ?? -1) - (a.valor ?? -1));
+
+  // Columnas verticales cuando las etiquetas son cortas —el caso de los tramos
+  // de edad, donde la silueta de la distribución es el dato—; barras
+  // horizontales cuando son largas, que es la única forma de que entren.
+  const corta = datos.every(d => d.etiqueta.length <= 9);
+  return {
+    datos, ordinal,
+    vertical: corta && ordinal && datos.length <= 24,
+    pct: RX_PCT.test(met),
+    titulo: met.replace(/_/g,' ').replace(/^\w/, c => c.toUpperCase()) +
+            ' por ' + cat.replace(/_/g,' '),
+  };
+}
+
+// Tope superior "redondo" para el eje: la barra más alta nunca toca el borde.
+function topeEje(max){
+  if (max <= 0) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(max)));
+  return Math.ceil(max / (mag/2)) * (mag/2);
+}
+
+function graficoHTML(s, id){
+  if (!s) return '';
+  const vals = s.datos.map(d => d.valor).filter(v => v !== null);
+  const tope = topeEje(Math.max(...vals));
+  const maxV = Math.max(...vals);
+  const fmtV = v => s.pct ? `${fmt(v)} %` : fmt(v);
+  const cima = s.datos.find(d => d.valor === maxV);
+  // Un número sobre CADA barra no se lee y tapa el resto. Con pocas categorías
+  // la columna de valores se lee como una tabla y ayuda; pasado ese punto, solo
+  // se rotula el extremo y el resto se consulta en el tooltip o en la tabla del
+  // texto, que es la que tiene todas las cifras.
+  const rotularTodas = !s.vertical && s.datos.length <= 12;
+
+  const barras = s.datos.map(d => {
+    const supr = d.valor === null;
+    const pc = supr ? 0 : (d.valor / tope) * 100;
+    const destaca = !supr && d.valor === maxV;
+    const titulo = supr ? `${d.etiqueta}: sin dato publicable`
+                        : `${d.etiqueta}: ${fmtV(d.valor)}`;
+    // La celda suprimida NO es un cero: se dice, no se dibuja como barra corta.
+    const val = supr ? '<i>sin dato</i>'
+                     : (rotularTodas || destaca ? esc(fmtV(d.valor)) : '');
+    const pista = `<span class="gb-pista"><span class="gb-fill" style="--pc:${pc.toFixed(2)}%"></span></span>`;
+    // En vertical la etiqueta va DEBAJO de la columna, que es donde se la busca.
+    return `<div class="gb${supr?' supr':''}${destaca?' max':''}" tabindex="0" role="listitem"
+                 aria-label="${esc(titulo)}" title="${esc(titulo)}">
+        ${s.vertical ? pista + `<span class="gb-et">${esc(d.etiqueta)}</span>`
+                     : `<span class="gb-et">${esc(d.etiqueta)}</span>` + pista +
+                       `<span class="gb-val${destaca?' on':''}">${val}</span>`}
+      </div>`;
+  }).join('');
+
+  // En vertical el extremo se nombra en el pie en vez de flotar sobre la
+  // columna: ahí chocaba contra las etiquetas del eje y quedaba ilegible.
+  const pie = s.vertical
+    ? `<b>0</b><span class="gb-max">máx. ${esc(cima ? cima.etiqueta : '')} · ${esc(fmtV(maxV))}</span><b>${esc(fmtV(tope))}</b>`
+    : `<b>0</b><b>${esc(fmtV(tope))}</b>`;
+  const resumen = `${s.titulo}. ${s.datos.length} categorías, máximo ${fmtV(maxV)}.`;
+  return `<figure class="graf ${s.vertical?'vert':'horiz'}" id="graf-${id}">
+      <figcaption>${esc(s.titulo)}</figcaption>
+      <div class="gb-lista" role="list" aria-label="${esc(resumen)}">${barras}</div>
+      <span class="gb-eje">${pie}</span>
+    </figure>`;
+}
+
 async function rellenarOK(card, pregunta, j, censo){
   const id = ++uid;
   const tieneMapa = !!j.mapa;
+  const serie = serieGrafico(j);   // null si el resultado no tiene forma de gráfico
   const nFilas = Array.isArray(j.datos) ? j.datos.length : 0;
   const supr = j.celdas_suprimidas || 0;
 
@@ -415,6 +546,7 @@ async function rellenarOK(card, pregunta, j, censo){
       <div class="answer" id="ans-${id}"></div>
     </div>
     ${tieneMapa ? `<div class="legend" id="leg-${id}"></div><div class="map" id="map-${id}" role="img" aria-label="Mapa coroplético del resultado"></div>` : ''}
+    ${graficoHTML(serie, id)}
     ${opcionesHTML(j)}
     <div class="meta">
       ${metaPills}

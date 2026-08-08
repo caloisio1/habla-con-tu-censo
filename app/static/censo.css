@@ -513,3 +513,128 @@ details.var .ref-p.desc{color:var(--ink-2); font-size:.88rem; font-style:italic;
 footer .ine-box{margin-top:22px; padding-top:18px; border-top:1px solid var(--line);}
 footer .ine-box p{margin:0; line-height:1.65;}
 footer .ine-box b{color:var(--ink);}
+
+/* ===== Gráfico de barras =================================================
+   La tercera salida, al lado del texto y el mapa. Una sola serie, así que un
+   solo color: el largo de la barra ya codifica la magnitud, y pintar cada
+   barra de un tono distinto gastaría el único canal libre en repetir lo que
+   la barra ya dice.
+
+   La grilla y los ejes van en gris de un paso sobre el fondo y en línea fina
+   continua: el dato es lo único que puede ser fuerte. Los valores y las
+   etiquetas van en tinta, nunca en el color de la serie.
+
+   El color sale del token (--azul-600), así que el modo oscuro se resuelve
+   solo: no hay un hex escrito en este bloque. */
+.graf{
+  margin:16px 0 0; padding:16px 20px 14px;
+  border-top:1px solid var(--line); background:var(--inset);
+}
+.graf figcaption{
+  color:var(--ink-2); font-size:.78rem; text-transform:uppercase;
+  letter-spacing:.06em; font-weight:600; margin-bottom:14px;
+}
+.graf .gb-eje{
+  display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+  margin-top:10px; padding-top:7px; border-top:1px solid var(--line);
+  color:var(--ink-3); font-size:.72rem; font-variant-numeric:tabular-nums;
+}
+.graf .gb-eje .gb-max{color:var(--ink); font-weight:700;}
+.graf .gb{cursor:default; outline:none;}
+.graf .gb:focus-visible{outline:2px solid var(--focus); outline-offset:3px; border-radius:4px;}
+.graf .gb-fill{background:var(--azul-600); display:block;}
+.graf .gb-val{color:var(--ink-3); font-variant-numeric:tabular-nums; font-size:.78rem;}
+.graf .gb-val.on{color:var(--ink); font-weight:700;}
+.graf .gb-val i{font-style:normal; color:var(--ink-3); opacity:.75;}
+.graf .gb-et{color:var(--ink-2); font-size:.8rem;}
+/* Celda suprimida por confidencialidad: NO es un cero. Se marca con la misma
+   trama que el mapa usa para "sin dato publicable" y se dice con palabras, en
+   vez de dibujar una barra corta que se leería como un valor chico. */
+.graf .gb.supr .gb-pista{
+  background:repeating-linear-gradient(45deg,
+    var(--map-null),var(--map-null) 3px,transparent 3px,transparent 7px);
+  border-radius:3px;
+}
+
+/* --- barras horizontales: etiqueta | pista | valor --- */
+.graf.horiz .gb-lista{display:flex; flex-direction:column; gap:6px;}
+.graf.horiz .gb{
+  display:grid; grid-template-columns:minmax(84px,26%) 1fr auto;
+  align-items:center; gap:12px; min-height:24px;   /* zona de hover cómoda */
+}
+.graf.horiz .gb-et{
+  text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.graf.horiz .gb-pista{height:16px; display:block;}   /* <= 24px de grosor */
+.graf.horiz .gb-fill{
+  height:100%; width:var(--pc);
+  border-radius:0 4px 4px 0;        /* redondeado en la punta, recto en la base */
+  min-width:2px;
+}
+.graf.horiz .gb.supr .gb-fill{display:none;}
+.graf.horiz .gb-val{text-align:right; min-width:64px; white-space:nowrap;}
+
+/* --- columnas verticales: la silueta de la distribución --- */
+.graf.vert .gb-lista{
+  display:flex; align-items:flex-end; gap:2px;      /* 2px de aire entre columnas */
+  height:190px; position:relative;
+}
+/* La línea del eje va donde APOYAN las columnas, no debajo de las etiquetas:
+   es la referencia del cero y tiene que estar pegada a la base de las barras.
+   64px de banda de etiquetas + 6px de aire = 70px desde abajo. */
+.graf.vert .gb-lista::after{
+  content:''; position:absolute; left:0; right:0; bottom:70px; height:1px;
+  background:var(--line-strong); pointer-events:none;
+}
+.graf.vert .gb{
+  flex:1 1 0; min-width:0; height:100%;
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+}
+.graf.vert .gb-pista{
+  flex:1 1 auto; width:100%; max-width:24px; margin:0 auto;   /* <= 24px */
+  display:flex; align-items:flex-end; min-height:0;
+}
+.graf.vert .gb-fill{
+  width:100%; height:var(--pc);
+  border-radius:4px 4px 0 0;        /* redondeado arriba, recto en la base */
+  min-height:2px;
+}
+.graf.vert .gb.supr .gb-fill{display:none;}
+/* La etiqueta va DEBAJO de la columna, girada para que entren todas sin
+   pisarse. El valor del extremo NO va acá: va en el pie, porque flotando
+   sobre la columna chocaba contra estas mismas etiquetas. */
+/* ALTURA FIJA, no max-height: la etiqueta más larga ('100 y más') ocupaba más
+   alto que las cortas, le comía espacio a SU columna y esa barra arrancaba más
+   arriba que el resto. Con las bases desparejas el gráfico miente sobre el
+   dato. La banda de etiquetas mide lo mismo en todas las columnas, así la
+   línea de base es una sola. */
+.graf.vert .gb-et{
+  font-size:.66rem; white-space:nowrap; writing-mode:vertical-rl;
+  text-orientation:mixed; height:64px; overflow:hidden; flex:none;
+}
+.graf.vert .gb.max .gb-et{color:var(--ink); font-weight:700;}
+
+/* En pantalla angosta las columnas no entran: se leen apiladas, como barras. */
+@media (max-width:560px){
+  .graf.vert .gb-lista{
+    height:auto; flex-direction:column; align-items:stretch; gap:6px;
+  }
+  .graf.vert .gb-lista::after{display:none;}   /* apiladas no hay base común que marcar */
+  .graf.vert .gb{
+    height:auto; display:grid; grid-template-columns:minmax(56px,24%) 1fr;
+    align-items:center; gap:10px; min-height:24px;
+  }
+  .graf.vert .gb-et{
+    writing-mode:horizontal-tb; text-align:right; max-height:none;
+    font-size:.76rem; order:-1;
+  }
+  /* Ojo: hay que soltar el max-width y el centrado de la columna vertical. Sin
+     eso la pista queda capada en 24px y la barra sale como una astilla. */
+  .graf.vert .gb-pista{
+    height:14px; width:auto; max-width:none; margin:0; flex:none;
+    align-items:stretch;
+  }
+  .graf.vert .gb-fill{
+    height:100%; width:var(--pc); border-radius:0 4px 4px 0; min-height:0; min-width:2px;
+  }
+}
