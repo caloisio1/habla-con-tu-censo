@@ -14,7 +14,7 @@ import registro
 import usage_log
 from comun import llm, pipeline, rechazos, sinonimos
 
-DB = os.environ.get("CENSO2023_DB", os.path.join(AQUI, "censo2023.db"))
+DB = os.environ.get("CENSO2023_DB", os.path.join(AQUI, "datos", "censo2023.db"))
 MODELO = os.environ.get("CENSO_MODELO", llm.MODELO_POR_DEFECTO)
 # Configuración por ETAPA (modelo + esfuerzo de razonamiento), sobreescribible por entorno.
 # El SQL es la etapa que RAZONA (traducir la pregunta al esquema): esfuerzo alto.
@@ -35,6 +35,10 @@ ESQUEMA = open(os.path.join(AQUI, "esquema_llm_2023.txt"), encoding="utf-8").rea
 REGLAS = """Reglas estrictas (dialecto SQLite):
 - Devolvé SOLO la consulta SQL, sin explicaciones ni markdown.
 - Solo SELECT y SIEMPRE agregado; nunca filas individuales.
+- OBLIGATORIO EN TODA CONSULTA, SIN EXCEPCIÓN: COUNT(*) AS n_crudo como última columna del
+  SELECT (una por celda si hay GROUP BY). Va ADEMÁS de la métrica, nunca en su lugar. Sin esa
+  columna el guard RECHAZA la consulta y el usuario se queda sin respuesta, aunque el resto
+  del SQL sea correcto. Revisá antes de responder que la columna esté.
 - PERSONAS: la cifra publicada es SUM(W) (redondeada); agregá SIEMPRE COUNT(*) AS n_crudo
   (conteo sin ponderar) para la supresión de celdas chicas. NUNCA presentes COUNT(*) como
   cantidad de personas.
@@ -43,6 +47,10 @@ REGLAS = """Reglas estrictas (dialecto SQLite):
   DIRECCION_ID/VIVID/HOGID. Agregá COUNT(*) AS n_crudo.
 - VIVIENDAS: consultá la tabla viviendas_2023 y usá COUNT(*) (esa tabla no tiene ponderador).
 - W es el PONDERADOR (siempre válido): NO le apliques filtros de perdidos (nada de W IN (7777,...)).
+- SEXO es PERPH02 (1=Varón, 2=Mujer). "Mujeres" es PERPH02=2. NO lo confundas con PERMI01,
+  que es LUGAR DE NACIMIENTO: los prefijos se parecen y filtrar PERMI01=2 por "mujeres" da
+  un universo equivocado (o vacío). Ante cualquier variable, verificá la etiqueta en el
+  esquema antes de usar su código.
 - PROHIBIDO unir o mezclar personas_2023 con viviendas_2023 (ni JOIN ni subconsulta).
 - JOIN permitido solo con el nomenclátor. Para responder por NOMBRE de localidad:
     JOIN localidades_2023 l ON (personas_2023.DEPARTAMENTO||personas_2023.LOCALIDAD)=l.codloc
@@ -188,6 +196,11 @@ def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False,
     sys_prompt = (
         SYS_REDACTA
         + regla_cifra
+        + "\nCÓDIGOS: cuando venga la leyenda de codificaciones, nombrá SIEMPRE la etiqueta "
+          "y nunca el número pelado. Esa leyenda es el diccionario de la variable: ya lo "
+          "tenés acá. NO inventes limitaciones —no digas que no revisaste el diccionario ni "
+          "que te falta el codebook— y no ofrezcas buscar archivos ni 'lanzar otra consulta': "
+          "no ejecutás nada, solo narrás lo que ya está en este mensaje."
         + "\nTu función es NARRAR los resultados provistos. NO auditás, corregís ni "
           "critiques la consulta SQL: asumila correcta y contá lo que devolvió."
         + "\nNO comentes sobre disponibilidad de mapas (el sistema agrega esa aclaración "

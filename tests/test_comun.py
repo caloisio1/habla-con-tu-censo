@@ -298,23 +298,31 @@ def test_formulaciones_equivalentes_dan_el_mismo_motivo():
 # ── centinelas no declarados de 2011 ─────────────────────────────────────
 def test_los_centinelas_de_2011_estan_declarados_y_van_al_prompt():
     assert 88 in perdidos.de("2011", "Años_estudio")
+    # 5555 = secreto estadístico: desde que las 53 personas protegidas se cargan
+    # (28-jul-2026), el código está en las columnas crudas y contamina promedios.
+    assert 5555 in perdidos.de("2011", "Años_estudio")
     bloque = perdidos.bloque_para_prompt("2011")
-    assert "Años_estudio" in bloque and "NOT IN (88)" in bloque
+    assert "Años_estudio" in bloque and "NOT IN (88, 5555)" in bloque
     assert len(perdidos.variables("2011")) == 11
 
 
 def test_excluir_el_centinela_cambia_el_promedio_de_2011():
-    """La cifra que el INE vio (13,75) contra la correcta (8,60)."""
+    """La cifra que el INE vio (13,80) contra la correcta (8,60).
+
+    Excluir SOLO el 88 ya no alcanza: quedan 12 filas de Montevideo con 5555 que
+    llevan el promedio a 8,66. Hay que excluir los dos códigos declarados.
+    """
     con = sqlite3.connect("file:%s?mode=ro" % nom.BASES["2011"], uri=True)
+    mvd = "FROM personas WHERE departamento='MONTEVIDEO'"
     try:
-        con_88 = con.execute('SELECT ROUND(AVG("Años_estudio"),2) FROM personas '
-                             "WHERE departamento='MONTEVIDEO'").fetchone()[0]
-        sin_88 = con.execute('SELECT ROUND(AVG("Años_estudio"),2) FROM personas '
-                             'WHERE departamento=\'MONTEVIDEO\' AND "Años_estudio" '
-                             "NOT IN (88)").fetchone()[0]
+        crudo = con.execute('SELECT ROUND(AVG("Años_estudio"),2) ' + mvd).fetchone()[0]
+        solo_88 = con.execute('SELECT ROUND(AVG("Años_estudio"),2) ' + mvd +
+                              ' AND "Años_estudio" NOT IN (88)').fetchone()[0]
+        limpio = con.execute('SELECT ROUND(AVG("Años_estudio"),2) ' + mvd +
+                             ' AND "Años_estudio" NOT IN (88, 5555)').fetchone()[0]
     finally:
         con.close()
-    assert con_88 == 13.75 and sin_88 == 8.6
+    assert crudo == 13.8 and solo_88 == 8.66 and limpio == 8.6
 
 
 # ── el nomenclátor de los cuatro censos carga ────────────────────────────

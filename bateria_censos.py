@@ -43,9 +43,13 @@ ANCLAS = {
     "2004": [("personas", "SELECT COUNT(*) FROM censo2004 WHERE per=1", 3241003),
              ("viviendas", "SELECT COUNT(*) FROM censo2004 WHERE viv=1", 1279741),
              ("hogares", "SELECT COUNT(*) FROM censo2004 WHERE hog=1", 1065677)],
-    "2011": [("personas", "SELECT COUNT(*) FROM personas", 3285824),
-             ("hogares", "SELECT COUNT(DISTINCT hogar_key) FROM personas", 1166251),
-             ("viviendas", "SELECT COUNT(DISTINCT vivienda_key) FROM personas", 1136413)],
+    # 28-jul-2026: +53 personas, +19 hogares y +19 viviendas. Se dejaron de descartar
+    # las 53 personas con el cuestionario bajo secreto estadístico (19 hogares
+    # completos): cuentan en la población aunque no aporten a ningún otro corte.
+    # Ver datos/NOTAS_CALIDAD.md.
+    "2011": [("personas", "SELECT COUNT(*) FROM personas", 3285877),
+             ("hogares", "SELECT COUNT(DISTINCT hogar_key) FROM personas", 1166270),
+             ("viviendas", "SELECT COUNT(DISTINCT vivienda_key) FROM personas", 1136432)],
     "2023": [("personas (ponderadas)", "SELECT ROUND(SUM(W)) FROM personas_2023", 3499451),
              ("hogares", "SELECT COUNT(DISTINCT hogar_key) FROM personas_2023 "
                          "WHERE hogar_key IS NOT NULL", 1255062),
@@ -178,6 +182,10 @@ PREGUNTAS_B = [
     ("edad-a", None, "¿Cuántas personas mayores de 65 años hay en Uruguay?", "ok"),
     ("edad-b", None, "¿Cuántas personas de 65 años y más hay en Uruguay?", "ok"),
     ("ancla", None, "¿Cuántas personas hay en Uruguay?", "ok"),
+    # 1996: "desocupadas" son condocup 3..6 = 140.476. El error a atajar es contestar
+    # 182.708 (total menos condocup='1'), que mete adentro las 42.232 viviendas
+    # OCUPADAS con moradores ausentes, o contestar el total de viviendas sin filtrar.
+    ("viv-desocupadas", "1996", "¿Cuántas viviendas estaban desocupadas?", "desocupadas_1996"),
 ]
 
 
@@ -210,6 +218,12 @@ def capa_b():
                 ok = bool(r.get("ok")) and bool(r.get("opciones"))
             elif comprobacion == "sin_filtro_sexo":
                 ok = not any(p in sql for p in ("perph02", "sexo ="))
+            elif comprobacion == "desocupadas_1996":
+                # Se controla la CIFRA, no el SQL: hay más de una forma correcta de
+                # escribir el filtro, y una sola respuesta correcta.
+                vals = [v for f in (r.get("datos") or [{}]) for v in f.values()
+                        if isinstance(v, (int, float))]
+                ok = bool(r.get("ok")) and vals[:1] == [140476]
             else:
                 ok = bool(r.get("ok"))
             control("B/%s" % ident, "%s · %s" % (censo, pregunta[:40]), ok,

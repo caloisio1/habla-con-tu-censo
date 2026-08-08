@@ -16,10 +16,20 @@ desde antes de 1996 y los barrios son la clasificación de 1985, la misma en los
 tres censos (verificado: los 62 códigos de barrio calzan 1 a 1 con los polígonos,
 y la población por código correlaciona 0,97 entre 1996 y 2004).
 
-Secciones censales, segmentos y localidades NO se mapean: esos marcos se
-redibujaron entre censos y pintar el código de 1996 sobre el polígono de 2011
-daría un dato falso. La cartografía propia de esos años que tenemos son planos en
-PDF, no geometrías.
+Las SECCIONES censales sí se mapean: el conjunto de códigos es idéntico en los
+cuatro censos departamento por departamento, y los 232 polígonos cubren todos los
+códigos de 1996 y 2004.
+
+Los SEGMENTOS se mapean desde el 29-jul-2026, con cartografía propia
+reconstruida desde las planchas PDF del INE (que son vectoriales) y validada
+contra los microdatos. Está INCOMPLETA y se publica acotada: solo los segmentos
+de las localidades que salieron enteras y sin solaparse — 1.238 de 3.967 en 2004
+y 586 de 3.958 en 1996. Fuera de eso no se dibuja nada, por pertenencia al
+conjunto de polígonos.
+
+Las LOCALIDADES no se mapean: la localidad no es un nivel de la jerarquía censal
+(departamento -> sección -> segmento), se apoya en los segmentos pero cruza
+secciones.
 
 La clave del LLM la toma del entorno; no se escribe en ningún archivo.
 """
@@ -30,7 +40,7 @@ import sqlite3
 import usage_log
 import registro
 from sql_guard_historicos import SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
-from comun import llm, pipeline, rechazos, sinonimos
+from comun import codigos, llm, pipeline, rechazos, sinonimos
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
@@ -48,6 +58,32 @@ TOPE_REDACTOR = int(os.environ.get("CENSO_TOPE_REDACTOR", "1600"))
 # compartido por los cuatro censos.
 
 _SECCIONES = None
+_SEGMENTOS = {}
+
+
+def segmentos_con_poligono(censo):
+    """geo_codigo (dpto*100000 + secc*1000 + segm) con polígono, por censo.
+
+    La cartografía de segmentos se reconstruyó desde las planchas del INE y está
+    INCOMPLETA (74% de los segmentos en 2004, 67% en 1996). Solo se publican los
+    de las localidades que salieron ENTERAS y sin solaparse entre sí: 1.238
+    segmentos en 2004 y 586 en 1996. El resto no tiene polígono a propósito.
+
+    Como la validación en construir_mapa es por pertenencia a este conjunto, una
+    consulta que toque un solo segmento sin polígono no dibuja nada. Es lo
+    correcto: media localidad pintada se leería como la localidad entera.
+    """
+    if censo not in ("1996", "2004"):
+        return set()
+    if censo not in _SEGMENTOS:
+        import json
+        ruta = os.path.join(AQUI, "app", "static", "segmentos_%s.geojson" % censo)
+        try:
+            with open(ruta, encoding="utf-8") as fh:
+                _SEGMENTOS[censo] = {f["properties"]["cod"] for f in json.load(fh)["features"]}
+        except (OSError, KeyError, ValueError):
+            _SEGMENTOS[censo] = set()
+    return _SEGMENTOS[censo]
 
 
 def secciones_con_poligono():
@@ -86,8 +122,18 @@ REGLAS_COMUNES = """Reglas estrictas (dialecto SQLite):
 - Solo SELECT y SIEMPRE agregado; nunca filas individuales.
 - Agregá SIEMPRE COUNT(*) AS n_crudo por celda: es el conteo que habilita la supresión
   de confidencialidad. NO lo narres, es control interno.
+- n_crudo va ADEMÁS de la métrica pedida, NUNCA como única columna: la métrica lleva su
+  propio alias (personas / hogares / viviendas). Un SELECT cuya única columna es n_crudo
+  se muestra VACÍO al usuario, porque n_crudo se oculta antes de presentar los datos.
+  Mal:  SELECT COUNT(*) AS n_crudo FROM personas_1996 WHERE edad >= 65
+  Bien: SELECT COUNT(*) AS personas, COUNT(*) AS n_crudo FROM personas_1996 WHERE edad >= 65
 - PERDIDOS: excluí SIEMPRE los NULL y los códigos marcados PERDIDOS en el esquema, de
   conteos, totales y denominadores. En porcentajes el denominador excluye los perdidos.
+- NO agregues columnas que no se pidieron. En particular, si la pregunta pide un CONTEO
+  no devuelvas además un porcentaje: un porcentaje cuyo denominador es el mismo universo
+  ya filtrado da siempre 100 % y ocupa el lugar de la cifra real en pantalla.
+  Mal:  ... COUNT(*) AS viviendas, 100.0*COUNT(*)/(SELECT COUNT(*) FROM v WHERE <mismo filtro>)
+  Si pide un porcentaje, el denominador es el universo SIN el filtro que se está midiendo.
 - UNIVERSO: si la variable tiene universo declarado en su etiqueta (3 años o más, mujeres
   de 15 o más, viviendas ocupadas con moradores presentes, etc.), respetalo en el filtro
   y en el denominador.
@@ -95,19 +141,39 @@ REGLAS_COMUNES = """Reglas estrictas (dialecto SQLite):
 MAPAS (tres niveles, ver abajo): si el desglose es por DEPARTAMENTO, por SECCIÓN CENSAL o
 por BARRIO DE MONTEVIDEO, agregá el código de la unidad geográfica con el alias EXACTO
 'geo_codigo' y su nombre con alias 'geo_nombre' (del nomenclátor), y agrupá por el código:
-  - por departamento -> CAST(dpto AS INTEGER) AS geo_codigo, d.nombre AS geo_nombre,
-    con JOIN cod_departamentos d ON <tabla>.dpto = d.dpto ... GROUP BY dpto, d.nombre
-  - por barrio de Montevideo -> CAST(barrio AS INTEGER) AS geo_codigo, b.nombre AS geo_nombre,
-    con JOIN cod_barrios_mvd b ON CAST(<tabla>.barrio AS INTEGER) = CAST(b.barrio AS INTEGER),
-    filtrando Montevideo (dpto='01') y CAST(barrio AS INTEGER) > 0 ... GROUP BY barrio, b.nombre
+  REGLA QUE VALE PARA LOS CUATRO: aliasá la tabla de datos como t (<tabla> AS t) y
+  CALIFICÁ SIEMPRE sus columnas (t.dpto, t.secc, t.barrio), en el SELECT y en el
+  GROUP BY. Sin el alias, 'dpto' aparece en las dos tablas del JOIN, SQLite corta con
+  'ambiguous column name: dpto' y la consulta se pierde entera.
+  - por departamento -> CAST(t.dpto AS INTEGER) AS geo_codigo, d.nombre AS geo_nombre,
+    con <tabla> AS t JOIN cod_departamentos d ON t.dpto = d.dpto ... GROUP BY t.dpto, d.nombre
+  - por barrio de Montevideo -> CAST(t.barrio AS INTEGER) AS geo_codigo, b.nombre AS geo_nombre,
+    con <tabla> AS t JOIN cod_barrios_mvd b ON CAST(t.barrio AS INTEGER) = CAST(b.barrio AS INTEGER),
+    filtrando Montevideo (t.dpto='01') y CAST(t.barrio AS INTEGER) > 0 ... GROUP BY t.barrio, b.nombre
     El CAST en LAS DOS PATAS del join es OBLIGATORIO: el código de barrio no siempre está
     guardado con el mismo formato que el nomenclátor ('1' vs '01'), y sin CAST el join
     descarta EN SILENCIO los barrios de un dígito (Ciudad Vieja, Centro, Pocitos, Buceo...).
-  - por sección censal -> CAST(dpto AS INTEGER)*100 + CAST(secc AS INTEGER) AS geo_codigo,
-    d.nombre || ' — sección ' || CAST(secc AS INTEGER) AS geo_nombre,
-    con JOIN cod_departamentos d ON <tabla>.dpto = d.dpto ... GROUP BY dpto, secc, d.nombre
-NO uses geo_codigo en ningún otro corte geográfico (segmento, zona, localidad): la
-aplicación no tiene la cartografía de esos marcos para este censo.
+  - por sección censal -> CAST(t.dpto AS INTEGER)*100 + CAST(t.secc AS INTEGER) AS geo_codigo,
+    d.nombre || ' — sección ' || CAST(t.secc AS INTEGER) AS geo_nombre,
+    con <tabla> AS t JOIN cod_departamentos d ON t.dpto = d.dpto ... GROUP BY t.dpto, t.secc, d.nombre
+  - por segmento censal -> CAST(t.dpto AS INTEGER)*100000 + CAST(t.secc AS INTEGER)*1000
+    + CAST(t.segm AS INTEGER) AS geo_codigo,
+    d.nombre || ' — secc ' || CAST(t.secc AS INTEGER) || ' segm ' || CAST(t.segm AS INTEGER)
+    AS geo_nombre, con <tabla> AS t JOIN cod_departamentos d ON t.dpto = d.dpto
+    ... GROUP BY t.dpto, t.secc, t.segm, d.nombre
+    CALIFICÁ SIEMPRE con el alias de la tabla (t.dpto, no dpto): con el JOIN al
+    nomenclátor la columna 'dpto' queda ambigua y la consulta falla.
+    El segmento es el corte MÁS FINO que se dibuja y la cartografía está INCOMPLETA:
+    solo hay polígonos donde la localidad entera pudo reconstruirse. Usalo únicamente
+    si la pregunta pide segmentos de UNA localidad o UNA sección concreta; si no hay
+    polígono para algún código, la aplicación no dibuja el mapa y muestra solo la tabla.
+    NUNCA agrupes por segmento un departamento entero, y en particular NUNCA en
+    MONTEVIDEO: son más de mil segmentos, la tabla se corta igual en 300 filas y de
+    Montevideo hay UN solo segmento con polígono. Si la pregunta pide "Montevideo por
+    segmento", respondé por SECCIÓN CENSAL o por BARRIO, que sí tienen cartografía
+    completa, y aclaralo en el geo_nombre.
+NO uses geo_codigo en ningún otro corte geográfico (zona, localidad): la aplicación no
+tiene la cartografía de esos marcos para este censo.
 - Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE"""
 
 SYS_REDACTA_BASE = (
@@ -121,6 +187,14 @@ SYS_REDACTA_BASE = (
     "estadístico: el sistema agrega esa nota automáticamente al final.\n"
     "NO menciones ni narres la columna 'n_crudo' (conteo interno de control para la "
     "supresión): no aparece en la respuesta al usuario.\n"
+    "CÓDIGOS: cuando abajo venga la leyenda de codificaciones, nombrá SIEMPRE la etiqueta "
+    "y NUNCA el número pelado ('de uso temporal', no 'código 3'). Esa leyenda es el "
+    "diccionario de la variable: ya lo tenés, acá mismo.\n"
+    "NO inventes limitaciones. Tenés todo lo necesario en este mensaje: no digas que no "
+    "revisaste el diccionario, que no sabés qué significa un código, que te falta el "
+    "codebook ni que necesitás otra fuente. Tampoco ofrezcas buscar archivos, consultar "
+    "documentación ni 'lanzar otra consulta': no ejecutás nada, solo narrás lo que ya "
+    "está acá. Si un dato realmente no está en lo provisto, decilo en una línea y punto.\n"
     "NO narres las banderas de registro (per, viv, hog) ni las claves internas: son la "
     "mecánica de la tabla, no una característica de la población. Decí 'personas', "
     "'viviendas' u 'hogares' a secas.\n"
@@ -155,6 +229,7 @@ class Motor:
         # codificación de las variables que aparecen en el SQL, no las ~110.
         self._lineas = [ln.strip() for ln in self.esquema.splitlines()
                         if ln.lstrip().startswith("- ")]
+        self._mapa_codigos = None   # se arma en el primer uso (ver mapa_codigos)
 
     # -- etapas LLM -------------------------------------------------------
     def generar_sql(self, pregunta, contexto=None):
@@ -222,7 +297,7 @@ class Motor:
 
     # -- mapa -------------------------------------------------------------
     @staticmethod
-    def construir_mapa(sql, filas, suprimidas):
+    def construir_mapa(sql, filas, suprimidas, censo=None):
         """Si el SQL emitió 'geo_codigo', arma {nivel, datos:[{clave,valor}]}.
 
         Solo dos niveles (ver el encabezado del módulo). El nivel se decide por la
@@ -240,14 +315,41 @@ class Motor:
         geo_key = next((k for k in ejemplo if k.lower() == "geo_codigo"), None)
         if geo_key is None:
             return None
-        m = re.search(r"group\s+by\s+(.+?)(?:\s+order\s+by\b|\s+limit\b|$)",
-                      sql, re.IGNORECASE | re.DOTALL)
-        clausula = m.group(1).lower() if m else ""
-        # Un corte MÁS FINO que el nivel dibujable (segmento, zona, localidad)
-        # pintado como departamento sería un mapa FALSO: mejor tabla sin mapa.
-        if re.search(r"\b(segm|zona|loc|ccz|secpol)\b", clausula):
+        # El GROUP BY que decide el nivel es el del SELECT RAÍZ, y hay que sacarlo
+        # PARSEANDO, no con una expresión regular. El regex tomaba el primer
+        # 'group by' del texto: con una subconsulta agrupada —el LEFT JOIN al
+        # nomenclátor de localidades, que el modelo usa para resolver un nombre—
+        # capturaba desde el GROUP BY interno y se llevaba puesto el 'ON c.cod =
+        # p.loc' de más adelante. Eso hacía matchear 'loc' y descartaba el mapa
+        # en silencio, aun con todos los códigos bien. Afectaba también a
+        # departamento y sección, no solo a segmento.
+        clausula = ""
+        try:
+            import sqlglot
+            raiz = sqlglot.parse_one(sql, read="sqlite")
+            grupo = raiz.args.get("group") if raiz is not None else None
+            if grupo is not None:
+                clausula = grupo.sql(dialect="sqlite").lower()
+        except Exception:
+            clausula = ""
+        if not clausula:
+            m = re.search(r"group\s+by\s+(.+?)(?:\s+order\s+by\b|\s+limit\b|$)",
+                          sql, re.IGNORECASE | re.DOTALL)
+            clausula = m.group(1).lower() if m else ""
+        # Un corte MÁS FINO que el nivel dibujable (zona, localidad) pintado como
+        # departamento sería un mapa FALSO: mejor tabla sin mapa.
+        if re.search(r"\b(zona|loc|ccz|secpol)\b", clausula):
             return None
-        if re.search(r"\bbarrio\b", clausula):
+        if re.search(r"\bsegm\b", clausula):
+            # Segmento censal: la cartografía se reconstruyó desde las planchas
+            # del INE y está INCOMPLETA. Solo se publican los segmentos de las
+            # localidades que salieron enteras y sin solaparse entre sí (1.238 en
+            # 2004, 586 en 1996). Como la validación de abajo es por pertenencia
+            # al conjunto, una consulta que toque un segmento sin polígono no
+            # dibuja NADA, que es el comportamiento correcto: media localidad
+            # pintada se leería como la localidad entera.
+            nivel, validos = "segmento_%s" % censo, segmentos_con_poligono(censo)
+        elif re.search(r"\bbarrio\b", clausula):
             nivel, validos = "barrio_hist", set(range(1, 63))
         elif re.search(r"\bsecc\b", clausula):
             # Sección censal: el marco es el mismo en los 4 censos (mismos códigos
@@ -294,12 +396,33 @@ class Motor:
         return {"nivel": nivel, "datos": datos, "suprimidas": suprimidas}
 
     # -- pipeline ---------------------------------------------------------
-    @staticmethod
-    def _ocultar_n_crudo(filas, columnas_conteo):
-        """El n crudo no se muestra: revelaría lo que la supresión oculta."""
+    def mapa_codigos(self):
+        """{variable: {código: etiqueta}} de este censo, leído una sola vez."""
+        if self._mapa_codigos is None:
+            self._mapa_codigos = codigos.mapa_desde_lineas(self._lineas)
+        return self._mapa_codigos
+
+    def _ocultar_n_crudo(self, filas, columnas_conteo):
+        """El n crudo no se muestra: revelaría lo que la supresión oculta.
+
+        Con una salvedad: si n_crudo es la ÚNICA columna, ocultarlo deja la fila
+        vacía y el usuario ve una tabla en blanco bajo un texto que sí cita la
+        cifra. En ese caso el n crudo ES la métrica pedida (un conteo sin
+        desglose, donde no hay nada que la supresión pueda revelar), así que se
+        conserva con el nombre de la unidad. Red de seguridad del prompt: el
+        modelo tiene que pedir la métrica aparte, pero esto evita que un desliz
+        suyo se vea como una respuesta vacía.
+        """
         quitar = {c.lower() for c in columnas_conteo
                   if c.lower() in ("n_crudo", "n") or c.lower().startswith("conteo_")}
-        return [{k: v for k, v in f.items() if k.lower() not in quitar} for f in filas]
+        salida = []
+        for f in filas:
+            visible = {k: v for k, v in f.items() if k.lower() not in quitar}
+            if not visible and f:
+                unidad = self.unidad_conteo(columnas_conteo, "")
+                visible = {unidad: next(iter(f.values()))}
+            salida.append(visible)
+        return salida
 
     def preguntar(self, texto):
         # 1. Indicador ambiguo o variable no relevada: se responde SIN llamar al
@@ -361,6 +484,11 @@ class Motor:
             return dict(rechazos.a_respuesta(rechazo, sql=sql_seguro),
                         veredicto="OK", celdas_suprimidas=suprimidas)
 
+        # Códigos -> etiquetas ANTES de narrar: el redactor no puede confundir un
+        # número con una categoría si ya no hay números que confundir. Las columnas
+        # geográficas quedan crudas (las necesita el mapa).
+        filas = codigos.etiquetar(filas, self.mapa_codigos())
+
         respuesta = {"ok": True, "sql": sql_seguro, "veredicto": "OK",
                      "respuesta": self.redactar(texto, sql_seguro, filas, suprimidas,
                                                 columnas_conteo,
@@ -375,7 +503,7 @@ class Motor:
             respuesta["opciones"] = alternativas
         # El mapa se arma con las filas YA suprimidas: lo que no se publica en la
         # tabla tampoco se pinta.
-        mapa = self.construir_mapa(sql_seguro, filas, suprimidas)
+        mapa = self.construir_mapa(sql_seguro, filas, suprimidas, self.censo)
         if mapa:
             respuesta["mapa"] = mapa
         pipeline.recordar_resultado(sql_seguro, self.censo, respuesta)

@@ -172,7 +172,7 @@ def _literales(arbol, censo, mapa=None, por_defecto=True):
 def resolver_en_sql(sql, censo, pregunta=None):
     """Resuelve las entidades nombradas del SQL.
 
-    Devuelve (sql_corregido, interpretaciones). Lanza EntidadNoResuelta cuando hay
+    Devuelve (sql_corregido, interpretaciones, alternativas). Lanza EntidadNoResuelta cuando hay
     que preguntar en vez de ejecutar. `pregunta` es el texto original: sirve para
     saber si el usuario ya dijo de qué tipo de entidad habla ("el departamento de
     Maldonado") y no volver a preguntárselo.
@@ -181,9 +181,13 @@ def resolver_en_sql(sql, censo, pregunta=None):
     try:
         arboles = [a for a in sqlglot.parse(sql, read="sqlite") if a is not None]
     except Exception:
-        return sql, []          # el guard se encarga del SQL que no parsea
+        # Tres valores, como el return normal: el que espera sobre_sql(). Estas dos
+        # salidas tempranas quedaron en dos cuando se agregaron las alternativas, y
+        # reventaban con ValueError —un 500— en cuanto un SQL no traía entidades que
+        # resolver, que es el caso de cualquier consulta sin nombre propio.
+        return sql, [], []      # el guard se encarga del SQL que no parsea
     if not arboles:
-        return sql, []
+        return sql, [], []
 
     interpretaciones, alternativas, cambiado = [], [], False
     for arbol in arboles:

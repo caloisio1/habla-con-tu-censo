@@ -16,22 +16,31 @@ es lo que impide que el mismo agujero se repita variable por variable.
 
 Verificado contra la base: cada uno de estos códigos aparece como valor máximo de
 su columna y no corresponde a una categoría válida.
+
+Actualización 28-jul-2026: se suma **5555 = secreto estadístico** a las mismas
+variables. Antes no hacía falta porque las 53 personas con el cuestionario
+protegido se descartaban en la carga; ahora se cargan (son personas censadas, ver
+`datos/NOTAS_CALIDAD.md`) y su 5555 queda en las columnas crudas. Medido: el
+promedio de años de estudio de Montevideo excluyendo solo el 88 pasaba de 8,60 a
+8,66 por 12 filas. En las ~90 variables CATEGÓRICAS que también traen 5555 la
+regla va declarada de forma global en el prompt (`app/main.py`, bloque PERDIDOS),
+porque enumerarlas acá una por una sería ruido para el modelo.
 """
 
 # censo -> {variable: (codigos_perdidos, motivo)}
 CENTINELAS = {
     "2011": {
-        "Años_estudio": ((88,), "no relevado"),
-        "HOGHD00": ((88,), "no relevado"),
-        "HOGHD01": ((88,), "no relevado"),
-        "HOGCE06": ((88,), "no relevado"),
-        "HOGCE09": ((88,), "no relevado"),
-        "HOGCE10": ((88,), "no relevado"),
-        "HOGCE12": ((88,), "no relevado"),
-        "HOGCE13": ((88,), "no relevado"),
-        "PERMI01_4": ((9999,), "país no declarado"),
-        "PERMI06_4": ((9999,), "país no declarado"),
-        "PERMI07_4": ((9999,), "país no declarado"),
+        "Años_estudio": ((88, 5555), "no relevado / secreto estadístico"),
+        "HOGHD00": ((88, 5555), "no relevado / secreto estadístico"),
+        "HOGHD01": ((88, 5555), "no relevado / secreto estadístico"),
+        "HOGCE06": ((88, 5555), "no relevado / secreto estadístico"),
+        "HOGCE09": ((88, 5555), "no relevado / secreto estadístico"),
+        "HOGCE10": ((88, 5555), "no relevado / secreto estadístico"),
+        "HOGCE12": ((88, 5555), "no relevado / secreto estadístico"),
+        "HOGCE13": ((88, 5555), "no relevado / secreto estadístico"),
+        "PERMI01_4": ((9999, 5555), "país no declarado / secreto estadístico"),
+        "PERMI06_4": ((9999, 5555), "país no declarado / secreto estadístico"),
+        "PERMI07_4": ((9999, 5555), "país no declarado / secreto estadístico"),
     },
     # 1996 y 2004 declaran sus perdidos en el propio esquema generado
     # (`PERDIDOS: 99=NS/NC`), y 2023 los trae en el bloque `perdidos` del

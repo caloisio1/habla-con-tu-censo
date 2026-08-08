@@ -6,30 +6,85 @@ Fuente: microdatos del Censo 2011 (INE Uruguay), archivo
 ## Carga de `personas` (v4)
 
 - **Filas leídas del `.sav`:** 3.285.877
-- **Filas descartadas:** 53, por tener `departamento`, `sexo` o `edad` fuera de
-  rango o inválidos (misma regla de limpieza desde v3).
-- **Personas cargadas:** **3.285.824**
-- **Imputadas por moradores ausentes (`MA=1`) incluidas:** 34.223
+- **Filas descartadas:** **0** (desde el 28-jul-2026)
+- **Personas cargadas:** **3.285.877** = todas las del archivo
+- **Imputadas por moradores ausentes (`MA=1`):** **34.223**, que coincide exacto
+  con la cifra publicada por el INE
+- **Personas con `edad = NULL`:** 53, por secreto estadístico
+
+Hasta esa fecha se descartaban 53 filas. La nota decía que era "por
+`departamento`, `sexo` o `edad` fuera de rango o inválidos", y eso era falso:
+describía la regla del cargador, no lo que la regla rechazaba. Ninguna de las 53
+tenía departamento ni sexo inválidos. Las 53 salían por una sola causa,
+`PERNA01 = 5555`, que es el código de **secreto estadístico** del INE — no una
+edad corrupta.
+
+### Por qué ahora se cargan
+
+Las 53 filas **no son personas sueltas: son 19 hogares completos**. En cada uno de
+esos 19 hogares TODOS los integrantes están bajo secreto, así que el hogar
+desaparecía entero de la base. Recuperarlas suma **+53 personas, +19 hogares y
++19 viviendas**.
+
+Qué traen realmente esas filas: el secreto cubre casi todo el cuestionario, **de
+93 a 106 de las 145 variables vienen en 5555** (vivienda, hogar, educación,
+ascendencia, migración, actividad, NBI). Lo único utilizable es la **geografía**
+(departamento, sección, localidad), el **sexo** y las claves de hogar y vivienda.
+Solo 2 de las 53 son imputadas por moradores ausentes (`MA=1`).
+
+**Decisión (28-jul-2026, Carlos): se cargan.** Son personas que el censo contó;
+lo protegido es su cuestionario, no su existencia. Descartarlas era además
+incoherente con el resto del pipeline, que para cualquier otra variable mapea
+5555 a NULL y conserva la fila. Ahora `edad` queda en NULL —perdido, excluido de
+todo corte por edad— y las 53 suman a la población, al departamento y al sexo.
+
+**Consecuencia a tener presente:** el 5555 queda en las columnas CRUDAS (las
+crudas se guardan tal cual, por diseño), y solo 13 de las 145 variables lo traen
+etiquetado como `SECRETO ESTADISTICO` en el diccionario del INE. En las otras ~90
+el modelo no tendría cómo saber que es un perdido, así que la regla se declara de
+forma global en el prompt (`app/main.py`, bloque PERDIDOS): en este censo el
+código 5555 es secreto estadístico en cualquier variable, esté o no listada.
 
 ### Referencia oficial del INE
 - Población **censada:** 3.252.091
-- Población **contabilizada** (incluye 34.223 imputadas): 3.286.314
+- Imputadas por moradores ausentes: 34.223
+- Población **contabilizada** (censada + imputadas): **3.286.314**
 
-La cifra cargada (3.285.824) es la contabilizada (3.286.314) menos los 53
-descartes por datos inválidos y las diferencias de cobertura del archivo público.
+### Cuadre de la base contra la cifra publicada
+
+| | INE publicado | En la base | Diferencia |
+|---|---|---|---|
+| Contabilizada | 3.286.314 | 3.285.877 | −437 |
+| Censada (`MA=0`) | 3.252.091 | 3.251.654 | −437 |
+| Imputadas (`MA=1`) | 34.223 | 34.223 | **0** |
+
+La diferencia que queda **no es del pipeline**: el archivo público de microdatos
+ya trae 437 registros menos que el total contabilizado, y la base carga todas sus
+filas. La base es el **99,987%** de la población contabilizada. (Antes del
+28-jul-2026 la diferencia era de 490, porque el pipeline descartaba 53 filas más.)
+
+**Cómo se comunica:** la ficha del censo encabeza con la cifra PUBLICADA
+(3.286.314), que es la única cotejable contra un documento oficial, y muestra
+los registros de la base aparte. Nunca al revés: un total que no existe en
+ninguna publicación del INE no se puede presentar como "la población de 2011".
 
 ## Consistencia de hogares y `PERID` (diferencia de 7, por diseño)
 
-- `COUNT(DISTINCT hogar_key)` = **1.166.251** hogares
-- `COUNT(*) WHERE PERID=1`    = **1.166.244**
+- `COUNT(DISTINCT hogar_key)` = **1.166.270** hogares
+- `COUNT(*) WHERE PERID=1`    = **1.166.263**
 - **Diferencia: 7 hogares (0,0006%).**
 
-Causa: 7 de las 53 filas descartadas eran el **jefe de hogar** (`PERID=1`). Al
-descartar esa fila por `departamento`/`sexo`/`edad` inválidos, el hogar sigue
-existiendo (sobrevive por sus otros miembros con `PERID>=2`), pero se queda sin
-la persona `PERID=1`. Por eso el conteo de personas con `PERID=1` es 7 menor que
-el de hogares distintos. No hay hogares con `PERID=1` duplicado (0). Es un
-artefacto esperado de la limpieza de filas, no un error del pipeline.
+Causa: **son 7 hogares que en el archivo del INE ya vienen sin su fila `PERID=1`**
+— sus listados arrancan en `PERID=2` (uno de ellos tiene 22 personas, de la 2 a
+la 23). Verificado fila por fila contra el `.sav`: ninguna de las filas de esos 7
+hogares tiene el código 5555, así que **el descarte del pipeline no interviene**.
+No hay hogares con `PERID=1` duplicado (0), ni filas con `hogar_key` NULL (0).
+
+Ojo, porque esta nota decía otra cosa y era falsa: no es que "7 de las 53 filas
+descartadas eran el jefe de hogar". De las 53 descartadas, 19 son `PERID=1`, pero
+esos 19 hogares desaparecen ENTEROS de la base (todos sus integrantes tienen
+5555), así que aportan cero a los dos conteos y no pueden generar diferencia
+alguna. Las dos cosas son independientes.
 
 **Implicación práctica:** para contar hogares usá siempre
 `COUNT(DISTINCT hogar_key)`, no `COUNT(*) WHERE PERID=1`.

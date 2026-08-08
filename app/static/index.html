@@ -74,6 +74,24 @@
       </div>
       <button class="ask" type="submit">Preguntar</button>
     </form>
+    <!-- Botón + desplegable del diccionario: al lado de la pregunta, que es
+         donde hace falta saber qué variables hay y qué valores toman. -->
+    <div class="dicc-wrap">
+      <button type="button" id="btn-dicc" class="btn-dicc" aria-expanded="false" aria-controls="dicc-pop">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><line x1="8" y1="7.5" x2="16" y2="7.5"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        <span>Diccionario de variables</span>
+        <span class="btn-censo" id="dicc-censo">Censo 2023</span>
+        <span class="chev" aria-hidden="true">⌄</span>
+      </button>
+      <div class="dicc-pop" id="dicc-pop" hidden>
+        <div class="buscador">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="dicc-q" type="search" placeholder="Buscar variable, etiqueta o valor…" aria-label="Buscar en el diccionario" autocomplete="off">
+          <span class="cuenta" id="dicc-n"></span>
+        </div>
+        <div class="dicc-lista" id="dicc-body"></div>
+      </div>
+    </div>
   </div>
 
   <div class="ejemplos" aria-label="Ejemplos de preguntas">
@@ -82,6 +100,16 @@
   </div>
 
   <section id="historial" aria-live="polite" aria-label="Respuestas"></section>
+
+  <!-- Diccionario y documentación del censo seleccionado. Se cargan a demanda:
+       el contenido sale de los MISMOS esquemas que usa el motor para generar el
+       SQL, así que lo que se consulta acá no puede divergir de lo que se consulta. -->
+  <section class="ref" aria-label="Referencia del censo">
+    <details id="det-doc">
+      <summary><span class="ref-t">Documentación</span><span class="ref-c" id="doc-censo">Censo 2023</span></summary>
+      <div class="ref-body" id="doc-body"></div>
+    </details>
+  </section>
 </main>
 
 <footer>
@@ -102,6 +130,14 @@
         <p>Cada respuesta muestra la consulta SQL ejecutada.<br>
         <a href="https://github.com/caloisio1/habla-con-tu-censo" target="_blank" rel="noopener">Código abierto en GitHub</a></p>
       </div>
+    </div>
+    <div class="ine-box">
+      <h3>Organismo productor de los datos</h3>
+      <p><b>Instituto Nacional de Estadística</b><br>
+      Dirección: Santiago de Liniers 1280<br>
+      Teléfono: (598) 2902 7303<br>
+      <a href="https://www.gub.uy/instituto-nacional-estadistica/institucional/contacto" target="_blank" rel="noopener">Contacto</a><br>
+      Horario de atención: Lunes a Viernes de 09:00 a 17:00 horas</p>
     </div>
     <div class="legal">
       <span>Las cifras de personas del Censo 2023 son estimaciones del censo ponderado; hogares y viviendas son conteos exactos.</span>
@@ -144,6 +180,14 @@ const MAPA_CFG = {
   // abrevia los nombres compuestos distinto ('Pque. Batlle' / 'PARQUE BATLLE').
   barrio_hist:  { archivo: '/static/barrios_montevideo.geojson', prop: 'nro',
                   nombre: p => p.barrio, centro: [-34.86, -56.17], zoom: 11 },
+  // Segmentos de 1996 y 2004: cartografía propia, reconstruida desde las planchas
+  // PDF del INE. Va acotada a las localidades que salieron enteras y sin solapes
+  // (1.238 segmentos en 2004, 586 en 1996); si la consulta toca uno sin polígono,
+  // el motor no manda mapa. El join es por 'cod' = dpto*100000 + secc*1000 + segm.
+  segmento_1996: { archivo: '/static/segmentos_1996.geojson', prop: 'cod',
+                   nombre: p => `Secc ${p.secc}, segmento ${p.segm}`, centro: null },
+  segmento_2004: { archivo: '/static/segmentos_2004.geojson', prop: 'cod',
+                   nombre: p => `Secc ${p.secc}, segmento ${p.segm}`, centro: null },
   // Niveles del Censo 2023: GeoJSON estáticos públicos servidos desde /static/geo_2023/.
   // Join por 'codigo' (código compuesto) que emite construir_mapa_2023.
   depto_2023:     { archivo: '/static/geo_2023/geo_2023_departamentos.json', prop: 'codigo',
@@ -160,11 +204,26 @@ const MAPA_CFG = {
 
 const SUPR_MSG = 'Suprimido por confidencialidad: menos de 5 casos.';
 
-function color(t){  // escala secuencial teal, t en [0,1], usa las variables de la paleta
+// Escala secuencial dorado -> azul (los dos colores de la identidad gráfica), t en [0,1].
+//
+// Es de DOS tonos, que normalmente se reserva para escalas divergentes. Vale acá
+// porque la luminosidad baja de forma estrictamente monótona del dorado claro al
+// azul profundo (verificado paso por paso en OKLCH): el ojo lee "más oscuro = más",
+// no "hay un centro neutro". Ese centro inexistente es el riesgo de mezclar dos
+// tonos en un mapa de conteos, y es lo que la monotonía evita.
+//
+// La rampa viene de --map-ramp (siete pasos) y se recorre por tramos: interpolar
+// directo entre los dos extremos pasaría por un gris embarrado en el medio.
+// En modo oscuro la rampa va invertida, porque sobre fondo oscuro el azul profundo
+// desaparece y el que tiene que destacar es el valor alto.
+function color(t){
   const cs = getComputedStyle(document.documentElement);
-  const parse = v => v.trim().replace('#','').match(/.{2}/g).map(h=>parseInt(h,16));
-  const a = parse(cs.getPropertyValue('--map-lo')), b = parse(cs.getPropertyValue('--map-hi'));
-  const c = a.map((x,i)=>Math.round(x+(b[i]-x)*t));
+  const pasos = cs.getPropertyValue('--map-ramp').split(',')
+    .map(v => v.trim().replace('#','').match(/.{2}/g).map(h => parseInt(h,16)));
+  const x = Math.min(Math.max(t, 0), 1) * (pasos.length - 1);
+  const i = Math.min(Math.floor(x), pasos.length - 2);
+  const f = x - i;
+  const c = pasos[i].map((v, k) => Math.round(v + (pasos[i+1][k] - v) * f));
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 function fmt(v){ return Number.isInteger(v) ? v.toLocaleString('es-UY') : v.toFixed(2).replace('.',','); }
@@ -315,9 +374,15 @@ function cifraDestacada(j){
     typeof v === 'number' && !CRUDOS.includes(k.toLowerCase()));
   if (!nums.length) return '';
   const esPct = k => /porcentaje|pct|porc|proporcion/i.test(k);
-  const par = nums.find(([k]) => esPct(k))
-           || nums.find(([k]) => /persona|poblacion|habitante|hogar|vivienda|mujer|varon|hombre|afro/i.test(k))
-           || nums[0];
+  // Un porcentaje de 100 en una fila única no informa nada: sale de un denominador
+  // que es el mismo universo ya filtrado (desocupadas sobre desocupadas). Como el
+  // porcentaje tiene la máxima prioridad, ese 100 % le robaba el lugar a la cifra
+  // real y quedaba de titular. Si hay otra métrica, esa es la que va en grande.
+  const utiles = nums.filter(([k, v]) => !(esPct(k) && v >= 100));
+  const cand = utiles.length ? utiles : nums;
+  const par = cand.find(([k]) => esPct(k))
+           || cand.find(([k]) => /persona|poblacion|habitante|hogar|vivienda|mujer|varon|hombre|afro/i.test(k))
+           || cand[0];
   const [clave, valor] = par;
   const etiqueta = clave.replace(/_/g,' ').replace(/^porcentaje/,'porcentaje');
   const texto = esPct(clave) ? `${fmt(valor)} %` : fmt(valor);
@@ -451,7 +516,13 @@ async function preguntar(texto){
     const res = await fetchT('/preguntar', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({texto, censo})
-    }, 90000);  // tope 90s: el backend acota el LLM a 60s; margen para red
+    // Tope 150s. El backend acota cada llamada al modelo a 60s y ya NO reintenta
+    // los timeouts, pero el peor caso medido de punta a punta es ~93s (el
+    // proveedor tarda en cerrar). Con el tope viejo de 90s el navegador abortaba
+    // ANTES de que llegara la respuesta y tapaba el motivo real con el aviso
+    // genérico de conexión. La cadena tiene que ser backend < frontend < nginx:
+    // el que corta debe ser este, que es el único que sabe explicar por qué.
+    }, 150000);
     const j = await res.json();
     stop();
     if (j.ok === false) rellenarAviso(card, texto, j);
@@ -476,9 +547,123 @@ function sincronizarFuente(){
   const b = document.getElementById('fuente-datos');
   if (b) b.textContent = `Censo ${censoSel()}${censoSel() === '2004' ? ' Fase 1' : ''}, INE Uruguay`;
 }
+// ---------- Diccionario y documentación ----------
+// Un JSON por censo, generado desde los esquemas del motor (datos/generar_diccionarios.py).
+// Se piden a demanda y quedan en memoria: no se descarga nada hasta que se abre la sección.
+const DICC = {};
+async function datosCenso(censo){
+  if (!DICC[censo]) {
+    const r = await fetchT(`/static/dicc/dicc_${censo}.json?v=__V__`, {}, 20000);
+    if (!r.ok) throw new Error('no se pudo cargar el diccionario');
+    DICC[censo] = await r.json();
+  }
+  return DICC[censo];
+}
+
+function pintarDoc(d){
+  const o = d.doc, cif = (o.cifras || []).map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('');
+  document.getElementById('doc-body').innerHTML = `
+    <p class="ref-lead">${esc(o.nombre_oficial)} — INE Uruguay.</p>
+    <p class="ref-p"><b>${esc(o.ponderacion)}</b></p>
+    ${cif ? `<div class="tablewrap"><table class="ref-tab"><tbody>${cif}</tbody></table></div>` : ''}
+    <h4>Cómo se cuenta</h4><p class="ref-p">${esc(o.unidades)}</p>
+    <h4>Mapas disponibles</h4><p class="ref-p">${esc(o.mapas)}</p>
+    ${(o.avisos||[]).length ? `<h4>Advertencias de este censo</h4><ul class="ref-ul">${o.avisos.map(a=>`<li>${esc(a)}</li>`).join('')}</ul>` : ''}
+    <h4>Consideraciones importantes</h4><ul class="ref-ul">${(o.comun||[]).map(a=>`<li>${esc(a)}</li>`).join('')}</ul>`;
+}
+
+// Búsqueda tolerante: sin distinguir mayúsculas NI TILDES, que es lo que rompe
+// una búsqueda en español (las etiquetas del INE vienen en mayúsculas con
+// acento: 'ÉTNICO', 'EDUCACIÓN'). 'afro', 'Afro', 'etnico' y 'ÉTNICO' matchean
+// lo mismo. El texto normalizado de cada variable se calcula una sola vez.
+function norm(s){
+  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+function indexar(d){
+  if (d._indexado) return d;
+  d.tablas.forEach(t => t.variables.forEach(v => {
+    v._b = norm(`${v.nombre} ${v.etiqueta || ''} ${v.descripcion || ''} ` +
+                (v.codigos || []).map(c => `${c.codigo} ${c.etiqueta}`).join(' '));
+  }));
+  d._indexado = true;
+  return d;
+}
+
+function pintarDicc(d, filtro){
+  indexar(d);
+  // varias palabras = todas tienen que aparecer ("afro mujer"), en cualquier orden
+  const términos = norm(filtro).split(/\s+/).filter(Boolean);
+  let n = 0;
+  const bloques = d.tablas.map(t => {
+    const vars = t.variables.filter(v => términos.every(x => v._b.includes(x)));
+    n += vars.length;
+    if (!vars.length) return '';
+    return `<h4 class="ref-tabla">${esc(t.tabla)} <span class="ref-n">${vars.length}</span></h4>` +
+      vars.map(v => {
+        const cods = (v.codigos || []).map(c =>
+          `<tr class="${c.perdido ? 'perdido' : ''}"><td class="cod">${esc(c.codigo)}</td><td>${esc(c.etiqueta)}${c.perdido ? ' <span class="tag-p">perdido</span>' : ''}</td></tr>`).join('');
+        // Se muestra el nombre FORMAL de la variable (su etiqueta), no el nombre
+        // técnico de la columna: 'asc_afro' no le dice nada a quien consulta.
+        // El nombre técnico igual se indexa, así que buscarlo sigue funcionando.
+        const titulo = (v.etiqueta || '').trim() || v.nombre;
+        // La pregunta textual del formulario va ADENTRO, no en el título: el
+        // título es el nombre corto, como en el diccionario de 2011.
+        const desc = v.descripcion ? `<p class="ref-p desc">${esc(v.descripcion)}</p>` : '';
+        return `<details class="var"><summary><span class="et">${esc(titulo)}</span></summary>` + desc +
+          (cods ? `<div class="tablewrap"><table class="ref-tab cods"><tbody>${cods}</tbody></table></div>`
+                : (desc ? '' : `<p class="ref-p sin">Sin lista de códigos: es un valor numérico o de texto libre.</p>`)) +
+          `</details>`;
+      }).join('');
+  }).join('');
+  document.getElementById('dicc-body').innerHTML = bloques || '<p class="ref-p sin">Ninguna variable coincide con la búsqueda.</p>';
+  document.getElementById('dicc-n').textContent = `${n} de ${d.n_variables}`;
+}
+
+const btnDicc = document.getElementById('btn-dicc'), popDicc = document.getElementById('dicc-pop'),
+      inpDicc = document.getElementById('dicc-q');
+
+async function abrirDicc(abrir){
+  btnDicc.setAttribute('aria-expanded', String(abrir));
+  popDicc.hidden = !abrir;
+  // Los mapas de Leaflet crean capas con z-index 400: sin esto el desplegable
+  // queda TAPADO por el mapa de una respuesta anterior, que es justo el caso de
+  // uso (consultar el diccionario mientras se trabaja sobre un resultado).
+  document.querySelector('.panel').style.zIndex = abrir ? '60' : '';
+  if (!abrir) return;
+  document.getElementById('dicc-body').innerHTML = '<p class="ref-p sin">Cargando…</p>';
+  try {
+    pintarDicc(await datosCenso(censoSel()), inpDicc.value);
+    inpDicc.focus();
+  } catch (_) {
+    document.getElementById('dicc-body').innerHTML = '<p class="ref-p sin">No se pudo cargar el diccionario.</p>';
+  }
+}
+btnDicc.onclick = () => abrirDicc(popDicc.hidden);
+// cerrar al hacer clic afuera o con Escape, como cualquier desplegable
+document.addEventListener('click', e => {
+  if (!popDicc.hidden && !popDicc.contains(e.target) && !btnDicc.contains(e.target)) abrirDicc(false);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !popDicc.hidden) { abrirDicc(false); btnDicc.focus(); } });
+inpDicc.addEventListener('input', async e => {
+  try { pintarDicc(await datosCenso(censoSel()), e.target.value); } catch (_) {}
+});
+
+async function sincronizarRef(){
+  const censo = censoSel(), etiq = `Censo ${censo}${censo === '2004' ? ' Fase 1' : ''}`;
+  document.getElementById('doc-censo').textContent = etiq;
+  document.getElementById('dicc-censo').textContent = etiq;
+  if (!popDicc.hidden) {
+    try { pintarDicc(await datosCenso(censo), inpDicc.value); } catch (_) {}
+  }
+  if (!document.getElementById('det-doc').open) return;
+  try { pintarDoc(await datosCenso(censo)); }
+  catch (_) { document.getElementById('doc-body').innerHTML = '<p class="ref-p sin">No se pudo cargar la documentación.</p>'; }
+}
+document.getElementById('det-doc').addEventListener('toggle', sincronizarRef);
+
 renderChips();
 sincronizarFuente();
-document.querySelectorAll('input[name="censo"]').forEach(r => r.onchange = () => { renderChips(); sincronizarFuente(); });
+document.querySelectorAll('input[name="censo"]').forEach(r => r.onchange = () => { renderChips(); sincronizarFuente(); sincronizarRef(); });
 
 document.getElementById('btn-como').onclick = () => document.getElementById('modal').showModal();
 document.getElementById('modal').addEventListener('click', e => {

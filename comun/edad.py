@@ -107,7 +107,8 @@ DOMINIO = {
     "2004": {"columna": "edad", "excluir": (),
              "nota": "la edad llega hasta 118 y no usa códigos centinela"},
     "2011": {"columna": "edad", "excluir": (),
-             "nota": "la edad llega hasta 111 y no usa códigos centinela"},
+             "nota": "la edad llega hasta 111 y no usa códigos centinela; las 53 personas "
+                     "con la edad bajo secreto estadístico ya vienen con edad NULL"},
     "2023": {"columna": "PERNA01", "excluir": (7777, 8888, 9898, 9999),
              "nota": "99 es una edad VÁLIDA, no un perdido: NO la excluyas"},
 }

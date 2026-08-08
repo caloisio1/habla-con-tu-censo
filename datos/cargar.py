@@ -107,28 +107,45 @@ def construir(sav: Path, db: Path) -> None:
     placeholders = ",".join("?" * len(columnas))
     insert = f"INSERT INTO personas ({', '.join(_q(n) for n in columnas)}) VALUES ({placeholders})"
 
-    total = descartadas = imputadas = 0
+    total = descartadas = imputadas = sin_edad = 0
     lote = []
 
     def fila_a_tupla(idx, valores):
         """valores: tupla en orden raw_nombres. Devuelve la fila completa
-        (crudas + derivadas) o None si la fila se descarta (lógica v3)."""
-        nonlocal imputadas
+        (crudas + derivadas), o None si la fila se descarta por no tener
+        departamento o sexo utilizables."""
+        nonlocal imputadas, sin_edad
         g = lambda nombre: valores[idx[nombre]]
 
         # --- Aceptación de fila (idéntica a v3) ---
         ma = _codigo(g("MA")) if "MA" in idx else None
         if ma == 1:
             imputadas += 1
+        # Departamento y sexo SÍ deciden si la fila entra: sin ellos la persona no
+        # se puede ubicar ni contar en ningún corte.
         try:
             dpto_int = int(g(COL_DPTO))
             departamento = DEPARTAMENTOS[dpto_int]
             sexo = SEXO[int(g(COL_SEXO))]
-            edad = int(g(COL_EDAD))
-            if not 0 <= edad <= 115:
-                raise ValueError
         except (KeyError, ValueError, TypeError):
             return None
+
+        # La edad NO decide. Si viene bajo SECRETO ESTADÍSTICO (5555), no relevada o
+        # fuera de rango, la persona se carga con edad = NULL, que es como el pipeline
+        # trata cualquier otro perdido (ver ASC_AFRO / NBI acá abajo). Descartar la
+        # fila entera borraba gente que el censo SÍ contó: hasta v4 se perdían 53
+        # personas en 19 HOGARES COMPLETOS (el secreto se aplica al hogar entero: de
+        # 93 a 106 de las 145 variables vienen en 5555). De esas filas solo sirven
+        # departamento, sexo y las claves de hogar/vivienda, pero son personas
+        # censadas y tienen que sumar a la población.
+        try:
+            edad = int(g(COL_EDAD))
+            if not 0 <= edad <= 115:
+                edad = None
+        except (ValueError, TypeError):
+            edad = None
+        if edad is None:
+            sin_edad += 1
 
         # --- Derivadas (semántica v3) ---
         asc_afro = ASC_AFRO.get(_codigo(g(COL_AFRO)))
@@ -191,8 +208,9 @@ def construir(sav: Path, db: Path) -> None:
     con.close()
     print(f"\nOK: {total:,} personas en {db}")
     print(f"Imputados por moradores ausentes (MA=1) incluidos: {imputadas:,}")
+    print(f"Personas con edad = NULL (secreto estadístico / no relevada): {sin_edad:,}")
     if descartadas:
-        print(f"Filas descartadas (depto/sexo/edad inválidos): {descartadas:,}")
+        print(f"Filas descartadas (depto o sexo inválidos): {descartadas:,}")
 
 
 def _crear_indices(con) -> None:

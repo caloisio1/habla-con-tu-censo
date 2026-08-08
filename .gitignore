@@ -19,6 +19,7 @@ datos/*.db
 *.bak_*
 *_backup.db
 backup_*/
+backup_*
 *.log
 regress.py
 e1_check*.py

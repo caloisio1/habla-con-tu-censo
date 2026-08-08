@@ -98,8 +98,17 @@ Censo COMPLETO, SIN ponderación: todas las cifras son conteos EXACTOS.
 (a) PERSONAS: COUNT(*) sobre personas_1996 (3.163.763 registros = la población del censo).
 (b) HOGARES: COUNT(DISTINCT hogar_key) sobre personas_1996 (975.056). NUNCA rearmes la clave
     desde dpto/secc/segm/loc/vivienda/hogarviv: usá hogar_key, que ya viene materializada.
-(c) VIVIENDAS: COUNT(*) sobre viviendas_1996 (1.126.502, incluye 182.708 desocupadas).
-    Para viviendas OCUPADAS: WHERE condocup='1' (943.794).
+(c) VIVIENDAS: COUNT(*) sobre viviendas_1996 (1.126.502 en total). La condición de ocupación
+    es condocup y tiene TRES grupos, no dos; no los mezcles:
+      - OCUPADAS: condocup IN ('1','2') = 986.026. Son 943.794 con moradores presentes
+        ('1') más 42.232 con moradores AUSENTES ('2'), que están ocupadas igual.
+      - DESOCUPADAS: condocup IN ('3','4','5','6') = 140.476 (de temporada, en construcción,
+        para alquiler o venta, y otra razón). ESTE es el filtro de "viviendas desocupadas".
+      - No hay perdidos en condocup: los seis códigos suman el total.
+    OJO: 1.126.502 - 943.794 = 182.708 NO son las desocupadas, son las viviendas SIN MORADORES
+    PRESENTES (desocupadas + las ocupadas con moradores ausentes). Si te preguntan por
+    desocupadas, la respuesta es 140.476; 182.708 solo vale si preguntan explícitamente por
+    viviendas sin moradores presentes.
 (d) PROHIBIDO unir personas_1996 con viviendas_1996. Si necesitás una variable de vivienda al
     analizar personas, usá la copia que ya está en personas_1996 (tipviv, tenencia, higienico,
     los artefactos del hogar, etc. viven en la tabla de personas).

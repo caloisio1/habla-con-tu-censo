@@ -94,12 +94,14 @@ DERIVADAS, legibles, que DEBÉS PREFERIR sobre sus equivalentes crudas:
   'FLORIDA','LAVALLEJA','MALDONADO','PAYSANDU','RIO NEGRO','RIVERA','ROCHA',
   'SALTO','SAN JOSE','SORIANO','TACUAREMBO','TREINTA Y TRES'. (Usá departamento, no DPTO.)
 - sexo TEXT: 'Hombres' | 'Mujeres'. (Usá sexo, no PERPH02.)
-- edad INTEGER: años cumplidos, 0 a 110. (Usá edad, no PERNA01.)
+- edad INTEGER: años cumplidos, 0 a 111. (Usá edad, no PERNA01.)
 - asc_afro TEXT: 'Si' | 'No' | NULL. MENCIÓN de ascendencia afro o negra.
   "afrodescendiente"/"afro" = asc_afro='Si'. NULL = perdido. (Preferí sobre PERER01_1.)
 - asc_principal TEXT: 'Afro o Negra','Asiática o Amarilla','Blanca','Indígena',
-  'Otra','Ninguna' o NULL. Solo la responden quienes declararon MÁS DE UNA
-  ascendencia; es DISTINTA de la mención: NO la uses para contar afrodescendientes.
+  'Otra','Ninguna' o NULL. Es la ascendencia que la persona eligió como PRINCIPAL:
+  la responden TODAS las que declararon al menos una ascendencia (NULL = no declaró
+  ninguna; 'Ninguna' = declaró varias y no eligió una principal). Es DISTINTA de la
+  mención: NO la uses para contar afrodescendientes, para eso va asc_afro.
 - nbi INTEGER: cantidad de NBI del HOGAR, 0..3 (3 = "3 o MÁS"; topeada, no hay 4).
   Se repite en cada integrante del hogar. NULL = perdido. (Preferí sobre NBI_CANTIDAD.)
 - hogar_key TEXT: identificador de hogar (= ID_VIVIENDA || '-' || HOGID).
@@ -152,7 +154,10 @@ WHERE, JOIN y GROUP BY internos son libres.
 PERDIDOS: los códigos anotados con NR/NC/IG/SD/SE (ver leyenda arriba) y los NULL son
 PERDIDOS: EXCLUILOS SIEMPRE de conteos, totales y denominadores (filtrá esos códigos o
 IS NOT NULL). Un código NO anotado con esas siglas es una categoría VÁLIDA aunque sea 8
-o 9. En un porcentaje, el denominador debe excluir los perdidos de esa variable. NUNCA
+o 9. Excepción que vale para TODAS las variables crudas de este censo, esté o no listada
+abajo: el código 5555 es SECRETO ESTADÍSTICO y por lo tanto perdido — son 53 personas
+con el cuestionario protegido, de las que solo valen departamento, sexo y el hogar al
+que pertenecen; suman a la población total pero se excluyen de cualquier otro corte. En un porcentaje, el denominador debe excluir los perdidos de esa variable. NUNCA
 uses la población total como denominador de una variable con perdidos.
 
 PORCENTAJES: la métrica es el porcentaje (primera métrica del SELECT). Si querés que la
@@ -275,8 +280,10 @@ _SEMANTICA_DERIVADAS = {
             '"3 o MÁS" (no existe 4). Es del hogar y se repite en cada integrante.'),
     "asc_afro": ("asc_afro = mención de ascendencia afro ('Si'/'No'/NULL); "
                  "afrodescendiente = 'Si'. NULL = perdido, no se cuenta."),
-    "asc_principal": ("asc_principal = ascendencia principal; SOLO la declaran quienes "
-                      "mencionaron más de una ascendencia; NO sirve para contar afro."),
+    "asc_principal": ("asc_principal = ascendencia que la persona eligió como principal; "
+                      "la declaran todas las que mencionaron al menos una ascendencia "
+                      "('Ninguna' = mencionó varias y no eligió una principal). NO sirve "
+                      "para contar afrodescendientes: para eso va asc_afro, la mención."),
 }
 
 
@@ -342,6 +349,12 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
             "Respondé la pregunta del usuario usando EXCLUSIVAMENTE los datos "
             "provistos. Si los datos no alcanzan, decilo. Citá la fuente: "
             "'Censo 2011, INE Uruguay'. Sé breve y preciso.\n"
+            "CÓDIGOS: cuando venga la leyenda de codificaciones, nombrá SIEMPRE la "
+            "etiqueta y nunca el número pelado. Esa leyenda es el diccionario de la "
+            "variable: ya lo tenés acá. NO inventes limitaciones —no digas que no "
+            "revisaste el diccionario ni que te falta el codebook— y no ofrezcas buscar "
+            "archivos ni 'lanzar otra consulta': no ejecutás nada, solo narrás lo que ya "
+            "está en este mensaje.\n"
             "Tu función es NARRAR los resultados. NO auditás, corregís ni "
             "critiques la consulta SQL: asumila correcta y contá lo que devolvió.\n"
             "MAPAS: si la consulta agrupa por una unidad geográfica (departamento, "
@@ -527,12 +540,42 @@ def responder_2011(texto: str) -> dict:
 @app.post("/preguntar")
 def preguntar(p: Pregunta):
     """Interfaz pública única. Despacha al motor según el censo elegido en el
-    selector del frontend (por defecto 2023)."""
+    selector del frontend (por defecto 2023).
+
+    Cualquier excepción se traduce a una respuesta JSON con ok=False. Si sube tal
+    cual, FastAPI devuelve 500 con un cuerpo de TEXTO plano, el fetch del
+    frontend no lo puede parsear y cae en su catch genérico: el usuario ve
+    "Hubo un problema de conexión" para cosas que no son de conexión (un timeout
+    del modelo, una consulta inválida). Perdíamos el motivo real, que además
+    quedaba solo en el journal.
+    """
+    try:
+        return _responder(p)
+    except Exception as e:                      # noqa: BLE001 - la frontera pública
+        nombre = type(e).__name__
+        if "Timeout" in nombre or "timed out" in str(e).lower():
+            texto = ("La consulta tardó demasiado y se cortó. Suele pasar con "
+                     "preguntas muy abiertas: probá acotarla (un departamento, "
+                     "una localidad, un año) y volvé a intentar.")
+        else:
+            texto = ("No se pudo completar la consulta. Probá reformular la "
+                     "pregunta o intentar de nuevo en unos segundos.")
+        try:
+            registro.rechazo(p.censo, p.texto, "excepcion:%s" % nombre, "")
+        except Exception:
+            pass
+        print("ERROR /preguntar [%s] %s: %s" % (p.censo, nombre, e), flush=True)
+        return {"ok": False, "respuesta": texto, "motivo": nombre}
+
+
+def _responder(p: Pregunta):
     if p.censo == "2011":
         return responder_2011(p.texto)
 
-    # 1996 y 2004: censos completos sin ponderación, conteos exactos. No devuelven
-    # mapa (la app no tiene geometrías de esos marcos censales, ver motor_historico).
+    # 1996 y 2004: censos completos sin ponderación, conteos exactos. Sí devuelven
+    # mapa: departamento, barrio de Montevideo, sección censal y —desde el
+    # 29-jul-2026, con cartografía propia reconstruida de las planchas del INE y
+    # acotada a las localidades completas— segmento censal (ver motor_historico).
     if p.censo in MOTORES_HISTORICOS:
         r = MOTORES_HISTORICOS[p.censo].preguntar(p.texto)
         r.pop("veredicto", None)
@@ -550,6 +593,7 @@ def preguntar(p: Pregunta):
 INDEX = "app/static/index.html"
 VERSIONADOS = (
     "app/static/censo.css",
+    "app/static/dicc/dicc_2023.json",   # si cambia el diccionario, cambia el ?v=
     "app/static/logo_ine.png",
     "app/static/logo_censo.png",
     "app/static/logo_censo_dark.png",

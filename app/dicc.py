@@ -16,6 +16,7 @@ vivienda_key). El LLM ve las etiquetas para saber qué significa cada código.
 
 import json
 import os
+import re
 from functools import lru_cache
 
 _CANDIDATOS = (
@@ -41,7 +42,11 @@ COLUMNAS_LOCALIDADES = frozenset({"codloc", "nombre", "departamento"})
 # Clasificación de perdidos: fragmento de la etiqueta REAL del INE -> abreviatura.
 # La detección es POR LA ETIQUETA (no por el número de código): así, en las
 # variables donde 8/9 son categorías válidas, esos códigos NO se marcan perdidos.
-# Se comparan en minúsculas y por inclusión (cubre "NO RELEVADO"/"No relevado"/…).
+# Se comparan en minúsculas y ANCLADAS AL PRINCIPIO de la etiqueta, no por
+# inclusión: 'Desocupada: ignorado' (VIVVO03 de 2023) es una categoría válida —una
+# vivienda vacía cuyo motivo no se sabe—, no un dato faltante. Los faltantes de esa
+# variable son otros códigos. Anclar no cambia nada en 2011: ahí no hay ninguna
+# etiqueta que traiga el fragmento en el medio.
 _ABREV_PERDIDO = (
     ("no relevado", "NR"),
     ("no corresponde", "NC"),
@@ -49,6 +54,17 @@ _ABREV_PERDIDO = (
     ("sin dato", "SD"),
     ("secreto estad", "SE"),
 )
+
+# Algunas variables traen la SIGLA SOLA como etiqueta, sin el texto largo
+# (VIVVO04 tiene '0 = NC'; el esquema de 2023 usa NC/NR/IG/NRec en todas). Se
+# comparan por IGUALDAD EXACTA, nunca por inclusión: 'nc' está adentro de
+# 'Blanca' y 'blanca' no es un perdido.
+_SIGLAS_PERDIDO = {"NC": "NC", "NR": "NR", "IG": "IG", "SD": "SD", "SE": "SE",
+                   "NREC": "NRec", "NS/NC": "NC", "S/D": "SD"}
+
+# Algunos esquemas repiten el código adentro de la etiqueta ('9=IGNORADO'). Se
+# saca antes de comparar; el código en sí NUNCA decide si es perdido.
+_RX_COD = re.compile(r"^\s*\d+\s*[=:]\s*")
 
 # Leyenda global (una sola vez, al inicio del esquema del prompt).
 LEYENDA_PERDIDOS = (
@@ -60,9 +76,11 @@ LEYENDA_PERDIDOS = (
 
 def abrev_perdido(label: str):
     """Devuelve la sigla (NR/NC/IG/SD/SE) si la etiqueta es un perdido, o None."""
-    l = (label or "").lower()
+    l = _RX_COD.sub("", (label or "").strip()).strip().lower()
+    if l.upper() in _SIGLAS_PERDIDO:
+        return _SIGLAS_PERDIDO[l.upper()]
     for frag, sigla in _ABREV_PERDIDO:
-        if frag in l:
+        if l.startswith(frag):
             return sigla
     return None
 

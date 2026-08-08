@@ -17,7 +17,7 @@
   --azul-50:#E8F0F8;
   --dorado:#FBCE01; --dorado-700:#8A6A00; --dorado-tint:#FFF8DC;
   --warn:#8A6A00; --warn-bg:#FFFAE8; --warn-line:#F0DFA4;
-  --map-lo:#E8F0F8; --map-hi:#013A69; --map-null:#DDE3EA;
+  --map-ramp:#F9E7A0,#E8C65C,#AEAE73,#6E9A93,#3C7796,#145684,#013A69; --map-null:#DDE3EA;
   --shadow:0 1px 2px rgba(1,58,105,.06), 0 6px 20px -8px rgba(1,58,105,.16);
   --focus:#0A66B0;
   --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
@@ -31,7 +31,7 @@
     --azul-50:#12243A;
     --dorado:#FFD84D; --dorado-700:#E0B400; --dorado-tint:#2A2208;
     --warn:#FFD84D; --warn-bg:#241E08; --warn-line:#4A3E10;
-    --map-lo:#12314F; --map-hi:#8FC6F5; --map-null:#2A3340;
+    --map-ramp:#013A69,#145684,#3C7796,#6E9A93,#AEAE73,#E8C65C,#F9E7A0; --map-null:#2A3340;
     --shadow:0 1px 2px rgba(0,0,0,.35), 0 10px 26px -12px rgba(0,0,0,.6);
     --focus:#4DA3E8;
   }
@@ -43,7 +43,7 @@
   --azul:#015092; --azul-700:#013A69; --azul-600:#0A66B0; --azul-50:#E8F0F8;
   --dorado:#FBCE01; --dorado-700:#8A6A00; --dorado-tint:#FFF8DC;
   --warn:#8A6A00; --warn-bg:#FFFAE8; --warn-line:#F0DFA4;
-  --map-lo:#E8F0F8; --map-hi:#013A69; --map-null:#DDE3EA;
+  --map-ramp:#F9E7A0,#E8C65C,#AEAE73,#6E9A93,#3C7796,#145684,#013A69; --map-null:#DDE3EA;
   --shadow:0 1px 2px rgba(1,58,105,.06), 0 6px 20px -8px rgba(1,58,105,.16);
   --focus:#0A66B0;
 }
@@ -54,7 +54,7 @@
   --azul:#4DA3E8; --azul-700:#0A66B0; --azul-600:#2E8BD8; --azul-50:#12243A;
   --dorado:#FFD84D; --dorado-700:#E0B400; --dorado-tint:#2A2208;
   --warn:#FFD84D; --warn-bg:#241E08; --warn-line:#4A3E10;
-  --map-lo:#12314F; --map-hi:#8FC6F5; --map-null:#2A3340;
+  --map-ramp:#013A69,#145684,#3C7796,#6E9A93,#AEAE73,#E8C65C,#F9E7A0; --map-null:#2A3340;
   --shadow:0 1px 2px rgba(0,0,0,.35), 0 10px 26px -12px rgba(0,0,0,.6);
   --focus:#4DA3E8;
 }
@@ -285,7 +285,7 @@ button.ask:disabled{opacity:.6; cursor:default;}
   font-size:.79rem; color:var(--ink-2); background:var(--inset); border-bottom:1px solid var(--line);
 }
 .legend .scale{display:flex; align-items:center; gap:7px;}
-.legend .bar{height:11px; width:130px; border-radius:3px; background:linear-gradient(to right,var(--map-lo),var(--map-hi)); border:1px solid rgba(0,0,0,.08);}
+.legend .bar{height:11px; width:130px; border-radius:3px; background:linear-gradient(to right,var(--map-ramp)); border:1px solid rgba(0,0,0,.08);}
 .legend .swatch{display:inline-block; width:12px; height:12px; border-radius:3px; background:var(--map-null); border:1px solid var(--line-strong); vertical-align:-2px;}
 .legend .supr{display:inline-flex; align-items:center; gap:6px; cursor:help; border-bottom:1px dotted var(--ink-3);}
 .legend b{font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums;}
@@ -398,3 +398,118 @@ dialog{position:fixed; inset:0; margin:auto;}
 .opciones .chip .d{opacity:.65;font-weight:400}
 .opciones .chip.sug{font-style:italic}
 @media (max-width:640px){.opciones{padding-left:18px}}
+
+/* ---------- Referencia: documentación y diccionario por censo ----------
+   Dos plegables que siguen al censo elegido. El contenido se carga a demanda
+   (el diccionario de 2023 son 81 KB), así que la página no paga nada si no se
+   abren. Tipografía normal, no la negrita del cuerpo de respuesta: acá se lee
+   texto largo, no se leen cifras. */
+.ref{margin:26px 0 8px; display:flex; flex-direction:column; gap:12px;}
+.ref > details{
+  background:var(--surface); border:1px solid var(--line); border-radius:12px;
+  box-shadow:var(--shadow); overflow:hidden;
+}
+.ref > details > summary{
+  display:flex; align-items:center; gap:12px; cursor:pointer; padding:15px 20px;
+  font-weight:700; color:var(--ink); font-size:1rem; list-style:none;
+}
+.ref > details > summary::-webkit-details-marker{display:none;}
+.ref > details > summary::after{
+  content:"⌄"; margin-left:auto; color:var(--ink-3); font-size:1.1rem; line-height:1;
+  transition:transform .15s;
+}
+.ref > details[open] > summary::after{transform:rotate(180deg);}
+.ref > details[open] > summary{border-bottom:1px solid var(--line);}
+.ref .ref-c{
+  font-size:.78rem; font-weight:700; color:var(--azul-600); background:var(--azul-50);
+  border-radius:999px; padding:3px 10px;
+}
+.ref-body{padding:16px 20px 20px;}
+.ref-body h4{font-size:.79rem; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-2); margin:18px 0 7px;}
+.ref-lead{font-size:1rem; color:var(--ink); margin:0 0 6px;}
+.ref-p{color:var(--ink); font-size:.93rem; line-height:1.55; margin:0 0 6px;}
+.ref-p.sin{color:var(--ink-3);}
+.ref-ul{margin:0; padding-left:20px; color:var(--ink); font-size:.93rem; line-height:1.55;}
+.ref-ul li{margin:5px 0;}
+table.ref-tab{border-collapse:collapse; width:100%; font-size:.9rem;}
+table.ref-tab th,table.ref-tab td{padding:7px 12px; text-align:left; border-bottom:1px solid var(--line); color:var(--ink);}
+table.ref-tab th{width:38%; font-weight:700; background:var(--inset);}
+table.ref-tab tr:last-child th,table.ref-tab tr:last-child td{border-bottom:0;}
+table.ref-tab.cods td.cod{width:110px; font-family:var(--mono); font-size:.85rem; font-weight:700;}
+table.ref-tab.cods tr.perdido td{color:var(--ink-3);}
+.tag-p{font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--warn);
+  background:var(--warn-bg); border:1px solid var(--warn-line); border-radius:999px; padding:1px 7px;}
+
+/* buscador del diccionario */
+.buscador{
+  display:flex; align-items:center; gap:9px; border:1.5px solid var(--line-strong);
+  border-radius:10px; padding:8px 12px; margin-bottom:14px; background:var(--surface);
+}
+.buscador:focus-within{border-color:var(--azul); box-shadow:0 0 0 3px var(--azul-50);}
+.buscador svg{width:17px; height:17px; color:var(--ink-3); flex-shrink:0;}
+.buscador input{flex:1; border:0; outline:0; font:inherit; font-size:.95rem; background:none; color:var(--ink); min-width:0;}
+.buscador .cuenta{font-size:.78rem; color:var(--ink-3); font-variant-numeric:tabular-nums; white-space:nowrap;}
+
+/* una variable del diccionario */
+.ref-tabla{display:flex; align-items:center; gap:9px;}
+.ref-tabla .ref-n{font-size:.72rem; color:var(--ink-3); background:var(--inset); border-radius:999px; padding:2px 8px; letter-spacing:0;}
+details.var{border-bottom:1px solid var(--line);}
+details.var:last-of-type{border-bottom:0;}
+details.var > summary{
+  display:flex; align-items:baseline; gap:12px; cursor:pointer; padding:9px 2px;
+  list-style:none; font-size:.92rem;
+}
+details.var > summary::-webkit-details-marker{display:none;}
+details.var > summary:hover{background:var(--azul-50);}
+details.var .et{color:var(--ink); min-width:0; font-weight:600;}
+details.var > summary::before{content:"›"; color:var(--ink-3); font-size:1rem; line-height:1; transition:transform .13s; flex-shrink:0;}
+details.var[open] > summary::before{transform:rotate(90deg);}
+details.var > .tablewrap,details.var > .ref-p{margin:2px 0 12px;}
+@media (max-width:560px){
+  .ref-body{padding:14px 16px 18px;}
+  details.var > summary{flex-direction:column; gap:2px;}
+}
+
+/* ---------- Botón + desplegable del diccionario ----------
+   Va dentro del panel de consulta, debajo de la caja de pregunta: es ahí donde
+   uno necesita saber qué variables hay. El desplegable se posiciona absoluto
+   para no empujar la página, y la lista scrollea sola. */
+.dicc-wrap{position:relative; margin-top:12px;}
+.btn-dicc{
+  display:flex; align-items:center; gap:10px; width:100%; font:inherit; font-size:.92rem;
+  font-weight:700; color:var(--ink); background:var(--surface); cursor:pointer;
+  border:1.5px solid var(--line-strong); border-radius:10px; padding:10px 14px;
+  transition:border-color .13s, background .13s;
+}
+.btn-dicc:hover{border-color:var(--azul); background:var(--azul-50);}
+.btn-dicc svg{width:18px; height:18px; color:var(--azul-600); flex-shrink:0;}
+.btn-dicc .btn-censo{
+  margin-left:auto; font-size:.76rem; font-weight:700; color:var(--azul-600);
+  background:var(--azul-50); border-radius:999px; padding:3px 10px; white-space:nowrap;
+}
+.btn-dicc .chev{color:var(--ink-3); font-size:1.05rem; line-height:1; transition:transform .15s;}
+.btn-dicc[aria-expanded="true"]{border-color:var(--azul); background:var(--azul-50);}
+.btn-dicc[aria-expanded="true"] .chev{transform:rotate(180deg);}
+.dicc-pop{
+  position:absolute; z-index:40; left:0; right:0; top:calc(100% + 7px);
+  background:var(--surface); border:1px solid var(--line-strong); border-radius:12px;
+  box-shadow:0 12px 34px -10px rgba(1,58,105,.28), 0 2px 8px rgba(0,0,0,.08);
+  padding:13px 15px 6px; max-height:min(62vh,560px); display:flex; flex-direction:column;
+}
+.dicc-pop[hidden]{display:none;}
+.dicc-lista{overflow-y:auto; padding-right:4px; margin-bottom:8px;}
+.dicc-lista h4.ref-tabla{margin:12px 0 4px; position:sticky; top:0; background:var(--surface); padding:4px 0;}
+.dicc-lista h4.ref-tabla:first-child{margin-top:0;}
+@media (max-width:560px){
+  .dicc-pop{max-height:70vh; padding:11px 12px 6px;}
+  .btn-dicc .btn-censo{display:none;}
+}
+
+/* La pregunta textual del formulario, dentro de la variable desplegada. */
+details.var .ref-p.desc{color:var(--ink-2); font-size:.88rem; font-style:italic; margin:2px 0 8px;}
+
+/* Datos de contacto del INE, al pie. Va con su propio rótulo para que quede
+   claro que es el organismo que produce los datos, no el de esta aplicación. */
+footer .ine-box{margin-top:22px; padding-top:18px; border-top:1px solid var(--line);}
+footer .ine-box p{margin:0; line-height:1.65;}
+footer .ine-box b{color:var(--ink);}
