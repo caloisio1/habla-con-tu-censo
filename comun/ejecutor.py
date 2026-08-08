@@ -120,6 +120,7 @@ _CANDADO = threading.Lock()
 _CAIDAS = collections.Counter()   # base -> consultas que tuvieron que repetirse en SQLite
 _DERIVADAS = collections.Counter()  # base -> consultas mandadas a SQLite a propósito (_INCOMPATIBLES)
 _AVISADAS = set()                 # bases cuya primera caída ya se avisó (no se repite por consulta)
+_MODO = {}                        # base -> 'nativo' | 'puente'  (como quedo abierta en DuckDB)
 
 
 def _avisar(msg):
@@ -128,8 +129,30 @@ def _avisar(msg):
     sys.stderr.flush()
 
 
+def nativa_de(db):
+    """Ruta de la base DuckDB NATIVA que acompaña a una base SQLite, si existe.
+
+    Por CONVENCIÓN, no por configuración: junto a `datos/censo2023.db` se busca
+    `datos/censo2023.duckdb`. Poner el archivo la activa y borrarlo la desactiva,
+    sin tocar código ni variables de entorno. Eso hace que el despliegue sea un
+    `mv` y la vuelta atrás, otro."""
+    ruta = os.path.splitext(db)[0] + ".duckdb"
+    return ruta if os.path.exists(ruta) else None
+
+
 def _abrir(db):
-    """Abre y attacha la base en DuckDB, o devuelve None si no se puede confiar en ella.
+    """Abre la base en DuckDB, o devuelve None si no se puede confiar en ella.
+
+    Dos formas de abrir, en este orden:
+
+    1. NATIVA. Si existe el .duckdb hermano, se abre directo en solo lectura.
+       Es entre 23x y 46x más rápido que SQLite segun el censo, contra el 9x del
+       puente, porque no hay traduccion: el formato ya es columnar.
+    2. PUENTE. Si no, se attacha el .db de siempre con el lector sqlite.
+
+    LA BASE SQLITE NO SE JUBILA. Sigue siendo la que sirve `LIKE` y `UPPER` -que
+    los dos motores no resuelven igual- y la red de seguridad cuando DuckDB
+    falla. La nativa acelera; no reemplaza.
 
     Devolver None NO es un error fatal: significa 'esta base se sirve por SQLite'."""
     try:
@@ -137,12 +160,17 @@ def _abrir(db):
     except ImportError:
         _avisar("duckdb no está instalado: todo se sirve por SQLite")
         return None
+    nativa = nativa_de(db)
     try:
-        con = duckdb.connect()
-        con.execute("INSTALL sqlite; LOAD sqlite;")
+        if nativa:
+            con = duckdb.connect(nativa, read_only=True)
+        else:
+            con = duckdb.connect()
+            con.execute("INSTALL sqlite; LOAD sqlite;")
         con.execute("SET GLOBAL default_null_order='%s';" % _ORDEN_NULOS)
         con.execute("SET GLOBAL integer_division=true;")
-        con.execute("ATTACH '%s' AS s (TYPE sqlite, READ_ONLY); USE s;" % db)
+        if not nativa:
+            con.execute("ATTACH '%s' AS s (TYPE sqlite, READ_ONLY); USE s;" % db)
         # Los canarios deciden: si algún invariante no calca a SQLite, no se usa.
         for nombre, sql, esperado in _CANARIOS:
             if con.execute(sql).fetchall() != esperado:
@@ -150,7 +178,9 @@ def _abrir(db):
                 _avisar("%s: el canario de %s NO calca a SQLite -> se sirve por SQLite"
                         % (db, nombre))
                 return None
-        _avisar("%s: servida por DuckDB (%d canarios OK)" % (db, len(_CANARIOS)))
+        _MODO[os.path.abspath(db)] = "nativo" if nativa else "puente"
+        _avisar("%s: servida por DuckDB %s (%d canarios OK)"
+                % (db, "NATIVO" if nativa else "sobre el lector sqlite", len(_CANARIOS)))
         return con
     except Exception as e:
         _avisar("%s: no se pudo abrir en DuckDB (%s: %s) -> se sirve por SQLite"
@@ -243,7 +273,11 @@ def filas(db, sql):
     if con is not None:
         try:
             cur = con.cursor()
-            cur.execute("USE s;")
+            if _MODO.get(db) == "puente":
+                # Solo el puente necesita el USE: el cursor no hereda el
+                # esquema activo de la conexion. En la base nativa las tablas
+                # estan en main y un USE s fallaria.
+                cur.execute("USE s;")
             res = cur.execute(sql)
             columnas = [d[0] for d in res.description]
             return [dict(zip(columnas, (_normalizar(v) for v in f)))
@@ -262,7 +296,8 @@ def escalar(db, sql):
     if con is not None:
         try:
             cur = con.cursor()
-            cur.execute("USE s;")
+            if _MODO.get(db) == "puente":
+                cur.execute("USE s;")
             f = cur.execute(sql).fetchone()
             return _normalizar(f[0]) if f else None
         except ConsultaIncoherente:
@@ -289,7 +324,7 @@ def estado():
     no resuelven igual. Las primeras hay que mirarlas; las segundas son el
     sistema funcionando como se diseñó."""
     return {"motor_pedido": MOTOR,
-            "bases": {db: ("duckdb" if c is not None else "sqlite")
+            "bases": {db: (_MODO.get(db, "duckdb") if c is not None else "sqlite")
                       for db, c in _CONEXIONES.items()},
             "caidas": dict(_CAIDAS),
             "derivadas": dict(_DERIVADAS)}

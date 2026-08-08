@@ -187,3 +187,68 @@ def test_un_fallo_normal_SI_sigue_cayendo_a_sqlite(base):
     y ahi SQLite da la respuesta correcta, asi que se repite como siempre."""
     f = ejecutor.filas(base, "SELECT sqlite_version() AS v")
     assert f and f[0]["v"]
+
+
+# --- la base nativa, que es la que va a produccion --------------------------
+
+@pytest.fixture(scope="module")
+def base_con_nativa(tmp_path_factory):
+    """La misma base de juguete MAS su gemela nativa, construida desde la SQLite.
+
+    Reproduce lo que va a haber en produccion: el .db de siempre y un .duckdb al
+    lado, con el mismo contenido."""
+    ruta = str(tmp_path_factory.mktemp("nativa") / "mini.db")
+    cx = sqlite3.connect(ruta)
+    cx.execute("CREATE TABLE p (depto TEXT, nombre TEXT, edad INTEGER, w REAL)")
+    cx.executemany("INSERT INTO p VALUES (?,?,?,?)", [
+        ("01", "Montevideo", 17, 1.5), ("01", "Montevideo", 22, 2.0),
+        ("03", "Paso de los Toros", 64, 1.0), ("10", "Peñarol", 7, 3.0),
+        (None, None, None, 1.0),
+    ])
+    cx.commit()
+    cx.close()
+    nat = os.path.splitext(ruta)[0] + ".duckdb"
+    d = duckdb.connect(nat)
+    d.execute("INSTALL sqlite; LOAD sqlite;")
+    d.execute(f"ATTACH '{ruta}' AS s (TYPE sqlite, READ_ONLY)")
+    d.execute("CREATE TABLE p AS SELECT * FROM s.p")
+    d.close()
+    return ruta
+
+
+def test_si_hay_gemela_nativa_se_usa(base_con_nativa):
+    """La convencion: junto a censo.db se busca censo.duckdb. Poner el archivo
+    la activa; borrarlo la desactiva. El despliegue es un mv."""
+    assert ejecutor.nativa_de(base_con_nativa) is not None
+    ejecutor.filas(base_con_nativa, "SELECT COUNT(*) AS n FROM p")
+    assert ejecutor.estado()["bases"][os.path.abspath(base_con_nativa)] == "nativo"
+
+
+def test_la_nativa_contesta_LO_MISMO_que_sqlite(base_con_nativa):
+    """El unico criterio que importa. Si la nativa fuera mas rapida pero
+    cambiara una cifra, no serviria."""
+    for sql in (
+        "SELECT depto, COUNT(*) AS n FROM p GROUP BY 1 ORDER BY 1, 2",
+        "SELECT (edad/5)*5 AS tramo, COUNT(*) AS n FROM p WHERE edad IS NOT NULL GROUP BY 1 ORDER BY 1",
+        "SELECT depto FROM p ORDER BY depto",
+        "SELECT depto, ROUND(100.0*SUM(w)/(SELECT SUM(w) FROM p),1) AS pct FROM p GROUP BY 1 ORDER BY 1",
+    ):
+        assert ejecutor.filas(base_con_nativa, sql) == por_sqlite(base_con_nativa, sql), sql
+
+
+def test_los_canarios_tambien_corren_en_la_nativa(base_con_nativa):
+    for _n, sql, esperado in ejecutor._CANARIOS:
+        assert [tuple(f.values()) for f in ejecutor.filas(base_con_nativa, sql)] == esperado
+
+
+def test_el_LIKE_sigue_yendo_a_sqlite_aunque_haya_nativa(base_con_nativa):
+    """La nativa acelera; NO jubila a la base SQLite. El LIKE de los dos motores
+    difiere, asi que esas consultas siguen sirviendose por SQLite."""
+    sql = "SELECT nombre FROM p WHERE nombre LIKE '%toros'"
+    assert ejecutor.filas(base_con_nativa, sql) == [{"nombre": "Paso de los Toros"}]
+
+
+def test_sin_gemela_se_usa_el_puente_como_siempre(base):
+    assert ejecutor.nativa_de(base) is None
+    ejecutor.filas(base, "SELECT COUNT(*) AS n FROM p")
+    assert ejecutor.estado()["bases"][os.path.abspath(base)] == "puente"
