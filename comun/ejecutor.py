@@ -94,9 +94,14 @@ def _abrir(db):
 
 
 def _conexion(db):
-    """Conexión DuckDB para esa base, creada una sola vez (~100 ms) y reutilizada."""
+    """Conexión DuckDB para esa base, creada una sola vez (~100 ms) y reutilizada.
+
+    La ruta se normaliza porque los llamadores no coinciden: el motor 2011 pasa
+    'datos/censo.db' relativa y los otros tres la absoluta. Sin normalizar, la
+    misma base referida de las dos formas abriría DOS conexiones."""
     if MOTOR != "duckdb":
         return None
+    db = os.path.abspath(db)
     con = _CONEXIONES.get(db, False)
     if con is not False:
         return con
@@ -132,6 +137,7 @@ def filas(db, sql):
 
     Misma forma de salida que el camino viejo de SQLite (row_factory=Row -> dict),
     para que los llamadores no noten la diferencia."""
+    db = os.path.abspath(db)   # una sola clave por base, en las conexiones y en el contador
     con = _conexion(db)
     if con is not None:
         try:
@@ -147,6 +153,7 @@ def filas(db, sql):
 
 def escalar(db, sql):
     """Primer valor de la primera fila (COUNT(*) y similares). None si no hay filas."""
+    db = os.path.abspath(db)
     con = _conexion(db)
     if con is not None:
         try:
