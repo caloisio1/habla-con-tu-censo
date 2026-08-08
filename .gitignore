@@ -31,3 +31,6 @@ healthcheck.sh
 logs/
 usage*.jsonl
 informes/
+
+# Bases DuckDB nativas: son datos, como los .db
+*.duckdb
