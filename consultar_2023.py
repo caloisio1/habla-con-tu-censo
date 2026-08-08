@@ -327,7 +327,13 @@ def preguntar(texto, verbose=False):
     if listo is not None:
         return dict(listo, sql=sql_seguro, veredicto="OK")
 
-    filas = ejecutor.filas(DB, sql_seguro)
+    try:
+        filas = ejecutor.filas(DB, sql_seguro)
+    except ejecutor.ConsultaIncoherente as e:
+        # El SQL compara texto con numero. SQLite lo contestaria con una cifra
+        # falsa (0 % en todos lados); se rechaza en vez de contestar mal.
+        return dict(rechazos.a_respuesta(rechazos.procesamiento(str(e)), sql=sql_seguro),
+                    veredicto="RECHAZADO: consulta incoherente")
     n_geo_raw = len(filas)   # filas antes de supresión: detecta si el mapa quedó truncado por el LIMIT
 
     # Supresión con la regla corregida (1 <= n < 5): un conteo CERO no es un

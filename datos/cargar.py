@@ -16,6 +16,7 @@ total de 3.285.824 personas.
 """
 
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -87,10 +88,68 @@ def _cargar_diccionario():
     return [(v["nombre"], v["tipo"]) for v in d["variables"]]
 
 
+MOTOR = "sqlite"      # se fija en __main__ segun --duckdb
+
+
 def _tipo_sqlite(nombre, tipo_sav):
     if nombre in TIPO_OVERLAP:
-        return TIPO_OVERLAP[nombre]
-    return "TEXT" if tipo_sav == "string" else "NUMERIC"
+        return _entero_si(TIPO_OVERLAP[nombre])
+    if tipo_sav == "string":
+        return "TEXT"
+    # NUMERIC es una AFINIDAD de SQLite: acepta entero o real y decide fila por
+    # fila. DuckDB necesita un tipo concreto, y NUMERIC ahi es DECIMAL(18,3),
+    # que convertiria todos los conteos en decimales. Se comprobo con typeof()
+    # sobre las 3M filas de la base v4: de las 122 columnas NUMERIC, NINGUNA
+    # guarda un solo valor real ni de texto -son todas enteras-, asi que el tipo
+    # correcto es BIGINT. Si alguna vez entrara un valor no entero, la carga en
+    # DuckDB falla en vez de redondearlo en silencio.
+    return "BIGINT" if MOTOR == "duckdb" else "NUMERIC"
+
+
+def _entero_si(tsql):
+    """El INTEGER de SQLite es de 64 bits; el de DuckDB, de 32."""
+    return "BIGINT" if (MOTOR == "duckdb" and tsql.upper() == "INTEGER") else tsql
+
+
+def _indice(con, sql):
+    """Crea el indice SOLO en SQLite: DuckDB es columnar y no lo usa para estas
+    consultas. Unica diferencia estructural deliberada entre las dos bases."""
+    if MOTOR == "sqlite":
+        con.execute(sql)
+
+
+_RX_INSERT = re.compile(
+    r"INSERT (?:OR REPLACE )?INTO\s+([A-Za-z_0-9\"]+)\s*(?:\(([^)]*)\))?\s*VALUES", re.I)
+
+
+def _insertar(con, sql, filas):
+    """Inserta un lote. En DuckDB, executemany hace ~90 filas/s -horas para los
+    3M de personas-; el camino rapido pasa el lote como tabla Arrow y hace un
+    solo INSERT ... SELECT. El esquema del lote se toma de la tabla YA CREADA,
+    asi los tipos son por construccion los que declara el CREATE TABLE."""
+    if not filas:
+        return
+    if MOTOR != "duckdb":
+        con.executemany(sql, filas)
+        return
+    import pyarrow as pa
+    m = _RX_INSERT.search(sql)
+    tabla = m.group(1).strip('"')
+    declaradas = con.execute(
+        "SELECT column_name, data_type FROM information_schema.columns "
+        "WHERE table_name = '%s' ORDER BY ordinal_position" % tabla).fetchall()
+    tipos = dict(declaradas)
+    cols = ([c.strip().strip('"') for c in m.group(2).split(",")]
+            if m.group(2) else [c for c, _ in declaradas])
+    mapa = {"VARCHAR": pa.string(), "BIGINT": pa.int64(), "INTEGER": pa.int32(),
+            "DOUBLE": pa.float64(), "BOOLEAN": pa.bool_()}
+    esquema = pa.schema([(c, mapa.get(tipos[c], pa.string())) for c in cols])
+    lote = pa.table([pa.array(list(v), type=esquema.field(i).type)
+                     for i, v in enumerate(zip(*filas))], schema=esquema)
+    con.register("_lote", lote)
+    con.execute('INSERT INTO "%s" (%s) SELECT * FROM _lote'
+                % (tabla, ", ".join('"%s"' % c for c in cols)))
+    con.unregister("_lote")
 
 
 def construir(sav: Path, db: Path) -> None:
@@ -99,10 +158,15 @@ def construir(sav: Path, db: Path) -> None:
     es_string = {n: (t == "string") for n, t in raw}
     columnas = raw_nombres + [n for n, _ in DERIVADAS]
 
-    con = sqlite3.connect(db)
+    if MOTOR == "duckdb":
+        import duckdb
+        con = duckdb.connect(str(db))
+    else:
+        con = sqlite3.connect(db)
+    print(f"motor: {MOTOR} -> {db}")
     con.execute("DROP TABLE IF EXISTS personas")
     defs = [f"{_q(n)} {_tipo_sqlite(n, t)}" for n, t in raw]
-    defs += [f"{_q(n)} {tsql}" for n, tsql in DERIVADAS]
+    defs += [f"{_q(n)} {_entero_si(tsql)}" for n, tsql in DERIVADAS]
     con.execute(f"CREATE TABLE personas ({', '.join(defs)})")
     placeholders = ",".join("?" * len(columnas))
     insert = f"INSERT INTO personas ({', '.join(_q(n) for n in columnas)}) VALUES ({placeholders})"
@@ -194,12 +258,12 @@ def construir(sav: Path, db: Path) -> None:
                 continue
             lote.append(fila)
             if len(lote) >= 100_000:
-                con.executemany(insert, lote)
+                _insertar(con, insert, lote)
                 total += len(lote)
                 lote = []
         print(f"  … {total:,} personas cargadas", flush=True)
     if lote:
-        con.executemany(insert, lote)
+        _insertar(con, insert, lote)
         total += len(lote)
 
     _crear_indices(con)
@@ -217,7 +281,7 @@ def _crear_indices(con) -> None:
     # Índices de v3 + PERID (número de persona) + vivienda_key (nueva key v4).
     for col in ("departamento", "edad", "asc_afro", "nbi", "hogar_key",
                 "codsec", "codloc", "CCZ", "BARRIO85", "PERID", "vivienda_key"):
-        con.execute(f"CREATE INDEX {_q('ix_' + col.lower())} ON personas({_q(col)})")
+        _indice(con, f"CREATE INDEX {_q('ix_' + col.lower())} ON personas({_q(col)})")
 
 
 def _cargar_localidades(con) -> None:
@@ -235,13 +299,16 @@ def _cargar_localidades(con) -> None:
             (int(r["codloc"]), r["nombre"].strip(), r["departamento"].strip().upper())
             for r in csv.DictReader(f)
         ]
-    con.executemany("INSERT OR REPLACE INTO localidades VALUES (?,?,?)", filas)
+    _insertar(con, "INSERT OR REPLACE INTO localidades VALUES (?,?,?)", filas)
     print(f"OK: {len(filas):,} localidades cargadas")
 
 
 if __name__ == "__main__":
-    sav = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_SAV
-    db = Path(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_DB
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if "--duckdb" in sys.argv:
+        MOTOR = "duckdb"
+    sav = Path(args[0]) if len(args) > 0 else DEFAULT_SAV
+    db = Path(args[1]) if len(args) > 1 else DEFAULT_DB
     if not sav.exists():
         sys.exit(f"No existe el .sav: {sav}")
     construir(sav, db)

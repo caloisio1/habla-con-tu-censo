@@ -467,7 +467,11 @@ class Motor:
         if listo is not None:
             return dict(listo, sql=sql_seguro, veredicto="OK")
 
-        filas = ejecutor.filas(self.db, sql_seguro)
+        try:
+            filas = ejecutor.filas(self.db, sql_seguro)
+        except ejecutor.ConsultaIncoherente as e:
+            return dict(rechazos.a_respuesta(rechazos.procesamiento(str(e)), sql=sql_seguro),
+                        veredicto="RECHAZADO: consulta incoherente")
         n_raw = len(filas)
 
         # 3. Supresión con la regla corregida: el cero NO es confidencialidad.

@@ -157,3 +157,33 @@ def test_los_canarios_pasan_en_esta_maquina(base):
     for _nombre, sql, esperado in ejecutor._CANARIOS:
         assert [tuple(f.values()) for f in ejecutor.filas(base, sql)] == esperado
     assert ejecutor._conexion(base) is not None
+
+
+# --- el limite de la red de seguridad ---------------------------------------
+
+def test_una_consulta_incoherente_NO_se_repite_en_sqlite(base):
+    """El caso que motivo todo esto.
+
+    `asc_afro = 1` sobre una columna de texto: DuckDB lo rechaza y SQLite lo
+    contesta con una cifra falsa. Si el fallback la repitiera en SQLite,
+    convertiria un error ruidoso en una respuesta equivocada."""
+    sql = ("SELECT depto, ROUND(100.0*SUM(CASE WHEN nombre = 1 THEN 1 ELSE 0 END)"
+           "/COUNT(*), 1) AS pct FROM p GROUP BY 1")
+    with pytest.raises(ejecutor.ConsultaIncoherente):
+        ejecutor.filas(base, sql)
+
+
+def test_y_SQLite_efectivamente_la_contestaria_mal(base):
+    """La prueba de que rechazarla no es exceso de celo: el motor viejo devuelve
+    0.0 en todas las filas, que es una cifra publicable y falsa."""
+    sql = ("SELECT depto, ROUND(100.0*SUM(CASE WHEN nombre = 1 THEN 1 ELSE 0 END)"
+           "/COUNT(*), 1) AS pct FROM p GROUP BY 1")
+    filas = por_sqlite(base, sql)
+    assert filas and all(f["pct"] == 0.0 for f in filas)
+
+
+def test_un_fallo_normal_SI_sigue_cayendo_a_sqlite(base):
+    """No se rompio la red para el resto: sqlite_version() no existe en DuckDB
+    y ahi SQLite da la respuesta correcta, asi que se repite como siempre."""
+    f = ejecutor.filas(base, "SELECT sqlite_version() AS v")
+    assert f and f[0]["v"]

@@ -499,7 +499,11 @@ def responder_2011(texto: str) -> dict:
     if listo is not None:
         return dict(listo, sql=sql_seguro)
 
-    filas = ejecutor.filas(DB_PATH, sql_seguro)
+    try:
+        filas = ejecutor.filas(DB_PATH, sql_seguro)
+    except ejecutor.ConsultaIncoherente as e:
+        return dict(rechazos.a_respuesta(rechazos.procesamiento(str(e)), sql=sql_seguro),
+                    veredicto="RECHAZADO: consulta incoherente")
 
     # Si las filas devueltas alcanzan el tope del LIMIT, el resultado puede estar
     # recortado -> se avisa al redactor para que no narre extremos como universales (d).

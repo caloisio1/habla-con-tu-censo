@@ -40,9 +40,22 @@ Por eso se fijan `default_null_order` e `integer_division` Y ADEMÁS se comprueb
 con consultas canario al abrir cada conexión. Si algún canario no da exactamente
 la semántica de SQLite, esa base queda servida por SQLite y se sigue andando.
 
-RED DE SEGURIDAD. Cualquier excepción de DuckDB —una función que no soporta, un
-tipo declarado que no coincide con lo guardado— se atrapa y la consulta se repite
-en SQLite. Un fallo del motor rápido degrada la latencia, nunca la respuesta.
+RED DE SEGURIDAD, Y SU LÍMITE. Casi cualquier excepción de DuckDB —una función
+que no soporta, un desborde de enteros— se atrapa y la consulta se repite en
+SQLite: ahí el motor viejo da la respuesta correcta y solo se pierde velocidad.
+
+PERO NO TODOS LOS FALLOS SIGNIFICAN LO MISMO, y tratarlos igual era un error.
+Cuando DuckDB rechaza una consulta porque compara texto con número —`asc_afro = 1`
+sobre una columna que guarda 'Si'/'No'—, no está diciendo "no sé hacer esto":
+está diciendo "esta consulta no tiene sentido". SQLite la ejecuta igual y
+devuelve 0,0 % de afrodescendientes en TODOS los departamentos, cuando la cifra
+real va de 2,9 % a 16,9 %. Una cifra plausible, publicable y falsa.
+
+Repetir ESA consulta en SQLite convierte un error ruidoso en una respuesta
+equivocada, que es exactamente lo contrario de lo que la red tiene que hacer.
+Por eso esos fallos NO caen a SQLite: se levantan como ConsultaIncoherente y el
+motor los convierte en un rechazo. Es preferible no contestar a contestar mal.
+
 Esa red NO es muda: cada degradación se avisa una vez por base en el journal
 (`journalctl -u censo-query-uy | grep ejecutor`) y queda contada en `estado()`.
 Sin eso, perder DuckDB en producción sería invisible: las respuestas seguirían
@@ -88,6 +101,19 @@ _CANARIOS = (
 #   UPPER/LOWER: SQLite solo cambia el caso de los ASCII (UPPER('peñarol') deja
 #               la ñ intacta) y DuckDB es Unicode. Cambia el texto que se muestra.
 _INCOMPATIBLES = re.compile(r"\b(LIKE|GLOB|UPPER|LOWER)\b", re.I)
+
+# Fallos que NO se repiten en SQLite, porque significan que la consulta está mal
+# escrita y no que DuckDB no sepa resolverla. Si se repitieran, SQLite las
+# ejecutaría con su coerción silenciosa y devolvería una cifra equivocada.
+_NO_REINTENTAR = {"ConversionException"}
+
+
+class ConsultaIncoherente(Exception):
+    """El SQL compara valores que no son comparables (texto contra número).
+
+    No es un fallo del motor: es una consulta sin sentido, que SQLite
+    respondería con una cifra falsa en vez de avisar."""
+
 
 _CONEXIONES = {}          # ruta de la base -> conexión DuckDB, o None si quedó degradada
 _CANDADO = threading.Lock()
@@ -150,6 +176,19 @@ def _conexion(db):
         return _CONEXIONES[db]
 
 
+def _mirar(db, sql, e):
+    """Decide qué hacer con un fallo de DuckDB: repetirlo en SQLite o levantarlo.
+
+    Se levanta cuando el fallo dice que la CONSULTA está mal, no que el motor no
+    pueda con ella. Ver el encabezado del módulo."""
+    if type(e).__name__ in _NO_REINTENTAR:
+        _avisar("%s: consulta INCOHERENTE, no se repite en SQLite (%s) | SQL: %s"
+                % (db, str(e).replace("\n", " ")[:200],
+                   " ".join(sql.split())[:600]))
+        raise ConsultaIncoherente(str(e).split("\n")[0]) from e
+    _caida(db, sql, e)
+
+
 def _caida(db, sql, e):
     """Registra que una consulta tuvo que repetirse en SQLite. Avisa solo la primera
     vez por base: si DuckDB rechaza algo sistemáticamente, no queremos el journal
@@ -209,8 +248,10 @@ def filas(db, sql):
             columnas = [d[0] for d in res.description]
             return [dict(zip(columnas, (_normalizar(v) for v in f)))
                     for f in res.fetchall()]
+        except ConsultaIncoherente:
+            raise
         except Exception as e:
-            _caida(db, sql, e)   # cae a SQLite: se pierde velocidad, no la respuesta
+            _mirar(db, sql, e)   # cae a SQLite, salvo que el SQL sea incoherente
     return _sqlite_filas(db, sql)
 
 
@@ -224,8 +265,10 @@ def escalar(db, sql):
             cur.execute("USE s;")
             f = cur.execute(sql).fetchone()
             return _normalizar(f[0]) if f else None
+        except ConsultaIncoherente:
+            raise
         except Exception as e:
-            _caida(db, sql, e)
+            _mirar(db, sql, e)
     con2 = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
     try:
         f = con2.execute(sql).fetchone()
