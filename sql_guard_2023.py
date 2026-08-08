@@ -18,6 +18,8 @@ import json, os
 import sqlglot
 from sqlglot import exp
 
+from comun import orden
+
 UMBRAL_SUPRESION = 5
 LIMITE_MAXIMO = 300
 
@@ -385,6 +387,7 @@ def validar(sql):
         )
 
     arbol = _aplicar_limite(arbol)
+    arbol = orden.desempatar(arbol)
     return arbol.sql(dialect="sqlite", comments=False), columnas_conteo
 
 

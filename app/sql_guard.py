@@ -30,6 +30,8 @@ Reglas (todas sobre el árbol parseado, no sobre texto):
 import sqlglot
 from sqlglot import exp
 
+from comun import orden
+
 from app import dicc
 
 # Celdas con menos personas que esto se suprimen (control de divulgación).
@@ -398,6 +400,7 @@ def validar(sql: str) -> tuple[str, list[str]]:
 
     # 9. LIMIT obligatorio y acotado.
     arbol = _aplicar_limite(arbol)
+    arbol = orden.desempatar(arbol)
 
     return arbol.sql(dialect="sqlite", comments=False), columnas_conteo
 
