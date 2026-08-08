@@ -18,7 +18,6 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from openai import OpenAI
 
 from app import dicc
 from app.sql_guard import (
@@ -32,16 +31,16 @@ import consultar_2004   # motor Censo 2004 Fase 1 (conteo, sin ponderar)
 MOTORES_HISTORICOS = {"1996": consultar_1996, "2004": consultar_2004}
 import usage_log         # registro de métricas de tokens (solo métricas, sin contenido)
 import registro          # rastro de las consultas rechazadas (pregunta + SQL + motivo)
-from comun import perdidos, pipeline, precalentar, rechazos, sinonimos  # módulo compartido
+from comun import llm, perdidos, pipeline, precalentar, rechazos, sinonimos  # módulo compartido
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
-MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
+MODELO = os.environ.get("CENSO_MODELO", llm.MODELO_POR_DEFECTO)
 # Configuración por ETAPA (igual que el motor 2023): el SQL razona (esfuerzo alto),
-# el redactor solo narra (esfuerzo 'none' = "instant"). gpt-5.5: none|low|medium|high.
+# el redactor solo narra (esfuerzo bajo). Vocabulario de gpt-5.5: none|low|medium|high.
 MODELO_SQL = os.environ.get("CENSO_MODELO_SQL", MODELO)
 MODELO_REDACTOR = os.environ.get("CENSO_MODELO_REDACTOR", MODELO)
 ESFUERZO_SQL = os.environ.get("CENSO_ESFUERZO_SQL", "high")
-ESFUERZO_REDACTOR = os.environ.get("CENSO_ESFUERZO_REDACTOR", "none")
+ESFUERZO_REDACTOR = os.environ.get("CENSO_ESFUERZO_REDACTOR", "low")
 TOPE_SQL = int(os.environ.get("CENSO_TOPE_SQL", "4000"))
 TOPE_REDACTOR = int(os.environ.get("CENSO_TOPE_REDACTOR", "2000"))
 
@@ -53,10 +52,8 @@ PONDERACION_2023 = (
 )
 _RX_SUMW = re.compile(r"\bsum\s*\(\s*[^)]*\bw\b", re.I)
 
-# Bounded timeout: without it, a hung/half-closed LLM response wedges the worker
-# thread indefinitely and freezes the app (incident 2026-07-06). 60s per request
-# (connect/read/write/pool) + bounded retries.
-client = OpenAI(timeout=60.0, max_retries=2)  # requires OPENAI_API_KEY in environment
+# El cliente (proveedor, clave, timeout acotado y reintentos) vive en comun/llm.py,
+# compartido por los cuatro censos.
 
 
 @asynccontextmanager
@@ -257,17 +254,15 @@ def normalizar_departamentos(sql: str) -> str:
 
 
 def generar_sql(pregunta: str, contexto: dict | None = None) -> str:
-    r = client.chat.completions.create(
-        model=MODELO_SQL,
-        reasoning_effort=ESFUERZO_SQL,
-        max_completion_tokens=TOPE_SQL,
-        messages=[
-            {"role": "system", "content": PROMPT_SQL},
-            {"role": "user", "content": pipeline.mensaje_usuario(pregunta, contexto)},
-        ],
+    r = llm.completar(
+        modelo=MODELO_SQL,
+        esfuerzo=ESFUERZO_SQL,
+        tope=TOPE_SQL,
+        sistema=PROMPT_SQL,
+        usuario=pipeline.mensaje_usuario(pregunta, contexto),
     )
-    usage_log.registrar("2011", "sql", getattr(r, "usage", None), MODELO_SQL, ESFUERZO_SQL)
-    return r.choices[0].message.content.strip()
+    usage_log.registrar("2011", "sql", r.uso, MODELO_SQL, ESFUERZO_SQL)
+    return pipeline.sql_generado(r.texto)
 
 
 # Semántica de las columnas DERIVADAS cuya codificación NO es obvia (topeadas,
@@ -335,67 +330,59 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
         "mínimo, el mayor, el menor ni el único; describí solo lo que muestran las filas."
         if truncado else ""
     )
-    r = client.chat.completions.create(
-        model=MODELO_REDACTOR,
-        # El redactor solo NARRA (no razona): con el razonamiento por defecto de
-        # gpt-5.5 las preguntas de mapa consumían todo el presupuesto y devolvían
-        # respuesta VACÍA (finish=length). Esfuerzo 'none' ("instant") lo evita de raíz
-        # (y baja costo/latencia); el tope holgado es margen, el modelo corta al terminar.
-        reasoning_effort=ESFUERZO_REDACTOR,
-        max_completion_tokens=TOPE_REDACTOR,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "Respondé la pregunta del usuario usando EXCLUSIVAMENTE los datos "
-                    "provistos. Si los datos no alcanzan, decilo. Citá la fuente: "
-                    "'Censo 2011, INE Uruguay'. Sé breve y preciso.\n"
-                    "Tu función es NARRAR los resultados. NO auditás, corregís ni "
-                    "critiques la consulta SQL: asumila correcta y contá lo que devolvió.\n"
-                    "MAPAS: si la consulta agrupa por una unidad geográfica (departamento, "
-                    "sección censal, barrio, CCZ), el frontend DIBUJA el mapa coroplético "
-                    "automáticamente. NUNCA digas que no podés mostrar un mapa ni que faltan "
-                    "geometrías: el mapa se muestra solo.\n"
-                    f"UNIDAD DE ANÁLISIS de esta consulta: {unidad}. Nombrá esa unidad "
-                    "(personas, hogares o viviendas) al narrar; no digas 'personas' por defecto.\n"
-                    "NO escribas ninguna nota, aclaración ni frase sobre celdas suprimidas, "
-                    "confidencialidad o secreto estadístico: el sistema agrega esa nota "
-                    "automáticamente al final; no la escribas vos ni la repitas.\n"
-                    "Formato de las cifras (español rioplatense): separador de miles con PUNTO —escribí 323.114, nunca 323114— y decimales con coma. NO le pongas separador a los años ('Censo 2023', no 'Censo 2.023') ni a los códigos de sección, localidad o barrio.\n"
-                    "PRESENTACIÓN: si los resultados traen MÁS DE UNA FILA, presentalos SIEMPRE en una TABLA markdown (encabezado + una fila por categoría), NUNCA como lista con viñetas ni enumerados en prosa. Con una sola fila, narrala en una oración.\n"
-                    "NOMBRES PROPIOS: en la base los departamentos, localidades y barrios están en MAYÚSCULAS y sin tildes; escribilos con mayúscula inicial y acentuación correcta —Montevideo, Paysandú, Río Negro, San José, Tacuarembó, Treinta y Tres, Cerro Largo, Paso de los Toros, Bella Unión—, nunca en mayúsculas sostenidas. Las preposiciones y artículos internos van en minúscula (Paso de los Toros, Treinta y Tres).\n"
-                    "Las cifras del Censo 2011 son CONTEOS EXACTOS de los microdatos: NO uses "
-                    "'aproximadamente', 'alrededor de', 'unos/unas' ni 'estimación' para "
-                    "presentarlas (fuera del contexto metodológico general de omisión censal).\n"
-                    f"{aviso_trunc}\n"
-                    "Si el universo de la consulta excluye perdidos (valores NULL: "
-                    "no relevado, viviendas colectivas o secreto estadístico), aclaralo "
-                    "explícitamente (ej.: 'sobre N personas con respuesta válida'). "
-                    "Nunca presentes un porcentaje como si el denominador fuera toda la "
-                    "población cuando la variable tiene perdidos.\n"
-                    "CODIFICACIONES de esta consulta (respetalas al narrar; p. ej. una "
-                    "variable topeada en 3 significa '3 o más'):\n"
-                    + leyenda_codificaciones(sql, columnas_conteo) + "\n"
-                    + perdidos.leyenda_para_redactor("2011", sql) + "\n"
-                    "Contexto metodológico (usalo solo si es pertinente): el Censo 2011 "
-                    "fue el primer censo de derecho de Uruguay (cuenta a las personas en "
-                    "su residencia habitual), con fecha de referencia 4 de octubre de 2011. "
-                    "Población censada: 3.252.091; contabilizada (incluye 34.223 personas "
-                    "imputadas en viviendas con moradores ausentes): 3.286.314; total "
-                    "residente estimada (omisión 3,06%): 3.390.077. Los datos consultados "
-                    "son los microdatos publicados, que pueden incluir personas imputadas."
-                    + pipeline.instruccion_redactor(interpretaciones, contexto)
-                ),
-            },
-            {
-                "role": "user",
-                "content": f"Pregunta: {pregunta}\nSQL ejecutado: {sql}\nResultados: {filas}",
-            },
-        ],
+    r = llm.completar(
+        modelo=MODELO_REDACTOR,
+        # El redactor solo NARRA (no razona): con el razonamiento activado las
+        # preguntas de mapa consumían todo el presupuesto y devolvían respuesta
+        # VACÍA (corte por tope). Esfuerzo 'none' lo evita de raíz (y baja
+        # costo/latencia); el tope holgado es margen, el modelo corta al terminar.
+        esfuerzo=ESFUERZO_REDACTOR,
+        tope=TOPE_REDACTOR,
+        sistema=(
+            "Respondé la pregunta del usuario usando EXCLUSIVAMENTE los datos "
+            "provistos. Si los datos no alcanzan, decilo. Citá la fuente: "
+            "'Censo 2011, INE Uruguay'. Sé breve y preciso.\n"
+            "Tu función es NARRAR los resultados. NO auditás, corregís ni "
+            "critiques la consulta SQL: asumila correcta y contá lo que devolvió.\n"
+            "MAPAS: si la consulta agrupa por una unidad geográfica (departamento, "
+            "sección censal, barrio, CCZ), el frontend DIBUJA el mapa coroplético "
+            "automáticamente. NUNCA digas que no podés mostrar un mapa ni que faltan "
+            "geometrías: el mapa se muestra solo.\n"
+            f"UNIDAD DE ANÁLISIS de esta consulta: {unidad}. Nombrá esa unidad "
+            "(personas, hogares o viviendas) al narrar; no digas 'personas' por defecto.\n"
+            "NO escribas ninguna nota, aclaración ni frase sobre celdas suprimidas, "
+            "confidencialidad o secreto estadístico: el sistema agrega esa nota "
+            "automáticamente al final; no la escribas vos ni la repitas.\n"
+            "Formato de las cifras (español rioplatense): separador de miles con PUNTO —escribí 323.114, nunca 323114— y decimales con coma. NO le pongas separador a los años ('Censo 2023', no 'Censo 2.023') ni a los códigos de sección, localidad o barrio.\n"
+            "PRESENTACIÓN: si los resultados traen MÁS DE UNA FILA, presentalos SIEMPRE en una TABLA markdown (encabezado + una fila por categoría), NUNCA como lista con viñetas ni enumerados en prosa. Con una sola fila, narrala en una oración.\n"
+            "NOMBRES PROPIOS: en la base los departamentos, localidades y barrios están en MAYÚSCULAS y sin tildes; escribilos con mayúscula inicial y acentuación correcta —Montevideo, Paysandú, Río Negro, San José, Tacuarembó, Treinta y Tres, Cerro Largo, Paso de los Toros, Bella Unión—, nunca en mayúsculas sostenidas. Las preposiciones y artículos internos van en minúscula (Paso de los Toros, Treinta y Tres).\n"
+            "Las cifras del Censo 2011 son CONTEOS EXACTOS de los microdatos: NO uses "
+            "'aproximadamente', 'alrededor de', 'unos/unas' ni 'estimación' para "
+            "presentarlas (fuera del contexto metodológico general de omisión censal).\n"
+            f"{aviso_trunc}\n"
+            "Si el universo de la consulta excluye perdidos (valores NULL: "
+            "no relevado, viviendas colectivas o secreto estadístico), aclaralo "
+            "explícitamente (ej.: 'sobre N personas con respuesta válida'). "
+            "Nunca presentes un porcentaje como si el denominador fuera toda la "
+            "población cuando la variable tiene perdidos.\n"
+            "CODIFICACIONES de esta consulta (respetalas al narrar; p. ej. una "
+            "variable topeada en 3 significa '3 o más'):\n"
+            + leyenda_codificaciones(sql, columnas_conteo) + "\n"
+            + perdidos.leyenda_para_redactor("2011", sql) + "\n"
+            "Contexto metodológico (usalo solo si es pertinente): el Censo 2011 "
+            "fue el primer censo de derecho de Uruguay (cuenta a las personas en "
+            "su residencia habitual), con fecha de referencia 4 de octubre de 2011. "
+            "Población censada: 3.252.091; contabilizada (incluye 34.223 personas "
+            "imputadas en viviendas con moradores ausentes): 3.286.314; total "
+            "residente estimada (omisión 3,06%): 3.390.077. Los datos consultados "
+            "son los microdatos publicados, que pueden incluir personas imputadas."
+            + pipeline.instruccion_redactor(interpretaciones, contexto)
+        ),
+        usuario=f"Pregunta: {pregunta}\nSQL ejecutado: {sql}\nResultados: {filas}"
+                + pipeline.totales_para_redactor(filas, columnas_conteo),
     )
-    usage_log.registrar("2011", "redactor", getattr(r, "usage", None), MODELO_REDACTOR, ESFUERZO_REDACTOR)
-    texto = pipeline.asegurar_declaracion(r.choices[0].message.content.strip(),
-                                          interpretaciones, contexto)
+    usage_log.registrar("2011", "redactor", r.uso, MODELO_REDACTOR, ESFUERZO_REDACTOR)
+    texto = pipeline.asegurar_declaracion(r.texto, interpretaciones, contexto)
     return texto + nota
 
 

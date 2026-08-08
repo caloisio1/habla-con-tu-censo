@@ -1,6 +1,6 @@
 fastapi>=0.110
 uvicorn>=0.29
-openai>=1.30
+openai>=1.30           # cliente del LLM (gpt-5.5), ver comun/llm.py
 pytest>=8.0
 pyreadstat>=1.2
 dbfread>=2.0

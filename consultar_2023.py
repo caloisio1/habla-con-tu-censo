@@ -3,37 +3,34 @@
 Pipeline (análogo al motor 2011): pregunta ES -> LLM genera SQL -> guard 2023 valida
 -> ejecuta contra censo2023.db (SOLO LECTURA) -> supresión <5 -> LLM redacta.
 Interfaz `preguntar(texto)` que usa el servicio unificado cuando el selector elige 2023.
-La clave OpenAI la toma del entorno; no se escribe en ningún archivo.
+La clave del LLM la toma del entorno; no se escribe en ningún archivo.
 """
 import os, sys, re, sqlite3, json
-from openai import OpenAI
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
 from sql_guard_2023 import validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
 import registro
 import usage_log
-from comun import pipeline, rechazos, sinonimos
+from comun import llm, pipeline, rechazos, sinonimos
 
 DB = os.environ.get("CENSO2023_DB", os.path.join(AQUI, "censo2023.db"))
-MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
+MODELO = os.environ.get("CENSO_MODELO", llm.MODELO_POR_DEFECTO)
 # Configuración por ETAPA (modelo + esfuerzo de razonamiento), sobreescribible por entorno.
 # El SQL es la etapa que RAZONA (traducir la pregunta al esquema): esfuerzo alto.
-# El redactor solo NARRA los resultados: esfuerzo 'none' ("instant"), sin tokens de
-# razonamiento, más barato y más rápido. gpt-5.5 acepta: none | low | medium | high.
+# El redactor solo NARRA los resultados ya calculados: esfuerzo bajo, más barato y
+# más rápido. El vocabulario (none|low|medium|high) es el de gpt-5.5.
 MODELO_SQL = os.environ.get("CENSO_MODELO_SQL", MODELO)
 MODELO_REDACTOR = os.environ.get("CENSO_MODELO_REDACTOR", MODELO)
 ESFUERZO_SQL = os.environ.get("CENSO_ESFUERZO_SQL", "high")
-ESFUERZO_REDACTOR = os.environ.get("CENSO_ESFUERZO_REDACTOR", "none")
+ESFUERZO_REDACTOR = os.environ.get("CENSO_ESFUERZO_REDACTOR", "low")
 # Con esfuerzo alto el razonamiento consume presupuesto de salida: el tope del SQL sube
 # para que la consulta nunca salga vacía por finish_reason=length (incidente 2026-07-06).
 TOPE_SQL = int(os.environ.get("CENSO_TOPE_SQL", "4000"))
 TOPE_REDACTOR = int(os.environ.get("CENSO_TOPE_REDACTOR", "1600"))
 ESQUEMA = open(os.path.join(AQUI, "esquema_llm_2023.txt"), encoding="utf-8").read()
-# Timeout ACOTADO: sin él, una respuesta LLM colgada/medio-cerrada (CLOSE-WAIT) deja
-# el hilo worker clavado indefinidamente y wedge toda la app (incidente 2026-07-06).
-# timeout=60s por request (connect/read/write/pool) + reintentos acotados.
-client = OpenAI(timeout=60.0, max_retries=2)  # OPENAI_API_KEY del entorno
+# El cliente (proveedor, clave, timeout acotado y reintentos) vive en comun/llm.py,
+# compartido por los cuatro censos.
 
 REGLAS = """Reglas estrictas (dialecto SQLite):
 - Devolvé SOLO la consulta SQL, sin explicaciones ni markdown.
@@ -122,13 +119,11 @@ _RX_SUMW = re.compile(r"\bsum\s*\(\s*[^)]*\bw\b", re.I)
 
 
 def generar_sql(pregunta, contexto=None):
-    r = client.chat.completions.create(
-        model=MODELO_SQL, reasoning_effort=ESFUERZO_SQL, max_completion_tokens=TOPE_SQL,
-        messages=[{"role": "system", "content": PROMPT_SQL},
-                  {"role": "user",
-                   "content": pipeline.mensaje_usuario(pregunta, contexto)}])
-    usage_log.registrar("2023", "sql", getattr(r, "usage", None), MODELO_SQL, ESFUERZO_SQL)
-    return r.choices[0].message.content.strip()
+    r = llm.completar(modelo=MODELO_SQL, esfuerzo=ESFUERZO_SQL, tope=TOPE_SQL,
+                      sistema=PROMPT_SQL,
+                      usuario=pipeline.mensaje_usuario(pregunta, contexto))
+    usage_log.registrar("2023", "sql", r.uso, MODELO_SQL, ESFUERZO_SQL)
+    return pipeline.sql_generado(r.texto)
 
 
 # Líneas "- NOMBRE | etiqueta | códigos" del esquema, indexadas para inyectarle al
@@ -210,17 +205,15 @@ def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False,
            if leyenda else "")
         + pipeline.instruccion_redactor(interpretaciones, contexto)
     )
-    r = client.chat.completions.create(
-        # El redactor solo NARRA: sin razonamiento (esfuerzo 'none' = "instant") no puede
-        # agotar el presupuesto y devolver respuesta vacía (finish=length) en preguntas de
-        # mapa; es lo más barato y rápido. El tope holgado es margen.
-        model=MODELO_REDACTOR, reasoning_effort=ESFUERZO_REDACTOR,
-        max_completion_tokens=TOPE_REDACTOR,
-        messages=[{"role": "system", "content": sys_prompt},
-                  {"role": "user", "content": f"Pregunta: {pregunta}\nSQL: {sql}\nResultados: {filas}"}])
-    usage_log.registrar("2023", "redactor", getattr(r, "usage", None), MODELO_REDACTOR, ESFUERZO_REDACTOR)
-    texto = pipeline.asegurar_declaracion(r.choices[0].message.content.strip(),
-                                          interpretaciones, contexto)
+    # El redactor solo NARRA: con esfuerzo bajo el razonamiento no llega a agotar el
+    # presupuesto ni a vaciar la respuesta en preguntas de mapa. El tope holgado
+    # (1600) es justamente ese margen: no bajarlo sin volver a medir.
+    r = llm.completar(modelo=MODELO_REDACTOR, esfuerzo=ESFUERZO_REDACTOR,
+                      tope=TOPE_REDACTOR, sistema=sys_prompt,
+                      usuario=f"Pregunta: {pregunta}\nSQL: {sql}\nResultados: {filas}"
+                              + pipeline.totales_para_redactor(filas, columnas_conteo))
+    usage_log.registrar("2023", "redactor", r.uso, MODELO_REDACTOR, ESFUERZO_REDACTOR)
+    texto = pipeline.asegurar_declaracion(r.texto, interpretaciones, contexto)
     return texto + nota
 
 

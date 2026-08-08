@@ -21,34 +21,31 @@ redibujaron entre censos y pintar el código de 1996 sobre el polígono de 2011
 daría un dato falso. La cartografía propia de esos años que tenemos son planos en
 PDF, no geometrías.
 
-La clave OpenAI la toma del entorno; no se escribe en ningún archivo.
+La clave del LLM la toma del entorno; no se escribe en ningún archivo.
 """
 import os
 import re
 import sqlite3
 
-from openai import OpenAI
-
 import usage_log
 import registro
 from sql_guard_historicos import SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
-from comun import pipeline, rechazos, sinonimos
+from comun import llm, pipeline, rechazos, sinonimos
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
-MODELO = os.environ.get("CENSO_MODELO", "gpt-5.5")
+MODELO = os.environ.get("CENSO_MODELO", llm.MODELO_POR_DEFECTO)
 # Configuración por ETAPA, igual que 2011 y 2023: el SQL razona (esfuerzo alto),
-# el redactor solo narra (esfuerzo 'none' = "instant").
+# el redactor solo narra (esfuerzo bajo). Vocabulario de gpt-5.5.
 MODELO_SQL = os.environ.get("CENSO_MODELO_SQL", MODELO)
 MODELO_REDACTOR = os.environ.get("CENSO_MODELO_REDACTOR", MODELO)
 ESFUERZO_SQL = os.environ.get("CENSO_ESFUERZO_SQL", "high")
-ESFUERZO_REDACTOR = os.environ.get("CENSO_ESFUERZO_REDACTOR", "none")
+ESFUERZO_REDACTOR = os.environ.get("CENSO_ESFUERZO_REDACTOR", "low")
 TOPE_SQL = int(os.environ.get("CENSO_TOPE_SQL", "4000"))
 TOPE_REDACTOR = int(os.environ.get("CENSO_TOPE_REDACTOR", "1600"))
 
-# Timeout ACOTADO: sin él una respuesta LLM colgada deja el hilo worker clavado
-# y wedge toda la app (incidente 2026-07-06).
-client = OpenAI(timeout=60.0, max_retries=2)   # OPENAI_API_KEY del entorno
+# El cliente (proveedor, clave, timeout acotado y reintentos) vive en comun/llm.py,
+# compartido por los cuatro censos.
 
 _SECCIONES = None
 
@@ -161,15 +158,11 @@ class Motor:
 
     # -- etapas LLM -------------------------------------------------------
     def generar_sql(self, pregunta, contexto=None):
-        r = client.chat.completions.create(
-            model=MODELO_SQL, reasoning_effort=ESFUERZO_SQL,
-            max_completion_tokens=TOPE_SQL,
-            messages=[{"role": "system", "content": self.prompt_sql},
-                      {"role": "user",
-                       "content": pipeline.mensaje_usuario(pregunta, contexto)}])
-        usage_log.registrar(self.censo, "sql", getattr(r, "usage", None),
-                            MODELO_SQL, ESFUERZO_SQL)
-        return r.choices[0].message.content.strip()
+        r = llm.completar(modelo=MODELO_SQL, esfuerzo=ESFUERZO_SQL, tope=TOPE_SQL,
+                          sistema=self.prompt_sql,
+                          usuario=pipeline.mensaje_usuario(pregunta, contexto))
+        usage_log.registrar(self.censo, "sql", r.uso, MODELO_SQL, ESFUERZO_SQL)
+        return pipeline.sql_generado(r.texto)
 
     # Mecánica interna de la tabla: no son categorías que le interesen a quien
     # pregunta. Si entran en la leyenda, el redactor las narra ("registro de
@@ -217,17 +210,14 @@ class Motor:
                if leyenda else "")
             + pipeline.instruccion_redactor(interpretaciones, contexto)
         )
-        r = client.chat.completions.create(
-            model=MODELO_REDACTOR, reasoning_effort=ESFUERZO_REDACTOR,
-            max_completion_tokens=TOPE_REDACTOR,
-            messages=[{"role": "system", "content": sys_prompt},
-                      {"role": "user",
-                       "content": "Pregunta: %s\nSQL: %s\nResultados: %s"
-                                  % (pregunta, sql, filas)}])
-        usage_log.registrar(self.censo, "redactor", getattr(r, "usage", None),
+        r = llm.completar(modelo=MODELO_REDACTOR, esfuerzo=ESFUERZO_REDACTOR,
+                          tope=TOPE_REDACTOR, sistema=sys_prompt,
+                          usuario="Pregunta: %s\nSQL: %s\nResultados: %s%s"
+                                  % (pregunta, sql, filas,
+                                     pipeline.totales_para_redactor(filas, columnas_conteo)))
+        usage_log.registrar(self.censo, "redactor", r.uso,
                             MODELO_REDACTOR, ESFUERZO_REDACTOR)
-        texto = pipeline.asegurar_declaracion(
-            r.choices[0].message.content.strip(), interpretaciones, contexto)
+        texto = pipeline.asegurar_declaracion(r.texto, interpretaciones, contexto)
         return texto + nota
 
     # -- mapa -------------------------------------------------------------

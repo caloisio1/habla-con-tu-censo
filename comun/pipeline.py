@@ -15,6 +15,8 @@ Orden de una consulta, con el paso compartido entre paréntesis:
   6. supresión de celdas chicas         -> (sobre_filas) distingue vacío de suprimido
   7. el redactor narra                  -> (nota_final) declara interpretación y criterio
 """
+import re
+
 from comun import cache, edad, indicadores, rechazos, supresion
 from comun.sql_entidades import (EntidadNoResuelta, canonizar, preparar_1996,
                                  resolver_en_sql)
@@ -49,6 +51,51 @@ def mensaje_usuario(texto, contexto):
     """
     instr = (contexto or {}).get("instruccion_edad") or ""
     return (instr + "\n\n" + texto) if instr else texto
+
+
+_RX_CERCA = re.compile(r"^\s*```[a-zA-Z]*\s*|\s*```\s*$")
+
+
+def sql_generado(texto):
+    """Saca la cerca de markdown con que el modelo envuelve el SQL.
+
+    El prompt pide "sin markdown", pero hay modelos que igual devuelven
+    ```sql ... ```. Con la cerca puesta el guard ve un texto que no empieza en
+    SELECT y rechaza la consulta por "Solo se permiten consultas SELECT": la
+    pregunta era correcta y el SQL también, se caía por el envoltorio.
+
+    Se limpia acá, en el paso compartido, y no en cada motor: es la misma cerca en
+    los cuatro censos. Es puro desenvolver — no toca el SQL de adentro, así que un
+    modelo que ya respete el formato pasa sin cambios.
+    """
+    return _RX_CERCA.sub("", (texto or "").strip()).strip()
+
+
+def totales_para_redactor(filas, columnas_conteo):
+    """Línea con los totales YA SUMADOS de cada columna de conteo.
+
+    El redactor sumaba las filas de cabeza para dar el total y a veces erraba: en
+    un desglose de cuatro categorías que suman 240.191 escribió 234.291. Una cifra
+    equivocada por aritmética es el peor error posible acá, y es evitable: la suma
+    la hace Python y el modelo solo la transcribe. Vacío si hay una sola fila (no
+    hay nada que sumar) o si no hay columnas de conteo.
+    """
+    if not filas or len(filas) < 2:
+        return ""
+    conteo = {c.lower() for c in columnas_conteo}
+    sumas = {}
+    for fila in filas:
+        for col, valor in fila.items():
+            if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+                continue
+            clave = col.lower()
+            if clave in conteo and not clave.startswith(("pct", "porc", "proporcion")):
+                sumas[col] = sumas.get(col, 0) + valor
+    if not sumas:
+        return ""
+    detalle = "; ".join("%s=%d" % (c, v) for c, v in sumas.items())
+    return ("\nTOTALES ya calculados por el sistema (%s). Si narrás un total, usá EXACTAMENTE "
+            "estos números: NO sumes las filas vos." % detalle)
 
 
 def sql_cacheado(pregunta, censo, contexto):
