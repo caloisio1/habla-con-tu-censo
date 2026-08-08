@@ -5,14 +5,14 @@ Pipeline (análogo al motor 2011): pregunta ES -> LLM genera SQL -> guard 2023 v
 Interfaz `preguntar(texto)` que usa el servicio unificado cuando el selector elige 2023.
 La clave del LLM la toma del entorno; no se escribe en ningún archivo.
 """
-import os, sys, re, sqlite3, json
+import os, sys, re, json
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
 from sql_guard_2023 import validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
 import registro
 import usage_log
-from comun import llm, pipeline, rechazos, sinonimos
+from comun import ejecutor, llm, pipeline, rechazos, sinonimos
 
 DB = os.environ.get("CENSO2023_DB", os.path.join(AQUI, "datos", "censo2023.db"))
 MODELO = os.environ.get("CENSO_MODELO", llm.MODELO_POR_DEFECTO)
@@ -252,11 +252,7 @@ def _contar_unidades_geo(sql_seguro):
     """Cuenta las unidades geográficas REALES (sin el LIMIT) de una consulta de mapa,
     para el aviso anti-truncamiento. Envuelve el SQL ya validado en un COUNT(*)."""
     base = re.sub(r"\s+limit\s+\d+\s*$", "", sql_seguro, flags=re.I)
-    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
-    try:
-        return con.execute(f"SELECT COUNT(*) FROM ({base})").fetchone()[0]
-    finally:
-        con.close()
+    return ejecutor.escalar(DB, f"SELECT COUNT(*) FROM ({base})")
 
 
 def construir_mapa_2023(filas, columnas_conteo, suprimidas, sql=""):
@@ -331,10 +327,7 @@ def preguntar(texto, verbose=False):
     if listo is not None:
         return dict(listo, sql=sql_seguro, veredicto="OK")
 
-    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
-    con.row_factory = sqlite3.Row
-    filas = [dict(f) for f in con.execute(sql_seguro).fetchall()]
-    con.close()
+    filas = ejecutor.filas(DB, sql_seguro)
     n_geo_raw = len(filas)   # filas antes de supresión: detecta si el mapa quedó truncado por el LIMIT
 
     # Supresión con la regla corregida (1 <= n < 5): un conteo CERO no es un

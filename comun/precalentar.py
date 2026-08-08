@@ -93,6 +93,14 @@ def _correr(motores):
         time.sleep(PAUSA_ENTRE)
     log.info("PRECALENTADO listo: %d de %d preguntas en caché (%.0fs)",
              listas, listas + fallidas, time.time() - t0)
+    # Recién acá se tocaron los cuatro censos, así que las conexiones perezosas de
+    # comun/ejecutor.py ya existen todas: es el único momento en que el estado del
+    # motor está completo. Sin esta línea, una degradación a SQLite sería invisible.
+    try:
+        from comun import ejecutor
+        log.info("MOTOR SQL %s", ejecutor.estado())
+    except Exception:                                         # noqa: BLE001
+        pass
 
 
 def arrancar(motores):

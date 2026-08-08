@@ -5,3 +5,4 @@ pytest>=8.0
 pyreadstat>=1.2
 dbfread>=2.0
 sqlglot>=25
+duckdb>=1.5             # motor analítico sobre las mismas bases .db, ver comun/ejecutor.py

@@ -11,7 +11,6 @@ if a query fails validation or a cell is too small, the system says so.
 
 import os
 import re
-import sqlite3
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -31,7 +30,7 @@ import consultar_2004   # motor Censo 2004 Fase 1 (conteo, sin ponderar)
 MOTORES_HISTORICOS = {"1996": consultar_1996, "2004": consultar_2004}
 import usage_log         # registro de métricas de tokens (solo métricas, sin contenido)
 import registro          # rastro de las consultas rechazadas (pregunta + SQL + motivo)
-from comun import llm, perdidos, pipeline, precalentar, rechazos, sinonimos  # módulo compartido
+from comun import ejecutor, llm, perdidos, pipeline, precalentar, rechazos, sinonimos  # módulo compartido
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", llm.MODELO_POR_DEFECTO)
@@ -500,9 +499,7 @@ def responder_2011(texto: str) -> dict:
     if listo is not None:
         return dict(listo, sql=sql_seguro)
 
-    with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True) as con:
-        con.row_factory = sqlite3.Row
-        filas = [dict(f) for f in con.execute(sql_seguro).fetchall()]
+    filas = ejecutor.filas(DB_PATH, sql_seguro)
 
     # Si las filas devueltas alcanzan el tope del LIMIT, el resultado puede estar
     # recortado -> se avisa al redactor para que no narre extremos como universales (d).

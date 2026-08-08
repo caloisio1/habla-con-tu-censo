@@ -35,12 +35,11 @@ La clave del LLM la toma del entorno; no se escribe en ningún archivo.
 """
 import os
 import re
-import sqlite3
 
 import usage_log
 import registro
 from sql_guard_historicos import SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
-from comun import codigos, llm, pipeline, rechazos, sinonimos
+from comun import codigos, ejecutor, llm, pipeline, rechazos, sinonimos
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
@@ -468,12 +467,7 @@ class Motor:
         if listo is not None:
             return dict(listo, sql=sql_seguro, veredicto="OK")
 
-        con = sqlite3.connect("file:%s?mode=ro" % self.db, uri=True)
-        con.row_factory = sqlite3.Row
-        try:
-            filas = [dict(f) for f in con.execute(sql_seguro).fetchall()]
-        finally:
-            con.close()
+        filas = ejecutor.filas(self.db, sql_seguro)
         n_raw = len(filas)
 
         # 3. Supresión con la regla corregida: el cero NO es confidencialidad.
