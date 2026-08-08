@@ -153,13 +153,18 @@ def _conexion(db):
 def _caida(db, sql, e):
     """Registra que una consulta tuvo que repetirse en SQLite. Avisa solo la primera
     vez por base: si DuckDB rechaza algo sistemáticamente, no queremos el journal
-    inundado, pero sí queremos saber que pasó y con qué SQL."""
+    inundado, pero sí queremos saber que pasó y con qué SQL.
+
+    El SQL se recorta largo a propósito. La causa más común es el GROUP BY: SQLite
+    deja poner en el ORDER BY una columna que no está agrupada y DuckDB lo rechaza
+    por SQL estándar. Distinguir eso de un problema real necesita ver la consulta
+    entera, y con un recorte corto no se puede."""
     _CAIDAS[db] += 1
     if db not in _AVISADAS:
         _AVISADAS.add(db)
         _avisar("%s: consulta repetida en SQLite (%s: %s) | SQL: %s"
                 % (db, type(e).__name__, str(e).replace("\n", " ")[:200],
-                   " ".join(sql.split())[:200]))
+                   " ".join(sql.split())[:600]))
 
 
 def _sqlite_filas(db, sql):
