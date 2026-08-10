@@ -365,6 +365,19 @@ function tarjetaLoading(pregunta){
       <div class="preview answer" hidden style="opacity:.72"></div>
     </div>`;
   hist.prepend(card);
+  // Las tarjetas se ANTEPONEN, así que la nueva nace arriba de todo. Si la
+  // pregunta salió de un botón de opciones —que vive dentro de una tarjeta ya
+  // vieja, más abajo en la página— la respuesta aparece fuera de la pantalla y
+  // parece que el clic no hizo nada: el usuario clickea las cuatro opciones sin
+  // ver ninguna. Llevar la vista a la tarjeta lo vuelve evidente. Con la
+  // pregunta escrita en el formulario el desplazamiento es nulo o mínimo,
+  // porque ahí la tarjeta ya queda a la vista.
+  try {
+    card.scrollIntoView({
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'nearest'
+    });
+  } catch(_) { card.scrollIntoView(); }   // navegadores sin opciones en scrollIntoView
   const msgEl = card.querySelector('.msg');
   const prevEl = card.querySelector('.preview');
   let borrador = '', pintar = null;
