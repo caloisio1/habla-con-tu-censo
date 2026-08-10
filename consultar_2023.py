@@ -64,6 +64,26 @@ REGLAS = """Reglas estrictas (dialecto SQLite):
 - Identificadores (vivienda_key, hogar_key, DIRECCION_ID, VIVID, HOGID, PERID, ID_HOGAR):
   libres en subconsultas/GROUP BY interno, PROHIBIDOS en el SELECT externo salvo dentro de
   COUNT(DISTINCT ...).
+- TRAMOS Y CATEGORÍAS DERIVADAS (edad quinquenal o decenal, rangos, cualquier columna
+  construida con CASE o con aritmética). Tres reglas que van juntas:
+  1) AGRUPÁ POR EL ORDINAL de la columna proyectada -> GROUP BY 1, nunca repitiendo la
+     expresión. Para que los tramos salgan en orden de edad y no alfabético ('10-14'
+     antes que '5-9'), ordená con ORDER BY MIN(PERNA01). Repetir la expresión en el
+     GROUP BY, o poner PERNA01 suelta en el ORDER BY, hace que la consulta se resuelva
+     por el camino lento: responde igual pero tarda decenas de segundos en vez de décimas.
+  2) PARENTIZÁ cada operando y convertilo con CAST(... AS TEXT) antes de concatenar con
+     '||'. Sin eso, '||' se combina con '*' de forma distinta según el motor y la
+     etiqueta del tramo sale como un número suelto (20) en lugar del rango ('20-24').
+  3) DIVISIÓN: escribí CAST(FLOOR(PERNA01/5.0) AS INTEGER)*5, nunca (PERNA01/5)*5. La
+     división entera no da el mismo resultado en todos los motores y el tramo sale
+     '20.0-24.0'.
+  Bien: SELECT CASE WHEN PERNA01 >= 95 THEN '95 y más'
+               ELSE CAST(CAST(FLOOR(PERNA01/5.0) AS INTEGER)*5 AS TEXT) || '-' ||
+                    CAST(CAST(FLOOR(PERNA01/5.0) AS INTEGER)*5+4 AS TEXT) END AS tramo,
+               ROUND(SUM(W)) AS personas, COUNT(*) AS n_crudo
+        FROM personas_2023 WHERE PERNA01 NOT IN (7777, 8888, 9898, 9999)
+        GROUP BY 1 ORDER BY MIN(PERNA01)
+  Para tramos de 10 en 10 es lo mismo cambiando 5.0 por 10.0 y el +4 por +9.
 PATRONES DE MAPA (desglose geográfico): si la pregunta pide "por" o "en cada"
 departamento / sección / segmento / localidad, o pide un mapa, agrupá por esa unidad
 y devolvé como PRIMERA columna el CÓDIGO COMPUESTO con alias EXACTO 'geo_codigo',
