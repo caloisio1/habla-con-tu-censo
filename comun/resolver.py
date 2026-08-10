@@ -27,7 +27,8 @@ from collections import defaultdict, namedtuple
 
 from comun import nomenclator as nom
 from comun import sinonimos
-from comun.texto import fonetico, normalizar, similitud, variantes_numero
+from comun.texto import (fonetico, normalizar, normalizar_compat, similitud,
+                         variantes_numero)
 
 # ── estados posibles ─────────────────────────────────────────────────────
 UNICO = "unico"                  # una sola entidad: se puede ejecutar el SQL
@@ -59,19 +60,30 @@ MAX_SUGERENCIAS = 5
 
 
 def _indices(censo, tipos):
-    """Índices del catálogo: por nombre normalizado, por clave fonética y por
-    variante de número. Se recalculan por llamada sobre la lista cacheada, que
-    tiene unos pocos cientos de entradas."""
+    """Índices del catálogo: por nombre normalizado, por clave de compatibilidad,
+    por clave fonética y por variante de número. Se recalculan por llamada sobre
+    la lista cacheada, que tiene unos pocos cientos de entradas.
+
+    por_compat es el índice de RESPALDO (NFKD): pliega ancho completo, ligaduras
+    y demás compatibilidades Unicode. Guarda listas, igual que los otros, para
+    que una equivalencia de compatibilidad pueda ayudar a encontrar una entidad
+    sin fusionar dos que el catálogo distingue: si quedan varias, _clasificar()
+    devuelve ambigüedad en vez de elegir por su cuenta."""
     entidades = nom.catalogo(censo, tipos)
     por_norm, por_fon, por_num = defaultdict(list), defaultdict(list), defaultdict(list)
+    por_compat = defaultdict(list)
     for e in entidades:
         n = normalizar(e.nombre)
         por_norm[n].append(e)
+        # SIN condicionar a que difiera de n: lo que llega plegado es el texto
+        # del USUARIO, y su clave compat tiene que encontrar la del catálogo
+        # aunque para el catálogo ambas claves sean iguales ('MONTEVIDEO').
+        por_compat[normalizar_compat(e.nombre)].append(e)
         por_fon[fonetico(e.nombre)].append(e)
         for v in variantes_numero(e.nombre):
             if v != n:
                 por_num[v].append(e)
-    return entidades, por_norm, por_fon, por_num
+    return entidades, por_norm, por_compat, por_fon, por_num
 
 
 def _clasificar(candidatos, interpretacion=None):
@@ -136,7 +148,7 @@ def resolver(texto, tipo=None, censo="2023", variable=None):
         tipos = (tipos,)
 
     original = str(texto)
-    entidades, por_norm, por_fon, por_num = _indices(censo, tipos)
+    entidades, por_norm, por_compat, por_fon, por_num = _indices(censo, tipos)
 
     # 1. match exacto sobre lo normalizado
     consulta = normalizar(original)
@@ -168,6 +180,16 @@ def resolver(texto, tipo=None, censo="2023", variable=None):
         if v in por_num:
             cands = _filtrar_por_calificador(por_num[v], original, censo)
             return _clasificar(cands, interpretacion=_frase(cands[0]) if len(cands) == 1 else None)
+
+    # 3b. compatibilidad Unicode: ancho completo, ligaduras. Va DESPUÉS de las
+    # equivalencias declaradas (sinónimos, números), que son curadas y deben
+    # ganar, y ANTES de la fonética, que es mucho más laxa. Solo se consulta si
+    # la clave tolerante difiere de la conservadora: si son iguales, el paso 1
+    # ya falló y repetirlo no aporta nada.
+    compat = normalizar_compat(original)
+    if compat != consulta and compat in por_compat:
+        cands = _filtrar_por_calificador(por_compat[compat], original, censo)
+        return _clasificar(cands, interpretacion=_frase(cands[0]) if len(cands) == 1 else None)
 
     # 4. clave fonética
     clave = fonetico(original)

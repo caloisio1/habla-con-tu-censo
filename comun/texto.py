@@ -38,23 +38,52 @@ _RX_NO_PALABRA = re.compile(r"[^\w\s]", re.UNICODE)
 _RX_ESPACIOS = re.compile(r"\s+")
 
 
-def sin_tildes(texto):
-    """Quita diacríticos conservando la ñ (que en español no es un acento)."""
+def sin_tildes(texto, forma="NFD"):
+    """Quita diacríticos conservando la ñ (que en español no es un acento).
+
+    forma='NFKD' pliega ADEMÁS los caracteres de compatibilidad: ancho completo
+    ('ｍｏｎｔｅｖｉｄｅｏ'), ligaduras, superíndices, números encerrados. Eso sirve para
+    lo que el usuario tipea o pega, NO para decidir si dos entradas del catálogo
+    son el mismo nombre: NFKD equipara cosas que como identidad no queremos
+    fusionar. Por eso la clave principal se queda en NFD y la variante solo
+    alimenta el índice de respaldo (ver normalizar_compat).
+    """
     texto = str(texto).replace("ñ", "\x00").replace("Ñ", "\x01")
-    texto = "".join(c for c in unicodedata.normalize("NFD", texto)
+    texto = "".join(c for c in unicodedata.normalize(forma, texto)
                     if unicodedata.category(c) != "Mn")
     return texto.replace("\x00", "ñ").replace("\x01", "Ñ")
 
 
-def normalizar(texto):
-    """Clave de comparación principal: MAYÚSCULAS, sin tildes, sin puntuación,
-    espacios colapsados y abreviaturas expandidas."""
-    if texto is None:
-        return ""
-    t = sin_tildes(texto).upper()
+def _clave(texto, forma):
+    t = sin_tildes(texto, forma).upper()
     t = _RX_NO_PALABRA.sub(" ", t)
     t = _RX_ESPACIOS.sub(" ", t).strip()
     return " ".join(ABREVIATURAS.get(p, p) for p in t.split())
+
+
+def normalizar(texto):
+    """Clave de comparación principal: MAYÚSCULAS, sin tildes, sin puntuación,
+    espacios colapsados y abreviaturas expandidas.
+
+    Es la clave de IDENTIDAD del nomenclátor: define cuándo dos nombres del
+    catálogo son el mismo. Conservadora a propósito."""
+    if texto is None:
+        return ""
+    return _clave(texto, "NFD")
+
+
+def normalizar_compat(texto):
+    """Clave TOLERANTE, para lo que escribe el usuario: igual que normalizar()
+    pero plegando también los caracteres de compatibilidad Unicode.
+
+    NO reemplaza a normalizar(): se usa como segundo intento cuando el primero
+    no encontró nada. Una equivalencia de compatibilidad puede ayudar a ENCONTRAR
+    una entidad, pero no debe FUSIONAR dos que el catálogo distingue; por eso el
+    índice que alimenta guarda listas y la resolución solo procede si queda un
+    único candidato."""
+    if texto is None:
+        return ""
+    return _clave(texto, "NFKD")
 
 
 # ── normalización fonética del español ────────────────────────────────────
