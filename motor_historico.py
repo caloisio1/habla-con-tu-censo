@@ -285,7 +285,14 @@ class Motor:
         return self.unidad_por_defecto
 
     def redactar(self, pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False,
-                 interpretaciones=(), contexto=None):
+                 interpretaciones=(), contexto=None, emitir=None):
+        """Si emitir no es None, se la llama con cada fragmento a medida que llega.
+
+        Lo que se emite es SOLO lo que escribe el modelo. El texto definitivo
+        lleva además la nota de supresión/fuente/unidad y la declaración que
+        asegura el pipeline: el fragmento sirve para mostrar el avance, no como
+        respuesta final.
+        """
         unidad = self.unidad_conteo(columnas_conteo, sql)
         nota = ("\nNota: %d celda(s) con menos de %d %s fueron suprimidas por "
                 "confidencialidad." % (suprimidas, UMBRAL_SUPRESION, unidad)
@@ -305,11 +312,13 @@ class Motor:
                if leyenda else "")
             + pipeline.instruccion_redactor(interpretaciones, contexto)
         )
-        r = llm.completar(modelo=MODELO_REDACTOR, esfuerzo=ESFUERZO_REDACTOR,
-                          tope=TOPE_REDACTOR, sistema=sys_prompt,
-                          usuario="Pregunta: %s\nSQL: %s\nResultados: %s%s"
-                                  % (pregunta, sql, filas,
-                                     pipeline.totales_para_redactor(filas, columnas_conteo)))
+        _usuario = ("Pregunta: %s\nSQL: %s\nResultados: %s%s"
+                    % (pregunta, sql, filas,
+                       pipeline.totales_para_redactor(filas, columnas_conteo)))
+        _comun = dict(modelo=MODELO_REDACTOR, esfuerzo=ESFUERZO_REDACTOR,
+                      tope=TOPE_REDACTOR, sistema=sys_prompt, usuario=_usuario)
+        r = (llm.completar_stream(emitir=emitir, **_comun) if emitir
+             else llm.completar(**_comun))
         usage_log.registrar(self.censo, "redactor", r.uso,
                             MODELO_REDACTOR, ESFUERZO_REDACTOR)
         texto = pipeline.asegurar_declaracion(r.texto, interpretaciones, contexto)
@@ -444,7 +453,13 @@ class Motor:
             salida.append(visible)
         return salida
 
-    def preguntar(self, texto):
+    def preguntar(self, texto, avisar=None):
+        # avisar(tipo, dato) es el canal OPCIONAL de progreso: ("etapa", nombre)
+        # cuando el pipeline cambia de paso y ("delta", fragmento) por cada
+        # pedazo del redactor. Sin él (el caso de /preguntar) el flujo es
+        # exactamente el de siempre: _av no hace nada y no se pide streaming.
+        _av = avisar or (lambda *_: None)
+
         # 1. Indicador ambiguo o variable no relevada: se responde SIN llamar al
         #    modelo. Es el paso más barato del pipeline y el que evita inventar
         #    una definición por el usuario.
@@ -457,6 +472,9 @@ class Motor:
         # razona (la cara). El SQL igual pasa por el post-paso y por el guard.
         sql_crudo = pipeline.sql_cacheado(texto, self.censo, contexto)
         if sql_crudo is None:
+            # La etapa se anuncia SOLO si de verdad se va a llamar al modelo: con
+            # el SQL cacheado este paso no existe y anunciarlo sería mentir.
+            _av("etapa", "sql")
             sql_crudo = self.generar_sql(texto, contexto)
             pipeline.recordar_sql(texto, self.censo, contexto, sql_crudo)
         if sql_crudo.strip() == "NO_RESPONDIBLE":
@@ -475,6 +493,7 @@ class Motor:
             return dict(rechazos.a_respuesta(e.rechazo, sql=None),
                         veredicto=e.rechazo.codigo)
 
+        _av("etapa", "validando")
         try:
             sql_seguro, columnas_conteo = self.guard.validar(sql_crudo)
         except SQLNoSeguro as e:
@@ -488,6 +507,7 @@ class Motor:
         if listo is not None:
             return dict(listo, sql=sql_seguro, veredicto="OK")
 
+        _av("etapa", "consultando")
         try:
             filas = ejecutor.filas(self.db, sql_seguro)
         except ejecutor.ConsultaIncoherente as e:
@@ -508,12 +528,15 @@ class Motor:
         # geográficas quedan crudas (las necesita el mapa).
         filas = codigos.etiquetar(filas, self.mapa_codigos())
 
+        _av("etapa", "redactando")
         respuesta = {"ok": True, "sql": sql_seguro, "veredicto": "OK",
                      "respuesta": self.redactar(texto, sql_seguro, filas, suprimidas,
                                                 columnas_conteo,
                                                 truncado=n_raw >= LIMITE_MAXIMO,
                                                 interpretaciones=interpretaciones,
-                                                contexto=contexto),
+                                                contexto=contexto,
+                                                emitir=(lambda f: _av("delta", f))
+                                                       if avisar else None),
                      "datos": self._ocultar_n_crudo(filas, columnas_conteo),
                      "celdas_suprimidas": suprimidas}
         # Otras lecturas posibles del nombre consultado (departamento vs ciudad):

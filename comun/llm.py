@@ -88,3 +88,53 @@ def completar(modelo: str, esfuerzo: str, tope: int, sistema: str, usuario: str)
             ultimo = e
             time.sleep(0.5 * (2 ** intento))
     raise ultimo
+
+
+def completar_stream(modelo: str, esfuerzo: str, tope: int, sistema: str,
+                     usuario: str, emitir) -> Respuesta:
+    """Igual que completar(), pero llama a emitir(fragmento) a medida que llega.
+
+    Devuelve la misma Respuesta que completar() —texto completo, uso y motivo de
+    corte— para que quien la use no tenga que cambiar nada más: el streaming es
+    un efecto lateral, no otro contrato. El uso viene en el último chunk y hay
+    que pedirlo con stream_options; sin eso el registro de tokens queda en cero.
+
+    UN REINTENTO SOLO SI NO SE EMITIÓ NADA. Con la llamada de una sola vez,
+    reintentar es transparente. Acá no: si el corte llega después de haber
+    emitido texto, el reintento vuelve a empezar desde el principio y el usuario
+    ve la respuesta duplicada. Por eso, una vez que salió el primer fragmento, el
+    error se propaga en vez de reintentarse.
+    """
+    ultimo = None
+    for intento in range(REINTENTOS + 1):
+        partes, uso, corte, emitido = [], None, None, False
+        try:
+            flujo = cliente().chat.completions.create(
+                model=modelo,
+                reasoning_effort=esfuerzo,
+                max_completion_tokens=tope,
+                messages=[{"role": "system", "content": sistema},
+                          {"role": "user", "content": usuario}],
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            for chunk in flujo:
+                if getattr(chunk, "usage", None):
+                    uso = chunk.usage
+                if not chunk.choices:
+                    continue
+                opcion = chunk.choices[0]
+                fragmento = getattr(opcion.delta, "content", None)
+                if fragmento:
+                    partes.append(fragmento)
+                    emitido = True
+                    emitir(fragmento)
+                if getattr(opcion, "finish_reason", None):
+                    corte = opcion.finish_reason
+            return Respuesta(texto="".join(partes).strip(), uso=uso, motivo_corte=corte)
+        except Exception as e:
+            if emitido or "Timeout" in type(e).__name__ or intento == REINTENTOS:
+                raise
+            ultimo = e
+            time.sleep(0.5 * (2 ** intento))
+    raise ultimo

@@ -9,12 +9,15 @@ The LLM never answers from memory and the user never sees individual records:
 if a query fails validation or a cell is too small, the system says so.
 """
 
+import json
 import os
+import queue
 import re
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -80,6 +83,13 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 class Pregunta(BaseModel):
     texto: str
     censo: str = "2023"   # censo por defecto de la interfaz pública
+
+
+# Cada cuántos segundos de silencio se manda un comentario SSE. Tiene que quedar
+# holgadamente por DEBAJO del proxy_read_timeout de nginx (180 s en el bloque del
+# censo): si el modelo razona 15 s sin emitir nada y nadie escribe en el socket,
+# el proxy puede dar la conexión por muerta.
+LATIDO_SSE = 10
 
 
 # Capa 1: columnas DERIVADAS legibles (semántica v3). El LLM las prefiere sobre
@@ -342,7 +352,14 @@ def leyenda_codificaciones(sql: str, columnas_conteo: list) -> str:
 
 def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
                        columnas_conteo: list, truncado: bool = False,
-                       interpretaciones=(), contexto: dict | None = None) -> str:
+                       interpretaciones=(), contexto: dict | None = None,
+                       emitir=None) -> str:
+    """Si emitir no es None, se la llama con cada fragmento a medida que llega.
+
+    Lo que se emite es SOLO lo que escribe el modelo. El texto definitivo lleva
+    además la nota de supresión y la declaración que asegura el pipeline: el
+    fragmento sirve para mostrar el avance, no como respuesta final.
+    """
     unidad = unidad_conteo(columnas_conteo)
     nota = (
         f"\nNota: {suprimidas} celda(s) con menos de {UMBRAL_SUPRESION} {unidad} "
@@ -357,7 +374,7 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
         "mínimo, el mayor, el menor ni el único; describí solo lo que muestran las filas."
         if truncado else ""
     )
-    r = llm.completar(
+    _comun = dict(
         modelo=MODELO_REDACTOR,
         # El redactor solo NARRA (no razona): con el razonamiento activado las
         # preguntas de mapa consumían todo el presupuesto y devolvían respuesta
@@ -414,6 +431,8 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
         usuario=f"Pregunta: {pregunta}\nSQL ejecutado: {sql}\nResultados: {filas}"
                 + pipeline.totales_para_redactor(filas, columnas_conteo),
     )
+    r = (llm.completar_stream(emitir=emitir, **_comun) if emitir
+         else llm.completar(**_comun))
     usage_log.registrar("2011", "redactor", r.uso, MODELO_REDACTOR, ESFUERZO_REDACTOR)
     texto = pipeline.asegurar_declaracion(r.texto, interpretaciones, contexto)
     return texto + nota
@@ -472,9 +491,15 @@ def construir_mapa(sql: str, filas: list) -> dict | None:
     return {"nivel": nivel, "datos": datos}
 
 
-def responder_2011(texto: str) -> dict:
+def responder_2011(texto: str, avisar=None) -> dict:
     """Pipeline del motor 2011 (lo usa el servicio unificado cuando el selector elige 2011).
-    Abre censo.db en SOLO LECTURA (la app nunca escribe la base)."""
+    Abre censo.db en SOLO LECTURA (la app nunca escribe la base).
+
+    avisar(tipo, dato) es el canal OPCIONAL de progreso: ("etapa", nombre) al
+    cambiar de paso y ("delta", fragmento) por cada pedazo del redactor. Sin él
+    el flujo es el de siempre.
+    """
+    _av = avisar or (lambda *_: None)
     # Indicador ambiguo o variable no relevada: respuesta barata, sin llamar al modelo.
     corta, contexto = pipeline.antes(texto, "2011")
     if corta is not None:
@@ -484,6 +509,8 @@ def responder_2011(texto: str) -> dict:
     # Nivel A de caché: ahorra la llamada que razona. El guard corre igual.
     sql_crudo = pipeline.sql_cacheado(texto, "2011", contexto)
     if sql_crudo is None:
+        # Solo se anuncia si de verdad se llama al modelo.
+        _av("etapa", "sql")
         sql_crudo = generar_sql(texto, contexto)
         pipeline.recordar_sql(texto, "2011", contexto, sql_crudo)
 
@@ -508,6 +535,7 @@ def responder_2011(texto: str) -> dict:
         registro.no_respondible("2011", texto, e.rechazo.codigo)
         return rechazos.a_respuesta(e.rechazo, sql=None)
 
+    _av("etapa", "validando")
     try:
         sql_seguro, columnas_conteo = validar(sql_crudo)
     except SQLNoSeguro as e:
@@ -520,6 +548,7 @@ def responder_2011(texto: str) -> dict:
     if listo is not None:
         return dict(listo, sql=sql_seguro)
 
+    _av("etapa", "consultando")
     try:
         filas = ejecutor.filas(DB_PATH, sql_seguro)
     except ejecutor.ConsultaIncoherente as e:
@@ -537,10 +566,12 @@ def responder_2011(texto: str) -> dict:
         return dict(rechazos.a_respuesta(rechazo, sql=sql_seguro),
                     celdas_suprimidas=suprimidas)
 
+    _av("etapa", "redactando")
     respuesta = {
         "ok": True,
         "respuesta": redactar_respuesta(texto, sql_seguro, filas, suprimidas, columnas_conteo,
-                                        truncado, interpretaciones, contexto),
+                                        truncado, interpretaciones, contexto,
+                                        emitir=(lambda f: _av("delta", f)) if avisar else None),
         "sql": sql_seguro,   # transparency: the executed SQL is always shown
         "datos": filas,
         "celdas_suprimidas": suprimidas,
@@ -574,42 +605,109 @@ def preguntar(p: Pregunta):
     try:
         return _responder(p)
     except Exception as e:                      # noqa: BLE001 - la frontera pública
-        nombre = type(e).__name__
-        if "Timeout" in nombre or "timed out" in str(e).lower():
-            texto = ("La consulta tardó demasiado y se cortó. Suele pasar con "
-                     "preguntas muy abiertas: probá acotarla (un departamento, "
-                     "una localidad, un año) y volvé a intentar.")
-        else:
-            texto = ("No se pudo completar la consulta. Probá reformular la "
-                     "pregunta o intentar de nuevo en unos segundos.")
-        try:
-            registro.rechazo(p.censo, p.texto, "excepcion:%s" % nombre, "")
-        except Exception:
-            pass
-        print("ERROR /preguntar [%s] %s: %s" % (p.censo, nombre, e), flush=True)
-        return {"ok": False, "respuesta": texto, "motivo": nombre}
+        return _error_publico(p, e, "/preguntar")
 
 
-def _responder(p: Pregunta):
+def _error_publico(p: Pregunta, e: Exception, ruta: str) -> dict:
+    """Traduce una excepción al mismo cuerpo JSON que espera el frontend.
+
+    Lo comparten /preguntar y /preguntar_stream para que el usuario vea el mismo
+    motivo por cualquiera de los dos caminos: si el streaming falla y el
+    frontend cae al POST de siempre, el mensaje no debería cambiar.
+    """
+    nombre = type(e).__name__
+    if "Timeout" in nombre or "timed out" in str(e).lower():
+        texto = ("La consulta tardó demasiado y se cortó. Suele pasar con "
+                 "preguntas muy abiertas: probá acotarla (un departamento, "
+                 "una localidad, un año) y volvé a intentar.")
+    else:
+        texto = ("No se pudo completar la consulta. Probá reformular la "
+                 "pregunta o intentar de nuevo en unos segundos.")
+    try:
+        registro.rechazo(p.censo, p.texto, "excepcion:%s" % nombre, "")
+    except Exception:
+        pass
+    print("ERROR %s [%s] %s: %s" % (ruta, p.censo, nombre, e), flush=True)
+    return {"ok": False, "respuesta": texto, "motivo": nombre}
+
+
+def _responder(p: Pregunta, avisar=None):
     if p.censo == "2011":
-        return responder_2011(p.texto)
+        return responder_2011(p.texto, avisar=avisar)
 
     # 1996 y 2004: censos completos sin ponderación, conteos exactos. Sí devuelven
     # mapa: departamento, barrio de Montevideo, sección censal y —desde el
     # 29-jul-2026, con cartografía propia reconstruida de las planchas del INE y
     # acotada a las localidades completas— segmento censal (ver motor_historico).
     if p.censo in MOTORES_HISTORICOS:
-        r = MOTORES_HISTORICOS[p.censo].preguntar(p.texto)
+        r = MOTORES_HISTORICOS[p.censo].preguntar(p.texto, avisar=avisar)
         r.pop("veredicto", None)
         return r
 
     # Censo 2023 (ponderado). La línea de ponderación se agrega SOLO cuando la
     # métrica es SUM(W) (personas); viviendas y hogares son conteos exactos (regla c).
-    r = consultar_2023.preguntar(p.texto)
+    r = consultar_2023.preguntar(p.texto, avisar=avisar)
     r.pop("veredicto", None)
     if r.get("ok") and _RX_SUMW.search(r.get("sql") or ""):
         r["respuesta"] = r.get("respuesta", "") + "\n\n_" + PONDERACION_2023 + "_"
     return r
+
+
+@app.post("/preguntar_stream")
+def preguntar_stream(p: Pregunta):
+    """Igual que /preguntar, pero contando lo que pasa mientras pasa (SSE).
+
+    POR QUÉ UN HILO Y UNA COLA. El pipeline es sincrónico de punta a punta y hay
+    que emitir DESDE ADENTRO (el redactor no puede devolver el control por cada
+    fragmento). Se corre en un hilo que empuja eventos a una cola y el generador
+    de la respuesta la drena: así el pipeline no cambia de forma y sigue siendo
+    el mismo código que usa /preguntar.
+
+    EVENTOS. 'etapa' con el paso real del pipeline; 'delta' con cada fragmento
+    del redactor; 'fin' con el MISMO cuerpo que devuelve /preguntar —de ahí
+    salen el mapa, el gráfico, el SQL y el texto definitivo—; 'error' con el
+    cuerpo de _error_publico. El texto de los 'delta' es un ADELANTO: el
+    definitivo lleva además la nota de supresión y la declaración del pipeline,
+    así que el cliente debe reemplazarlo por el de 'fin', no concatenarlo.
+
+    X-Accel-Buffering: no le pide a nginx que NO bufferee esta respuesta. Sin
+    eso, nginx la acumula y el streaming no se ve, aunque el backend lo emita
+    perfecto. Evita tener que tocar la configuración del sitio.
+    """
+    cola: "queue.Queue" = queue.Queue()
+    FIN = object()
+
+    def avisar(tipo, dato):
+        cola.put((tipo, dato))
+
+    def trabajo():
+        try:
+            cola.put(("fin", _responder(p, avisar=avisar)))
+        except Exception as e:                  # noqa: BLE001 - la frontera pública
+            cola.put(("error", _error_publico(p, e, "/preguntar_stream")))
+        finally:
+            cola.put((FIN, None))
+
+    threading.Thread(target=trabajo, daemon=True).start()
+
+    def flujo():
+        while True:
+            try:
+                tipo, dato = cola.get(timeout=LATIDO_SSE)
+            except queue.Empty:
+                # Comentario SSE: mantiene viva la conexión mientras el modelo
+                # razona en silencio (el SQL puede tardar 15 s sin emitir nada).
+                yield ": latido\n\n"
+                continue
+            if tipo is FIN:
+                break
+            yield "event: %s\ndata: %s\n\n" % (
+                tipo, json.dumps(dato, ensure_ascii=False, default=str))
+
+    return StreamingResponse(flujo(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
 
 
 INDEX = "app/static/index.html"

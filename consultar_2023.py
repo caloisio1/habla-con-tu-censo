@@ -184,7 +184,15 @@ def leyenda_codificaciones(sql):
 
 
 def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False,
-             interpretaciones=(), contexto=None):
+             interpretaciones=(), contexto=None, emitir=None):
+    """Si emitir no es None, se la llama con cada fragmento a medida que llega.
+
+    Lo que se emite es SOLO lo que escribe el modelo. El texto definitivo lleva
+    además la nota de supresión/fuente y la declaración que asegura el pipeline,
+    así que el fragmento sirve para mostrar el avance, no como respuesta final:
+    quien consuma el stream debe reemplazarlo por el texto que devuelve esta
+    función cuando termina.
+    """
     unidad = unidad_conteo(columnas_conteo)
     palabra = unidad if unidad in ("hogares", "viviendas") else "registros"
     nota = (f"\nNota: {suprimidas} celda(s) con menos de {UMBRAL_SUPRESION} {palabra} "
@@ -241,10 +249,12 @@ def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False,
     # El redactor solo NARRA: con esfuerzo bajo el razonamiento no llega a agotar el
     # presupuesto ni a vaciar la respuesta en preguntas de mapa. El tope holgado
     # (1600) es justamente ese margen: no bajarlo sin volver a medir.
-    r = llm.completar(modelo=MODELO_REDACTOR, esfuerzo=ESFUERZO_REDACTOR,
-                      tope=TOPE_REDACTOR, sistema=sys_prompt,
-                      usuario=f"Pregunta: {pregunta}\nSQL: {sql}\nResultados: {filas}"
-                              + pipeline.totales_para_redactor(filas, columnas_conteo))
+    _usuario = (f"Pregunta: {pregunta}\nSQL: {sql}\nResultados: {filas}"
+                + pipeline.totales_para_redactor(filas, columnas_conteo))
+    _comun = dict(modelo=MODELO_REDACTOR, esfuerzo=ESFUERZO_REDACTOR,
+                  tope=TOPE_REDACTOR, sistema=sys_prompt, usuario=_usuario)
+    r = (llm.completar_stream(emitir=emitir, **_comun) if emitir
+         else llm.completar(**_comun))
     usage_log.registrar("2023", "redactor", r.uso, MODELO_REDACTOR, ESFUERZO_REDACTOR)
     texto = pipeline.asegurar_declaracion(r.texto, interpretaciones, contexto)
     return texto + nota
@@ -308,7 +318,12 @@ def construir_mapa_2023(filas, columnas_conteo, suprimidas, sql=""):
     return {"nivel": nivel, "datos": datos, "suprimidas": suprimidas}
 
 
-def preguntar(texto, verbose=False):
+def preguntar(texto, verbose=False, avisar=None):
+    # avisar(tipo, dato) es el canal OPCIONAL de progreso: ("etapa", nombre) al
+    # cambiar de paso y ("delta", fragmento) por cada pedazo del redactor. Sin
+    # él el flujo es el de siempre.
+    _av = avisar or (lambda *_: None)
+
     # Indicador ambiguo o variable no relevada: se resuelve SIN llamar al modelo.
     corta, contexto = pipeline.antes(texto, "2023")
     if corta is not None:
@@ -319,6 +334,9 @@ def preguntar(texto, verbose=False):
     # post-paso de entidades y por el guard.
     sql_crudo = pipeline.sql_cacheado(texto, "2023", contexto)
     if sql_crudo is None:
+        # Solo se anuncia si de verdad se llama al modelo: con el SQL cacheado
+        # este paso no existe.
+        _av("etapa", "sql")
         sql_crudo = generar_sql(texto, contexto)
         pipeline.recordar_sql(texto, "2023", contexto, sql_crudo)
     if sql_crudo.strip() == "NO_RESPONDIBLE":
@@ -335,6 +353,7 @@ def preguntar(texto, verbose=False):
         registro.no_respondible("2023", texto, e.rechazo.codigo)
         return dict(rechazos.a_respuesta(e.rechazo, sql=None), veredicto=e.rechazo.codigo)
 
+    _av("etapa", "validando")
     try:
         sql_seguro, columnas_conteo = validar(sql_crudo)
     except SQLNoSeguro as e:
@@ -347,6 +366,7 @@ def preguntar(texto, verbose=False):
     if listo is not None:
         return dict(listo, sql=sql_seguro, veredicto="OK")
 
+    _av("etapa", "consultando")
     try:
         filas = ejecutor.filas(DB, sql_seguro)
     except ejecutor.ConsultaIncoherente as e:
@@ -365,10 +385,12 @@ def preguntar(texto, verbose=False):
                     veredicto="OK", celdas_suprimidas=suprimidas)
 
     salida = _ocultar_n_crudo(filas, columnas_conteo)
+    _av("etapa", "redactando")
     resultado = {"ok": True, "sql": sql_seguro, "veredicto": "OK",
                  "respuesta": redactar(texto, sql_seguro, filas, suprimidas, columnas_conteo,
                                        truncado=n_geo_raw >= LIMITE_MAXIMO,
-                                       interpretaciones=interpretaciones, contexto=contexto),
+                                       interpretaciones=interpretaciones, contexto=contexto,
+                                       emitir=(lambda f: _av("delta", f)) if avisar else None),
                  "datos": salida, "celdas_suprimidas": suprimidas}
     # Otras lecturas posibles del nombre consultado: se ofrecen junto a la respuesta.
     if alternativas:

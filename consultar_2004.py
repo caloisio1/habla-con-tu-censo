@@ -34,8 +34,8 @@ _motor = Motor(
 )
 
 
-def preguntar(texto, verbose=False):
-    return _motor.preguntar(texto)
+def preguntar(texto, verbose=False, avisar=None):
+    return _motor.preguntar(texto, avisar=avisar)
 
 
 if __name__ == "__main__":
