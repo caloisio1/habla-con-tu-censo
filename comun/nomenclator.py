@@ -18,9 +18,10 @@ columna `dpto` tiene al menos una fila mal asignada, La Paloma de Rocha marcada
 como Salto).
 """
 import os
-import sqlite3
 import threading
 from collections import namedtuple
+
+from comun import ejecutor
 
 AQUI = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -61,12 +62,21 @@ _CACHE = {}
 _LOCK = threading.Lock()
 
 
-def _consultar(censo, sql):
-    con = sqlite3.connect("file:%s?mode=ro" % BASES[censo], uri=True)
-    try:
-        return con.execute(sql).fetchall()
-    finally:
-        con.close()
+def _consultar(censo, sql, params=()):
+    """Catálogos del censo, por el MISMO camino que las consultas de usuario.
+
+    Antes esto abría el `.db` con sqlite3 directo, sin pasar por el ejecutor. Eso
+    hacía que el nomenclátor -la capa que convierte "Salto" en un código antes de
+    que el modelo escriba el SQL, y que es por lo tanto el camino central- fuera
+    el único punto del sistema que seguía atado a SQLite aunque DuckDB estuviera
+    perfecto. Pasando por `ejecutor.filas` la base la elige el ejecutor: si está
+    el `.duckdb` hermano, se sirve de ahí.
+
+    Se pide por `tuplas()` y no por `filas()` porque los llamadores de este
+    módulo desempaquetan por posición (`for c, n, d in ...`) y hay consultas con
+    columnas HOMÓNIMAS -`SELECT COUNT(*), COUNT(*)` para el par (ponderado,
+    crudo)- que en un dict colapsan en una sola clave."""
+    return ejecutor.tuplas(BASES[censo], sql, params)
 
 
 def _localidades(censo):
@@ -227,14 +237,12 @@ def poblacion(entidad):
     if sql:
         params = (entidad.codigo, entidad.codigo) if sql.count("?") == 2 else (entidad.codigo,)
         try:
-            con = sqlite3.connect("file:%s?mode=ro" % BASES[entidad.censo], uri=True)
-            try:
-                ponderado, crudo = con.execute(sql, params).fetchone()
-            finally:
-                con.close()
+            ponderado, crudo = _consultar(entidad.censo, sql, params)[0]
             if crudo and crudo >= UMBRAL_SUPRESION and ponderado:
                 valor = int(ponderado)
-        except sqlite3.Error:
+        # No se acota a sqlite3.Error: acá abajo ahora puede haber DuckDB, y el
+        # contrato de esta función es devolver None cuando no se puede calcular.
+        except Exception:
             valor = None
     _POBLACION[clave] = valor
     return valor

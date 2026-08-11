@@ -252,3 +252,49 @@ def test_sin_gemela_se_usa_el_puente_como_siempre(base):
     assert ejecutor.nativa_de(base) is None
     ejecutor.filas(base, "SELECT COUNT(*) AS n FROM p")
     assert ejecutor.estado()["bases"][os.path.abspath(base)] == "puente"
+
+
+# --- salida posicional: lo que un dict no puede representar ------------------
+
+def test_las_columnas_homonimas_sobreviven_en_tuplas(base):
+    """EL caso que motivó `tuplas()`. `SELECT COUNT(*), COUNT(*)` -que es como el
+    nomenclátor pide el par (ponderado, crudo) en los censos sin ponderación-
+    produce DOS columnas con el mismo nombre. En un dict la segunda pisa a la
+    primera y la fila llega con un solo valor, así que el desempaquetado de dos
+    del llamador falla en silencio contra su `except`."""
+    sql = "SELECT COUNT(*), COUNT(*) FROM p WHERE depto = '01'"
+    assert ejecutor.tuplas(base, sql) == [(2, 2)]
+    assert len(ejecutor.filas(base, sql)[0]) == 1   # el dict SÍ las colapsa
+
+
+def test_tuplas_liga_los_parametros(base):
+    """El nomenclátor consulta por código con `?`, no concatenando."""
+    sql = "SELECT COUNT(*), COUNT(*) FROM p WHERE depto = ?"
+    assert ejecutor.tuplas(base, sql, ("01",)) == [(2, 2)]
+    assert ejecutor.tuplas(base, sql, ("10",)) == [(1, 1)]
+
+
+def test_tuplas_da_lo_mismo_que_sqlite(base):
+    """El invariante del módulo, también para la salida posicional."""
+    sql = "SELECT depto, COUNT(*) FROM p WHERE depto IS NOT NULL GROUP BY 1 ORDER BY 1"
+    cx = sqlite3.connect("file:%s?mode=ro" % base, uri=True)
+    try:
+        esperado = cx.execute(sql).fetchall()
+    finally:
+        cx.close()
+    assert ejecutor.tuplas(base, sql) == esperado
+
+
+def test_los_parametros_tambien_llegan_por_el_camino_de_sqlite(base):
+    """Un SQL con UPPER se deriva a SQLite a propósito: los `?` tienen que
+    seguir ligándose ahí, que es donde el nomenclátor terminaría si DuckDB
+    no estuviera disponible."""
+    sql = "SELECT COUNT(*), COUNT(*) FROM p WHERE UPPER(nombre) = ?"
+    assert ejecutor.tuplas(base, sql, ("MONTEVIDEO",)) == [(2, 2)]
+    # La Ñ sale en minúscula a propósito: el UPPER de SQLite es ASCII y no toca
+    # los caracteres no ingleses. Es una de las razones por las que UPPER se
+    # deriva a SQLite en vez de dejarlo resolver a DuckDB, que sí la mayusculiza:
+    # si se sirvieran de motores distintos, la misma consulta daría dos
+    # resultados. El test lo fija para que esa diferencia no pase inadvertida.
+    assert ejecutor.filas(base, "SELECT UPPER(nombre) AS n FROM p WHERE depto = ?",
+                          ("10",)) == [{"n": "PEñAROL"}]

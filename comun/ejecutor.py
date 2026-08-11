@@ -236,11 +236,11 @@ def _caida(db, sql, e):
                    " ".join(sql.split())[:600]))
 
 
-def _sqlite_filas(db, sql):
+def _sqlite_filas(db, sql, params=()):
     con = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
     con.row_factory = sqlite3.Row
     try:
-        return [dict(f) for f in con.execute(sql).fetchall()]
+        return [dict(f) for f in con.execute(sql, params).fetchall()]
     finally:
         con.close()
 
@@ -260,15 +260,20 @@ def _normalizar(v):
     return v
 
 
-def filas(db, sql):
+def filas(db, sql, params=()):
     """Ejecuta el SQL ya validado y devuelve una lista de dicts.
 
     Misma forma de salida que el camino viejo de SQLite (row_factory=Row -> dict),
-    para que los llamadores no noten la diferencia."""
+    para que los llamadores no noten la diferencia.
+
+    `params` liga los `?` del SQL. Lo usa el nomenclátor, que consulta por código
+    -no por nombre- y por lo tanto NO puede construir el SQL concatenando: el
+    código sale de un catálogo, pero ligarlo es lo que garantiza que siga siendo
+    un valor y no texto de consulta. Los dos motores lo entienden igual."""
     db = os.path.abspath(db)   # una sola clave por base, en las conexiones y en el contador
     if _INCOMPATIBLES.search(sql):
         _DERIVADAS[db] += 1
-        return _sqlite_filas(db, sql)
+        return _sqlite_filas(db, sql, params)
     con = _conexion(db)
     if con is not None:
         try:
@@ -278,7 +283,7 @@ def filas(db, sql):
                 # esquema activo de la conexion. En la base nativa las tablas
                 # estan en main y un USE s fallaria.
                 cur.execute("USE s;")
-            res = cur.execute(sql)
+            res = cur.execute(sql, list(params)) if params else cur.execute(sql)
             columnas = [d[0] for d in res.description]
             return [dict(zip(columnas, (_normalizar(v) for v in f)))
                     for f in res.fetchall()]
@@ -286,7 +291,45 @@ def filas(db, sql):
             raise
         except Exception as e:
             _mirar(db, sql, e)   # cae a SQLite, salvo que el SQL sea incoherente
-    return _sqlite_filas(db, sql)
+    return _sqlite_filas(db, sql, params)
+
+
+def _sqlite_tuplas(db, sql, params=()):
+    con = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
+    try:
+        return con.execute(sql, params).fetchall()
+    finally:
+        con.close()
+
+
+def tuplas(db, sql, params=()):
+    """Como `filas()`, pero POSICIONAL: una lista de tuplas, no de dicts.
+
+    POR QUÉ EXISTE Y NO ALCANZA CON filas(). Un dict pierde las columnas
+    HOMÓNIMAS. `SELECT COUNT(*), COUNT(*)` -que es como el nomenclátor pide el
+    par (ponderado, crudo) en los censos sin ponderación- produce dos columnas
+    con el mismo nombre, y al armar el dict la segunda pisa a la primera: la fila
+    llega con UN valor donde el llamador espera DOS, y el desempaquetado falla.
+
+    Los llamadores que desempaquetan por posición usan esta; los que leen por
+    nombre de columna, `filas()`."""
+    db = os.path.abspath(db)
+    if _INCOMPATIBLES.search(sql):
+        _DERIVADAS[db] += 1
+        return _sqlite_tuplas(db, sql, params)
+    con = _conexion(db)
+    if con is not None:
+        try:
+            cur = con.cursor()
+            if _MODO.get(db) == "puente":
+                cur.execute("USE s;")
+            res = cur.execute(sql, list(params)) if params else cur.execute(sql)
+            return [tuple(_normalizar(v) for v in f) for f in res.fetchall()]
+        except ConsultaIncoherente:
+            raise
+        except Exception as e:
+            _mirar(db, sql, e)
+    return _sqlite_tuplas(db, sql, params)
 
 
 def escalar(db, sql):
