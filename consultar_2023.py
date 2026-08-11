@@ -369,11 +369,14 @@ def preguntar(texto, verbose=False, avisar=None):
     _av("etapa", "consultando")
     try:
         filas = ejecutor.filas(DB, sql_seguro)
-    except ejecutor.ConsultaIncoherente as e:
-        # El SQL compara texto con numero. SQLite lo contestaria con una cifra
-        # falsa (0 % en todos lados); se rechaza en vez de contestar mal.
+    except ejecutor.SinRespuesta as e:
+        # Se captura la RAÍZ y no sólo la incoherente: sin la red de SQLite,
+        # cualquier otro fallo del ejecutor llegaría al usuario como una pantalla
+        # rota en vez de una explicación. El caso original sigue siendo el más
+        # importante: un SQL que compara texto con número, que SQLite contestaba
+        # con una cifra falsa (0 % en todos lados).
         return dict(rechazos.a_respuesta(rechazos.procesamiento(str(e)), sql=sql_seguro),
-                    veredicto="RECHAZADO: consulta incoherente")
+                    veredicto="RECHAZADO: %s" % ejecutor.motivo(e))
     n_geo_raw = len(filas)   # filas antes de supresión: detecta si el mapa quedó truncado por el LIMIT
 
     # Supresión con la regla corregida (1 <= n < 5): un conteo CERO no es un

@@ -1,12 +1,19 @@
 """Tests del ejecutor de consultas (comun/ejecutor.py). Run: pytest tests/test_ejecutor.py
 
-Lo que se prueba acá es la EQUIVALENCIA entre los dos motores, no la velocidad.
-DuckDB corre las mismas consultas sobre los mismos archivos .db, y la única forma
-de que ese cambio sea aceptable es que devuelva exactamente lo mismo que SQLite.
+Ya no hay dos motores: DuckDB es el único que ejecuta. Pero lo que se prueba acá
+sigue siendo la EQUIVALENCIA con SQLite, y con más razón que antes. Las cifras
+publicadas, los prompts y los guards se escribieron contra la semántica de
+SQLite; que ahora no ejecute no la vuelve irrelevante, la vuelve el patrón contra
+el que hay que seguir midiendo. Por eso los tests se comparan contra
+`por_sqlite()` sobre una base de juguete: SQLite quedó como PATRÓN de laboratorio,
+no como motor.
 
 Las divergencias peligrosas no dan error: dan otra cifra. Por eso cada una tiene
-su test, escrito contra el resultado de SQLite, que es el que la app viene dando
-desde siempre y contra el que se validaron todas las baterías.
+su test.
+
+Lo demás que se prueba acá es el contrato de lo que pasa cuando NO hay respuesta.
+Mientras hubo red de SQLite casi todo se absorbía con un reintento silencioso;
+ahora cada fallo tiene que salir explicado y contado.
 
 Todo corre sobre una base temporal chiquita: es determinista, no toca las bases
 de producción y no cuesta tokens.
@@ -106,54 +113,71 @@ def test_el_porcentaje_tipico_de_la_app(base):
                   "FROM p GROUP BY 1 ORDER BY 1")
 
 
-# --- lo que se manda a SQLite a propósito -----------------------------------
+# --- lo que se rechaza porque la respuesta dependería del motor --------------
+#
+# Mientras hubo dos motores estas consultas se DERIVABAN a SQLite. Ahora hay uno
+# solo y se RECHAZAN, que es la misma decisión de fondo: antes que devolver una
+# cifra que depende de quién la calcule, no se devuelve nada.
 
-def test_like_se_sirve_por_sqlite(base):
-    """El LIKE de SQLite es insensible a mayúsculas y el de DuckDB no:
-    devolvería MENOS filas sin dar error. Va por SQLite."""
-    sql = "SELECT nombre FROM p WHERE nombre LIKE '%toros'"
-    assert ejecutor.filas(base, sql) == [{"nombre": "Paso de los Toros"}]
-    iguales(base, sql)
-
-
-def test_upper_se_sirve_por_sqlite(base):
-    """SQLite solo pasa a mayúscula los ASCII: UPPER('Peñarol') deja la ñ."""
-    iguales(base, "SELECT UPPER(nombre) AS n FROM p WHERE nombre='Peñarol'")
+def test_el_like_se_rechaza(base):
+    """El LIKE de SQLite es insensible a mayúsculas y el de DuckDB no: la misma
+    consulta devolvería distinto según el motor, y sin dar error."""
+    with pytest.raises(ejecutor.ConstruccionAmbigua):
+        ejecutor.filas(base, "SELECT nombre FROM p WHERE nombre LIKE '%toros'")
 
 
-def test_las_derivadas_se_cuentan_aparte_de_las_caidas(base):
-    ejecutor.filas(base, "SELECT nombre FROM p WHERE nombre LIKE 'M%'")
+def test_el_upper_se_rechaza(base):
+    """SQLite solo pasa a mayúscula los ASCII -UPPER('Peñarol') deja la ñ- y
+    DuckDB es Unicode: cambia el texto que se muestra."""
+    with pytest.raises(ejecutor.ConstruccionAmbigua):
+        ejecutor.filas(base, "SELECT UPPER(nombre) AS n FROM p WHERE nombre='Peñarol'")
+
+
+def test_las_ambiguas_se_cuentan_aparte_de_los_rechazos(base):
+    """Se cuentan separadas porque significan cosas distintas: una ambigua es el
+    sistema aplicando su regla, un rechazo es una pregunta que no se pudo
+    responder y hay que ir a arreglar."""
+    with pytest.raises(ejecutor.ConstruccionAmbigua):
+        ejecutor.filas(base, "SELECT nombre FROM p WHERE nombre LIKE 'M%'")
     e = ejecutor.estado()
     clave = os.path.abspath(base)
-    assert e["derivadas"].get(clave, 0) >= 1
-    assert e["caidas"].get(clave, 0) == 0   # mandarla a SQLite a propósito NO es un fallo
+    assert e["ambiguas"].get(clave, 0) >= 1
+    assert e["rechazos"].get(clave, 0) == 0
 
 
-# --- la red de seguridad ----------------------------------------------------
+# --- sin red: lo que DuckDB no puede, no se responde -------------------------
 
-def test_si_duckdb_falla_la_respuesta_igual_sale(base):
-    """sqlite_version() no existe en DuckDB: tiene que caer a SQLite y contestar."""
-    f = ejecutor.filas(base, "SELECT sqlite_version() AS v")
-    assert f and f[0]["v"]
-    assert ejecutor.estado()["caidas"].get(os.path.abspath(base), 0) >= 1
+def test_si_duckdb_falla_la_consulta_falla(base):
+    """sqlite_version() no existe en DuckDB. Antes esto caía a SQLite y el
+    usuario nunca se enteraba; ahora falla a la vista, que es lo que hace que
+    alguien lo arregle."""
+    with pytest.raises(Exception) as exc:
+        ejecutor.filas(base, "SELECT sqlite_version() AS v")
+    assert not isinstance(exc.value, ejecutor.ConstruccionAmbigua)
+    assert ejecutor.estado()["rechazos"].get(os.path.abspath(base), 0) >= 1
+
+
+def test_una_base_que_no_abre_no_se_responde(base, monkeypatch):
+    """Fail-closed. Antes una base sin DuckDB se servía por SQLite; ahora se
+    avisa que no se puede responder, en vez de contestar con otra semántica."""
+    monkeypatch.setitem(ejecutor._CONEXIONES, os.path.abspath(base), None)
+    with pytest.raises(ejecutor.BaseNoDisponible):
+        ejecutor.filas(base, "SELECT COUNT(*) FROM p")
 
 
 def test_escalar_da_lo_mismo_que_la_consulta_completa(base):
     assert ejecutor.escalar(base, "SELECT COUNT(*) FROM p") == 5
 
 
-def test_se_puede_apagar_con_una_variable_de_entorno(base, monkeypatch):
-    """La palanca de emergencia: CENSO_MOTOR_SQL=sqlite y no se usa DuckDB."""
-    monkeypatch.setattr(ejecutor, "MOTOR", "sqlite")
-    assert ejecutor._conexion(base) is None
-    iguales(base, "SELECT depto, COUNT(*) AS n FROM p GROUP BY 1 ORDER BY 1")
+def test_escalar_tambien_liga_parametros(base):
+    assert ejecutor.escalar(base, "SELECT COUNT(*) FROM p WHERE depto = ?", ("01",)) == 2
 
 
-# --- los canarios que deciden si se usa DuckDB ------------------------------
+# --- los canarios, que ahora deciden si la base se abre ----------------------
 
 def test_los_canarios_pasan_en_esta_maquina(base):
-    """Si algún canario fallara, la base se serviría por SQLite. Que este test
-    pase confirma que el camino rápido está realmente activo."""
+    """Si algún canario fallara, la base no se abriría y nada se respondería.
+    Que este test pase confirma que la semántica esperada está activa."""
     for _nombre, sql, esperado in ejecutor._CANARIOS:
         assert [tuple(f.values()) for f in ejecutor.filas(base, sql)] == esperado
     assert ejecutor._conexion(base) is not None
@@ -182,11 +206,14 @@ def test_y_SQLite_efectivamente_la_contestaria_mal(base):
     assert filas and all(f["pct"] == 0.0 for f in filas)
 
 
-def test_un_fallo_normal_SI_sigue_cayendo_a_sqlite(base):
-    """No se rompio la red para el resto: sqlite_version() no existe en DuckDB
-    y ahi SQLite da la respuesta correcta, asi que se repite como siempre."""
-    f = ejecutor.filas(base, "SELECT sqlite_version() AS v")
-    assert f and f[0]["v"]
+def test_un_fallo_normal_tambien_se_levanta(base):
+    """El contraste con el de arriba: una consulta incoherente y una que DuckDB
+    simplemente no sabe resolver dan excepciones DISTINTAS, porque significan
+    cosas distintas. Antes la segunda se repetía en SQLite; ahora se levanta,
+    pero sigue sin confundirse con la primera."""
+    with pytest.raises(Exception) as exc:
+        ejecutor.filas(base, "SELECT sqlite_version() AS v")
+    assert not isinstance(exc.value, ejecutor.ConsultaIncoherente)
 
 
 # --- la base nativa, que es la que va a produccion --------------------------
@@ -241,11 +268,12 @@ def test_los_canarios_tambien_corren_en_la_nativa(base_con_nativa):
         assert [tuple(f.values()) for f in ejecutor.filas(base_con_nativa, sql)] == esperado
 
 
-def test_el_LIKE_sigue_yendo_a_sqlite_aunque_haya_nativa(base_con_nativa):
-    """La nativa acelera; NO jubila a la base SQLite. El LIKE de los dos motores
-    difiere, asi que esas consultas siguen sirviendose por SQLite."""
-    sql = "SELECT nombre FROM p WHERE nombre LIKE '%toros'"
-    assert ejecutor.filas(base_con_nativa, sql) == [{"nombre": "Paso de los Toros"}]
+def test_el_LIKE_se_rechaza_tambien_con_la_nativa(base_con_nativa):
+    """La regla no depende de cómo esté abierta la base: el LIKE se rechaza
+    igual, porque el motivo es la ambigüedad de la construcción y no el
+    formato."""
+    with pytest.raises(ejecutor.ConstruccionAmbigua):
+        ejecutor.filas(base_con_nativa, "SELECT nombre FROM p WHERE nombre LIKE '%toros'")
 
 
 def test_sin_gemela_se_usa_el_puente_como_siempre(base):
@@ -285,16 +313,41 @@ def test_tuplas_da_lo_mismo_que_sqlite(base):
     assert ejecutor.tuplas(base, sql) == esperado
 
 
-def test_los_parametros_tambien_llegan_por_el_camino_de_sqlite(base):
-    """Un SQL con UPPER se deriva a SQLite a propósito: los `?` tienen que
-    seguir ligándose ahí, que es donde el nomenclátor terminaría si DuckDB
-    no estuviera disponible."""
-    sql = "SELECT COUNT(*), COUNT(*) FROM p WHERE UPPER(nombre) = ?"
-    assert ejecutor.tuplas(base, sql, ("MONTEVIDEO",)) == [(2, 2)]
-    # La Ñ sale en minúscula a propósito: el UPPER de SQLite es ASCII y no toca
-    # los caracteres no ingleses. Es una de las razones por las que UPPER se
-    # deriva a SQLite en vez de dejarlo resolver a DuckDB, que sí la mayusculiza:
-    # si se sirvieran de motores distintos, la misma consulta daría dos
-    # resultados. El test lo fija para que esa diferencia no pase inadvertida.
-    assert ejecutor.filas(base, "SELECT UPPER(nombre) AS n FROM p WHERE depto = ?",
-                          ("10",)) == [{"n": "PEñAROL"}]
+def test_la_construccion_ambigua_se_rechaza_antes_de_mirar_los_parametros(base):
+    """El rechazo es por la FORMA del SQL, así que no depende de los valores
+    ligados ni de que la consulta fuera a devolver algo."""
+    with pytest.raises(ejecutor.ConstruccionAmbigua):
+        ejecutor.tuplas(base, "SELECT COUNT(*), COUNT(*) FROM p WHERE UPPER(nombre) = ?",
+                        ("MONTEVIDEO",))
+
+
+# --- que ningún fallo escape sin explicación --------------------------------
+
+def test_todo_lo_que_levanta_el_ejecutor_cuelga_de_una_sola_raiz():
+    """EL contrato con los motores. Los tres capturan `SinRespuesta` y nada más;
+    una excepción que no colgara de ahí llegaría al usuario como un error 500 en
+    vez de un rechazo explicado. Mientras hubo red esto no se notaba: casi todo
+    se absorbía repitiendo en SQLite."""
+    for cls in (ejecutor.ConsultaIncoherente, ejecutor.ConstruccionAmbigua,
+                ejecutor.BaseNoDisponible, ejecutor.ConsultaRechazada):
+        assert issubclass(cls, ejecutor.SinRespuesta)
+        assert ejecutor.motivo(cls("x")) != "no se pudo consultar"   # cada una con su etiqueta
+
+
+def test_un_rechazo_real_se_captura_por_la_raiz(base):
+    """No alcanza con que la jerarquía esté declarada: lo que el ejecutor levanta
+    de verdad tiene que caer dentro de ella."""
+    with pytest.raises(ejecutor.SinRespuesta):
+        ejecutor.filas(base, "SELECT sqlite_version() AS v")
+    with pytest.raises(ejecutor.SinRespuesta):
+        ejecutor.filas(base, "SELECT nombre FROM p WHERE nombre LIKE 'M%'")
+
+
+def test_el_ejecutor_ya_no_importa_sqlite():
+    """Un solo motor de verdad: si alguien vuelve a colgar SQLite del camino de
+    ejecución, esto lo dice."""
+    fuente = open(ejecutor.__file__, encoding="utf-8").read()
+    codigo = "\n".join(l for l in fuente.splitlines()
+                       if not l.strip().startswith("#"))
+    assert "import sqlite3" not in codigo
+    assert "sqlite3.connect" not in codigo

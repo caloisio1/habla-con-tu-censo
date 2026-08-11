@@ -551,9 +551,11 @@ def responder_2011(texto: str, avisar=None) -> dict:
     _av("etapa", "consultando")
     try:
         filas = ejecutor.filas(DB_PATH, sql_seguro)
-    except ejecutor.ConsultaIncoherente as e:
+    except ejecutor.SinRespuesta as e:
+        # La raíz, no sólo la incoherente: sin la red de SQLite cualquier fallo
+        # del ejecutor llegaría al usuario como una pantalla rota.
         return dict(rechazos.a_respuesta(rechazos.procesamiento(str(e)), sql=sql_seguro),
-                    veredicto="RECHAZADO: consulta incoherente")
+                    veredicto="RECHAZADO: %s" % ejecutor.motivo(e))
 
     # Si las filas devueltas alcanzan el tope del LIMIT, el resultado puede estar
     # recortado -> se avisa al redactor para que no narre extremos como universales (d).

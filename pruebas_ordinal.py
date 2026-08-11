@@ -105,10 +105,15 @@ def normalizar(filas):
 
 
 def contadores(db):
+    """(ambiguas, rechazos) de esa base, según el propio ejecutor.
+
+    Antes eran (derivadas, caidas): consultas mandadas a SQLite a propósito y
+    consultas repetidas en SQLite tras un fallo. Ya no hay a dónde caer, así que
+    las mismas dos situaciones ahora son rechazos y el veredicto se lee igual."""
     e = ejecutor.estado()
     import os
     k = os.path.abspath(db)
-    return (e.get("derivadas", {}).get(k, 0), e.get("caidas", {}).get(k, 0))
+    return (e.get("ambiguas", {}).get(k, 0), e.get("rechazos", {}).get(k, 0))
 
 
 def una_pasada(censo, pregunta):

@@ -1,14 +1,19 @@
-"""pruebas_fallback.py — ¿Cuánto se usa realmente la red de SQLite?
+"""pruebas_fallback.py — ¿Cuántas preguntas se quedan sin respuesta?
 
-POR QUÉ EXISTE. pruebas_ordinal.py midió UNA familia de preguntas (los tramos de
-edad) y dio 0 % de caídas después del arreglo. Ese número no autoriza a concluir
-que la red de SQLite ya no hace falta: el disparador de fondo —una expresión en
-el GROUP BY o en el ORDER BY que DuckDB no acepta— puede aparecer en otras
-formas de consulta que aquel banco no tocaba. Este mide el abanico.
+POR QUÉ EXISTE. Nació para medir cuánto se usaba la red de SQLite y decidir si se
+podía sacar. Se sacó, así que ahora mide lo que esa red tapaba: las consultas que
+DuckDB no puede resolver son, desde entonces, preguntas sin respuesta. El número
+que antes era "cuánto cuesta en velocidad" ahora es "cuánto cuesta en cobertura",
+y por eso este banco pasa a ser parte del control previo a cada despliegue.
 
-QUÉ CUENTA. Por cada pasada: si la resolvió DuckDB nativo, si DuckDB la rechazó
-y hubo que repetirla en SQLite (CAE_SQLITE), si se derivó a SQLite a propósito
-(LIKE/UPPER), o si los dos motores devolvieron cifras distintas.
+QUÉ CUENTA. Por cada pasada: si la resolvió DuckDB (NATIVO), si DuckDB no pudo
+(RECHAZADA), si se rechazó por usar una construcción cuya respuesta dependería
+del motor (AMBIGUA), o si la cifra difiere del control en SQLite.
+
+EL CONTROL DE CIFRAS ES DE LABORATORIO. Compara contra las bases .db, que ya no
+sirven en producción. Se conserva mientras existan porque es lo que destapó las
+divergencias mudas (precedencia del ||, división entera); el día que se borren,
+este control se va con ellas y el resto del banco sigue funcionando.
 
 CÓMO. Igual que el otro banco: el SQL lo escribe el modelo de verdad, lo valida
 el guard de verdad y lo ejecuta el camino de producción. El veredicto sale de
@@ -71,14 +76,17 @@ def una_pasada(censo, pregunta):
     try:
         filas = ejecutor.filas(db, sql)
     except Exception as e:
-        return "ERROR_EJEC", time.time() - t0, sql, str(e)[:80]
+        # Sin red, lo que antes era un reintento silencioso ahora es una
+        # excepción. Los contadores del ejecutor son los que dicen POR QUÉ, que
+        # es lo que hay que saber para arreglarlo.
+        seg = time.time() - t0
+        d1, c1 = contadores(db)
+        if c1 > c0:
+            return "RECHAZADA", seg, sql, "DuckDB no pudo: %s" % str(e)[:60]
+        if d1 > d0:
+            return "AMBIGUA", seg, sql, "LIKE/UPPER: rechazada a proposito"
+        return "ERROR_EJEC", seg, sql, str(e)[:80]
     seg = time.time() - t0
-    d1, c1 = contadores(db)
-
-    if c1 > c0:
-        return "CAE_SQLITE", seg, sql, "DuckDB la rechazo (reintento)"
-    if d1 > d0:
-        return "DERIVADA", seg, sql, "LIKE/UPPER: a SQLite a proposito"
 
     # Control de cifras: el mismo SQL en SQLite tiene que dar lo mismo. Es lo
     # que destapó las divergencias mudas (precedencia de ||, division entera).
@@ -98,7 +106,7 @@ def main():
     reps = int(sys.argv[1]) if len(sys.argv) > 1 else 2
     solo = sys.argv[2] if len(sys.argv) > 2 else None
     censos = [solo] if solo else ["1996", "2004", "2011", "2023"]
-    print("MEDICION AMPLIA DE LA RED DE SQLITE — %d formas x %d repeticiones x %d censos = %d pasadas\n"
+    print("MEDICION AMPLIA DE COBERTURA — %d formas x %d repeticiones x %d censos = %d pasadas\n"
           % (len(FORMAS), reps, len(censos), len(FORMAS) * reps * len(censos)))
 
     tot, por_forma, por_censo, incidentes = {}, {}, {}, []
@@ -111,7 +119,7 @@ def main():
                 por_censo.setdefault(censo, {})[v] = por_censo.setdefault(censo, {}).get(v, 0) + 1
                 marca = "" if v == "NATIVO" else "  <- " + det
                 print("  %-5s %-12s %-14s %6.2fs%s" % (censo, etiqueta, v, seg, marca), flush=True)
-                if v in ("CAE_SQLITE", "CIFRA_DISTINTA", "DERIVADA"):
+                if v in ("RECHAZADA", "CIFRA_DISTINTA", "AMBIGUA", "ERROR_EJEC"):
                     incidentes.append((censo, etiqueta, v, det, " ".join(sql.split())))
 
     n = sum(tot.values())
@@ -121,21 +129,23 @@ def main():
         print("   %-16s %4d   (%5.1f%%)" % (v, tot[v], 100.0 * tot[v] / n))
 
     utiles = n - tot.get("NO_RESPONDIBLE", 0)
-    red = tot.get("CAE_SQLITE", 0) + tot.get("DERIVADA", 0)
-    print("\n   LA RED DE SQLITE SE USÓ EN %d de %d pasadas respondibles (%.1f%%)"
-          % (red, utiles, 100.0 * red / utiles if utiles else 0))
+    sin_respuesta = (tot.get("RECHAZADA", 0) + tot.get("AMBIGUA", 0)
+                     + tot.get("ERROR_EJEC", 0))
+    print("\n   NO SE PUDO RESPONDER EN %d de %d pasadas respondibles (%.1f%%)"
+          % (sin_respuesta, utiles, 100.0 * sin_respuesta / utiles if utiles else 0))
 
     print("\nPOR CENSO")
     for c, d in por_censo.items():
         s = sum(d.values())
-        print("   %-6s nativo %d/%d | cae %d | derivada %d | cifra distinta %d | no respondible %d"
-              % (c, d.get("NATIVO", 0), s, d.get("CAE_SQLITE", 0),
-                 d.get("DERIVADA", 0), d.get("CIFRA_DISTINTA", 0), d.get("NO_RESPONDIBLE", 0)))
+        print("   %-6s nativo %d/%d | rechazada %d | ambigua %d | cifra distinta %d | no respondible %d"
+              % (c, d.get("NATIVO", 0), s, d.get("RECHAZADA", 0),
+                 d.get("AMBIGUA", 0), d.get("CIFRA_DISTINTA", 0), d.get("NO_RESPONDIBLE", 0)))
 
     print("\nFORMAS QUE DIERON PROBLEMA")
     hubo = False
     for f, d in por_forma.items():
-        mal = d.get("CAE_SQLITE", 0) + d.get("CIFRA_DISTINTA", 0) + d.get("DERIVADA", 0)
+        mal = (d.get("RECHAZADA", 0) + d.get("CIFRA_DISTINTA", 0)
+               + d.get("AMBIGUA", 0) + d.get("ERROR_EJEC", 0))
         if mal:
             hubo = True
             print("   %-12s %d de %d pasadas" % (f, mal, sum(d.values())))

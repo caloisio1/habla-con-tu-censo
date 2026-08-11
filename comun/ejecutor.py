@@ -6,9 +6,18 @@ jerarquías. Sobre SQLite esas consultas cuestan entre 2 y 19 segundos, y en las
 más pesadas son casi la mitad del tiempo total de la respuesta. DuckDB, que es
 columnar, las resuelve entre 5 y 12 veces más rápido.
 
-NO SE MIGRAN DATOS. DuckDB lee el MISMO archivo .db a través de su lector sqlite,
-attachado en solo lectura. Las bases siguen siendo las de siempre, el build no
-cambia, y volver atrás es cambiar una variable de entorno.
+UN SOLO MOTOR. Antes esto ejecutaba en DuckDB y repetía en SQLite lo que DuckDB
+rechazara. Esa red se sacó a propósito: dos motores dentro del mismo sistema no
+son una arquitectura, son un parche encima de otro, y encima obligaban a
+mantener dos copias de cada censo. Volver atrás es `git revert` y reiniciar.
+
+QUÉ SE PIERDE Y POR QUÉ SE ACEPTA. Con red, una consulta que DuckDB rechazaba se
+contestaba igual, más lento. Sin red, devuelve error. La apuesta es que un
+rechazo VISIBLE se arregla y uno tapado no: el último que quedaba —un ORDER BY
+por una columna no agrupada— se arregló en `comun/orden.py`, de forma
+determinista y para todas las consultas, y sólo se pudo encontrar porque se lo
+midió. Medido después de ese arreglo: 0 rechazos en 118 pasadas sobre 15 formas
+de consulta y los cuatro censos (informes/fallback_amplio_20260811.md).
 
 DÓNDE GANA Y DÓNDE NO. En un filtro muy selectivo (un departamento, una localidad)
 SQLite tiene índices y DuckDB hace escaneo completo: ahí pierde. Gana en todo lo
@@ -37,44 +46,38 @@ error y en silencio, que es la peor forma de romperse:
    PRINTF habría contestado mal y nadie se enteraba.
 
 Por eso se fijan `default_null_order` e `integer_division` Y ADEMÁS se comprueban
-con consultas canario al abrir cada conexión. Si algún canario no da exactamente
-la semántica de SQLite, esa base queda servida por SQLite y se sigue andando.
+con consultas canario al abrir cada conexión. Ya no hay a dónde degradar, así que
+un canario que no calque la semántica esperada deja la base SIN abrir: la app
+avisa que no puede responder. Es fail-closed a propósito —los dos invariantes
+cambian la respuesta sin dar error, que es la peor forma de romperse—, y arrancar
+igual sería servir cifras falsas con cara de buenas.
 
-RED DE SEGURIDAD, Y SU LÍMITE. Casi cualquier excepción de DuckDB —una función
-que no soporta, un desborde de enteros— se atrapa y la consulta se repite en
-SQLite: ahí el motor viejo da la respuesta correcta y solo se pierde velocidad.
-
-PERO NO TODOS LOS FALLOS SIGNIFICAN LO MISMO, y tratarlos igual era un error.
+PREFERIBLE NO CONTESTAR A CONTESTAR MAL. Es la regla que ordena todo lo demás.
 Cuando DuckDB rechaza una consulta porque compara texto con número —`asc_afro = 1`
 sobre una columna que guarda 'Si'/'No'—, no está diciendo "no sé hacer esto":
-está diciendo "esta consulta no tiene sentido". SQLite la ejecuta igual y
-devuelve 0,0 % de afrodescendientes en TODOS los departamentos, cuando la cifra
-real va de 2,9 % a 16,9 %. Una cifra plausible, publicable y falsa.
+está diciendo "esta consulta no tiene sentido". SQLite la ejecutaba igual y
+devolvía 0,0 % de afrodescendientes en TODOS los departamentos, cuando la cifra
+real va de 2,9 % a 16,9 %. Una cifra plausible, publicable y falsa. Esos fallos
+se levantan como ConsultaIncoherente y el motor los convierte en un rechazo.
 
-Repetir ESA consulta en SQLite convierte un error ruidoso en una respuesta
-equivocada, que es exactamente lo contrario de lo que la red tiene que hacer.
-Por eso esos fallos NO caen a SQLite: se levantan como ConsultaIncoherente y el
-motor los convierte en un rechazo. Es preferible no contestar a contestar mal.
+Por la misma razón se RECHAZAN las construcciones que los dos motores no
+resolvían igual (LIKE, GLOB, UPPER, LOWER): ver `_INCOMPATIBLES`.
 
-Esa red NO es muda: cada degradación se avisa una vez por base en el journal
-(`journalctl -u censo-query-uy | grep ejecutor`) y queda contada en `estado()`.
-Sin eso, perder DuckDB en producción sería invisible: las respuestas seguirían
-saliendo bien, solo diez veces más lento, y nadie se enteraría.
-
-APAGADO SIN DESPLIEGUE. `CENSO_MOTOR_SQL=sqlite` en el entorno vuelve todo a
-SQLite sin tocar código; `=duckdb` (o nada) usa el camino rápido.
+NADA DE ESTO ES MUDO. Cada rechazo se avisa en el journal
+(`journalctl -u censo-query-uy | grep ejecutor`) y queda contado en `estado()`.
+Un rechazo que nadie ve es un rechazo que nadie arregla.
 """
 import collections
 import decimal
 import os
 import re
-import sqlite3
 import sys
 import threading
 
-MOTOR = os.environ.get("CENSO_MOTOR_SQL", "duckdb").strip().lower()
-
-# Semántica de NULL de SQLite: ASC -> primero, DESC -> último.
+# Semántica de NULL heredada de SQLite: ASC -> primero, DESC -> último. Se
+# conserva aunque SQLite ya no ejecute nada, porque es la semántica contra la que
+# se escribieron los prompts, los guards y las cifras publicadas: cambiarla ahora
+# movería respuestas sin que nadie lo pidiera.
 _ORDEN_NULOS = "NULLS_FIRST_ON_ASC_LAST_ON_DESC"
 
 # Los canarios no tocan ninguna base, así que valen igual para los cuatro censos.
@@ -90,36 +93,73 @@ _CANARIOS = (
      [(15, 3, -3)]),
 )
 
-# CONSTRUCCIONES QUE LAS DOS BASES NO RESUELVEN IGUAL. No hay setting que las
-# alinee, así que se sirven por SQLite y listo: preferimos perder velocidad antes
-# que dar otra cifra. No cuesta nada porque en las 76 consultas reales del corpus
-# no aparece ninguna (0%); están acá porque el SQL lo escribe un modelo y mañana
-# puede escribirlas.
+# CONSTRUCCIONES CUYA RESPUESTA DEPENDERÍA DEL MOTOR. Mientras hubo dos motores
+# se derivaban a SQLite; ahora se RECHAZAN, que es la misma decisión de fondo:
+# antes que devolver una cifra que depende de quién ejecute, no se devuelve nada.
 #   LIKE/GLOB : el LIKE de SQLite es INSENSIBLE a mayúsculas en ASCII y el de
 #               DuckDB no. "'Paso de los Toros' LIKE '%toros'" da 1 en SQLite y
 #               false en DuckDB: devolvería MENOS filas, sin error.
 #   UPPER/LOWER: SQLite solo cambia el caso de los ASCII (UPPER('peñarol') deja
 #               la ñ intacta) y DuckDB es Unicode. Cambia el texto que se muestra.
+#
+# Rechazar no cuesta cobertura: son 0 casos en las 76 consultas reales del corpus
+# y 0 en las 118 pasadas de la medición amplia. El sistema NUNCA las genera por
+# su cuenta -para eso está el nomenclátor, que resuelve los nombres a códigos
+# ANTES del SQL-; aparecerían sólo si el modelo se sale del molde, y ahí un
+# rechazo visible es justo lo que hace falta para corregirlo.
 _INCOMPATIBLES = re.compile(r"\b(LIKE|GLOB|UPPER|LOWER)\b", re.I)
 
-# Fallos que NO se repiten en SQLite, porque significan que la consulta está mal
-# escrita y no que DuckDB no sepa resolverla. Si se repitieran, SQLite las
-# ejecutaría con su coerción silenciosa y devolvería una cifra equivocada.
-_NO_REINTENTAR = {"ConversionException"}
+# Fallos que significan que la CONSULTA está mal escrita, no que el motor no sepa
+# resolverla. Se distinguen porque merecen otro mensaje: no es "no pude", es "eso
+# que preguntaste no tiene sentido con estos datos".
+_INCOHERENTES = {"ConversionException"}
 
 
-class ConsultaIncoherente(Exception):
+class SinRespuesta(Exception):
+    """Raíz de todo lo que este módulo levanta cuando no va a devolver filas.
+
+    Existe para que los motores capturen UNA cosa y ninguna quede afuera. Mientras
+    hubo red, casi todos los fallos se absorbían repitiendo en SQLite y el único
+    que llegaba arriba era ConsultaIncoherente; sin red, cualquiera de estos
+    llegaría al usuario como un error 500 si no se lo contara. Un rechazo tiene
+    que salir explicado, no como una pantalla rota."""
+
+
+class ConsultaIncoherente(SinRespuesta):
     """El SQL compara valores que no son comparables (texto contra número).
 
     No es un fallo del motor: es una consulta sin sentido, que SQLite
     respondería con una cifra falsa en vez de avisar."""
 
 
-_CONEXIONES = {}          # ruta de la base -> conexión DuckDB, o None si quedó degradada
+class ConstruccionAmbigua(SinRespuesta):
+    """El SQL usa una construcción cuya respuesta dependería del motor.
+
+    Ver `_INCOMPATIBLES`. No se ejecuta: una cifra que cambia según quién la
+    calcule no es una cifra."""
+
+
+class BaseNoDisponible(SinRespuesta):
+    """La base no se pudo abrir, o se abrió sin la semántica esperada.
+
+    Fail-closed: antes había a dónde degradar y ahora no, así que no se responde
+    en vez de responder con otra semántica."""
+
+
+class ConsultaRechazada(SinRespuesta):
+    """DuckDB no pudo ejecutar la consulta.
+
+    Antes esto se repetía en SQLite y nadie se enteraba. Ahora es visible, que es
+    la condición para que se arregle: el último caso que quedaba -un ORDER BY por
+    una columna no agrupada- se corrigió en `comun/orden.py` justamente porque se
+    lo pudo ver."""
+
+
+_CONEXIONES = {}          # ruta de la base -> conexión DuckDB, o None si no se pudo abrir
 _CANDADO = threading.Lock()
-_CAIDAS = collections.Counter()   # base -> consultas que tuvieron que repetirse en SQLite
-_DERIVADAS = collections.Counter()  # base -> consultas mandadas a SQLite a propósito (_INCOMPATIBLES)
-_AVISADAS = set()                 # bases cuya primera caída ya se avisó (no se repite por consulta)
+_RECHAZOS = collections.Counter()    # base -> consultas que DuckDB no pudo ejecutar
+_AMBIGUAS = collections.Counter()    # base -> consultas rechazadas por _INCOMPATIBLES
+_AVISADAS = set()                 # bases cuyo primer rechazo ya se avisó (no se repite por consulta)
 _MODO = {}                        # base -> 'nativo' | 'puente'  (como quedo abierta en DuckDB)
 
 
@@ -148,17 +188,17 @@ def _abrir(db):
     1. NATIVA. Si existe el .duckdb hermano, se abre directo en solo lectura.
        Es entre 23x y 46x más rápido que SQLite segun el censo, contra el 9x del
        puente, porque no hay traduccion: el formato ya es columnar.
-    2. PUENTE. Si no, se attacha el .db de siempre con el lector sqlite.
+    2. PUENTE. Si no, se attacha el .db de siempre con el lector sqlite. Queda
+       como compatibilidad para una base que todavía no se haya reconstruido;
+       el camino normal es el nativo.
 
-    LA BASE SQLITE NO SE JUBILA. Sigue siendo la que sirve `LIKE` y `UPPER` -que
-    los dos motores no resuelven igual- y la red de seguridad cuando DuckDB
-    falla. La nativa acelera; no reemplaza.
-
-    Devolver None NO es un error fatal: significa 'esta base se sirve por SQLite'."""
+    Devolver None significa que esa base NO se puede responder. Antes era una
+    degradación silenciosa a SQLite; ahora es un fallo, y quien consulte recibe
+    BaseNoDisponible."""
     try:
         import duckdb
     except ImportError:
-        _avisar("duckdb no está instalado: todo se sirve por SQLite")
+        _avisar("duckdb no está instalado: no hay con qué responder")
         return None
     nativa = nativa_de(db)
     try:
@@ -171,11 +211,13 @@ def _abrir(db):
         con.execute("SET GLOBAL integer_division=true;")
         if not nativa:
             con.execute("ATTACH '%s' AS s (TYPE sqlite, READ_ONLY); USE s;" % db)
-        # Los canarios deciden: si algún invariante no calca a SQLite, no se usa.
+        # Los canarios deciden: si algún invariante no da la semántica esperada,
+        # la base no se abre. Ya no hay a dónde degradar, y responder con otra
+        # semántica sería devolver cifras distintas sin avisar.
         for nombre, sql, esperado in _CANARIOS:
             if con.execute(sql).fetchall() != esperado:
                 con.close()
-                _avisar("%s: el canario de %s NO calca a SQLite -> se sirve por SQLite"
+                _avisar("%s: el canario de %s NO da la semántica esperada -> base NO disponible"
                         % (db, nombre))
                 return None
         _MODO[os.path.abspath(db)] = "nativo" if nativa else "puente"
@@ -183,7 +225,7 @@ def _abrir(db):
                 % (db, "NATIVO" if nativa else "sobre el lector sqlite", len(_CANARIOS)))
         return con
     except Exception as e:
-        _avisar("%s: no se pudo abrir en DuckDB (%s: %s) -> se sirve por SQLite"
+        _avisar("%s: no se pudo abrir en DuckDB (%s: %s) -> base NO disponible"
                 % (db, type(e).__name__, e))
         return None
 
@@ -194,8 +236,6 @@ def _conexion(db):
     La ruta se normaliza porque los llamadores no coinciden: el motor 2011 pasa
     'datos/censo.db' relativa y los otros tres la absoluta. Sin normalizar, la
     misma base referida de las dos formas abriría DOS conexiones."""
-    if MOTOR != "duckdb":
-        return None
     db = os.path.abspath(db)
     con = _CONEXIONES.get(db, False)
     if con is not False:
@@ -206,43 +246,62 @@ def _conexion(db):
         return _CONEXIONES[db]
 
 
-def _mirar(db, sql, e):
-    """Decide qué hacer con un fallo de DuckDB: repetirlo en SQLite o levantarlo.
+def _levantar(db, sql, e):
+    """Convierte un fallo de DuckDB en la excepción que le corresponde.
 
-    Se levanta cuando el fallo dice que la CONSULTA está mal, no que el motor no
-    pueda con ella. Ver el encabezado del módulo."""
-    if type(e).__name__ in _NO_REINTENTAR:
-        _avisar("%s: consulta INCOHERENTE, no se repite en SQLite (%s) | SQL: %s"
+    Se distingue el fallo que dice que la CONSULTA está mal del que dice que el
+    motor no pudo, porque merecen mensajes distintos. Ninguno de los dos se
+    esconde: antes el segundo se repetía en SQLite y el usuario nunca se
+    enteraba.
+
+    El SQL se registra largo a propósito. La causa más común es el GROUP BY:
+    SQLite dejaba poner en el ORDER BY una columna que no está agrupada y DuckDB
+    lo rechaza por SQL estándar. Distinguir eso de un problema real necesita ver
+    la consulta entera, y con un recorte corto no se puede.
+
+    Se avisa una vez por base: si algo se rechaza sistemáticamente no queremos el
+    journal inundado, pero sí queremos saber que pasó y con qué SQL."""
+    if type(e).__name__ in _INCOHERENTES:
+        _avisar("%s: consulta INCOHERENTE (%s) | SQL: %s"
                 % (db, str(e).replace("\n", " ")[:200],
                    " ".join(sql.split())[:600]))
         raise ConsultaIncoherente(str(e).split("\n")[0]) from e
-    _caida(db, sql, e)
-
-
-def _caida(db, sql, e):
-    """Registra que una consulta tuvo que repetirse en SQLite. Avisa solo la primera
-    vez por base: si DuckDB rechaza algo sistemáticamente, no queremos el journal
-    inundado, pero sí queremos saber que pasó y con qué SQL.
-
-    El SQL se recorta largo a propósito. La causa más común es el GROUP BY: SQLite
-    deja poner en el ORDER BY una columna que no está agrupada y DuckDB lo rechaza
-    por SQL estándar. Distinguir eso de un problema real necesita ver la consulta
-    entera, y con un recorte corto no se puede."""
-    _CAIDAS[db] += 1
+    _RECHAZOS[db] += 1
     if db not in _AVISADAS:
         _AVISADAS.add(db)
-        _avisar("%s: consulta repetida en SQLite (%s: %s) | SQL: %s"
+        _avisar("%s: consulta RECHAZADA por DuckDB (%s: %s) | SQL: %s"
                 % (db, type(e).__name__, str(e).replace("\n", " ")[:200],
                    " ".join(sql.split())[:600]))
+    raise ConsultaRechazada(str(e).split("\n")[0]) from e
 
 
-def _sqlite_filas(db, sql, params=()):
-    con = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
-    con.row_factory = sqlite3.Row
+def _cursor(db, sql, params):
+    """Cursor con el SQL ya ejecutado, o la excepción que corresponda.
+
+    Es el único punto por el que se ejecuta: `filas()`, `tuplas()` y `escalar()`
+    se diferencian sólo en cómo leen el resultado."""
+    if _INCOMPATIBLES.search(sql):
+        _AMBIGUAS[os.path.abspath(db)] += 1
+        _avisar("%s: consulta RECHAZADA por construcción ambigua | SQL: %s"
+                % (db, " ".join(sql.split())[:600]))
+        raise ConstruccionAmbigua(
+            "La consulta usa LIKE, GLOB, UPPER o LOWER, cuya respuesta dependería "
+            "del motor que la ejecute.")
+    con = _conexion(db)
+    if con is None:
+        raise BaseNoDisponible("No se pudo abrir %s en DuckDB." % db)
+    cur = con.cursor()
+    if _MODO.get(os.path.abspath(db)) == "puente":
+        # Solo el puente necesita el USE: el cursor no hereda el esquema activo
+        # de la conexion. En la base nativa las tablas estan en main y un USE s
+        # fallaria.
+        cur.execute("USE s;")
     try:
-        return [dict(f) for f in con.execute(sql, params).fetchall()]
-    finally:
-        con.close()
+        return cur.execute(sql, list(params)) if params else cur.execute(sql)
+    except ConsultaIncoherente:
+        raise
+    except Exception as e:
+        _levantar(os.path.abspath(db), sql, e)
 
 
 def _normalizar(v):
@@ -269,37 +328,11 @@ def filas(db, sql, params=()):
     `params` liga los `?` del SQL. Lo usa el nomenclátor, que consulta por código
     -no por nombre- y por lo tanto NO puede construir el SQL concatenando: el
     código sale de un catálogo, pero ligarlo es lo que garantiza que siga siendo
-    un valor y no texto de consulta. Los dos motores lo entienden igual."""
-    db = os.path.abspath(db)   # una sola clave por base, en las conexiones y en el contador
-    if _INCOMPATIBLES.search(sql):
-        _DERIVADAS[db] += 1
-        return _sqlite_filas(db, sql, params)
-    con = _conexion(db)
-    if con is not None:
-        try:
-            cur = con.cursor()
-            if _MODO.get(db) == "puente":
-                # Solo el puente necesita el USE: el cursor no hereda el
-                # esquema activo de la conexion. En la base nativa las tablas
-                # estan en main y un USE s fallaria.
-                cur.execute("USE s;")
-            res = cur.execute(sql, list(params)) if params else cur.execute(sql)
-            columnas = [d[0] for d in res.description]
-            return [dict(zip(columnas, (_normalizar(v) for v in f)))
-                    for f in res.fetchall()]
-        except ConsultaIncoherente:
-            raise
-        except Exception as e:
-            _mirar(db, sql, e)   # cae a SQLite, salvo que el SQL sea incoherente
-    return _sqlite_filas(db, sql, params)
-
-
-def _sqlite_tuplas(db, sql, params=()):
-    con = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
-    try:
-        return con.execute(sql, params).fetchall()
-    finally:
-        con.close()
+    un valor y no texto de consulta."""
+    res = _cursor(db, sql, params)
+    columnas = [d[0] for d in res.description]
+    return [dict(zip(columnas, (_normalizar(v) for v in f)))
+            for f in res.fetchall()]
 
 
 def tuplas(db, sql, params=()):
@@ -313,61 +346,48 @@ def tuplas(db, sql, params=()):
 
     Los llamadores que desempaquetan por posición usan esta; los que leen por
     nombre de columna, `filas()`."""
-    db = os.path.abspath(db)
-    if _INCOMPATIBLES.search(sql):
-        _DERIVADAS[db] += 1
-        return _sqlite_tuplas(db, sql, params)
-    con = _conexion(db)
-    if con is not None:
-        try:
-            cur = con.cursor()
-            if _MODO.get(db) == "puente":
-                cur.execute("USE s;")
-            res = cur.execute(sql, list(params)) if params else cur.execute(sql)
-            return [tuple(_normalizar(v) for v in f) for f in res.fetchall()]
-        except ConsultaIncoherente:
-            raise
-        except Exception as e:
-            _mirar(db, sql, e)
-    return _sqlite_tuplas(db, sql, params)
+    return [tuple(_normalizar(v) for v in f)
+            for f in _cursor(db, sql, params).fetchall()]
 
 
-def escalar(db, sql):
+def escalar(db, sql, params=()):
     """Primer valor de la primera fila (COUNT(*) y similares). None si no hay filas."""
-    db = os.path.abspath(db)
-    con = _conexion(db) if not _INCOMPATIBLES.search(sql) else None
-    if con is not None:
-        try:
-            cur = con.cursor()
-            if _MODO.get(db) == "puente":
-                cur.execute("USE s;")
-            f = cur.execute(sql).fetchone()
-            return _normalizar(f[0]) if f else None
-        except ConsultaIncoherente:
-            raise
-        except Exception as e:
-            _mirar(db, sql, e)
-    con2 = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
-    try:
-        f = con2.execute(sql).fetchone()
-        return f[0] if f else None
-    finally:
-        con2.close()
+    f = _cursor(db, sql, params).fetchone()
+    return _normalizar(f[0]) if f else None
+
+
+_MOTIVOS = {
+    ConsultaIncoherente: "consulta incoherente",
+    ConstruccionAmbigua: "construcción ambigua",
+    BaseNoDisponible: "base no disponible",
+    ConsultaRechazada: "consulta rechazada por el motor",
+}
+
+
+def motivo(e):
+    """Etiqueta corta del porqué no hubo respuesta, para el veredicto.
+
+    Vive acá y no en cada motor porque los tres registran el mismo veredicto y
+    una etiqueta que se escribe tres veces se desincroniza dos."""
+    return _MOTIVOS.get(type(e), "no se pudo consultar")
 
 
 def estado():
-    """Qué motor quedó sirviendo cada base y cuántas consultas se cayeron a SQLite.
+    """Cómo quedó abierta cada base y cuántas consultas no se pudieron responder.
 
     Las conexiones son perezosas: recién después de la primera consulta de cada
-    censo el diccionario `bases` está completo. `caidas` en cero es la señal de
-    que el camino rápido está sirviendo de verdad.
+    censo el diccionario `bases` está completo, y una base en `no disponible` es
+    una que no se pudo abrir o cuyos canarios no dieron la semántica esperada.
 
-    `caidas` son fallos inesperados de DuckDB; `derivadas` son las consultas que
-    se mandaron a SQLite a propósito por tener una construcción que las dos bases
-    no resuelven igual. Las primeras hay que mirarlas; las segundas son el
-    sistema funcionando como se diseñó."""
-    return {"motor_pedido": MOTOR,
-            "bases": {db: (_MODO.get(db, "duckdb") if c is not None else "sqlite")
+    `rechazos` son consultas que DuckDB no pudo ejecutar: cada una es una
+    pregunta que alguien hizo y no obtuvo respuesta, así que son las que hay que
+    mirar y arreglar. `ambiguas` son las rechazadas por usar LIKE, GLOB, UPPER o
+    LOWER, cuya respuesta dependería del motor.
+
+    Los dos contadores en cero es lo normal. Antes esto medía cuánto se usaba la
+    red de SQLite; ahora que no hay red, mide directamente cuánto se está
+    dejando de responder."""
+    return {"bases": {db: (_MODO.get(db, "duckdb") if c is not None else "no disponible")
                       for db, c in _CONEXIONES.items()},
-            "caidas": dict(_CAIDAS),
-            "derivadas": dict(_DERIVADAS)}
+            "rechazos": dict(_RECHAZOS),
+            "ambiguas": dict(_AMBIGUAS)}

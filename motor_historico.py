@@ -510,9 +510,12 @@ class Motor:
         _av("etapa", "consultando")
         try:
             filas = ejecutor.filas(self.db, sql_seguro)
-        except ejecutor.ConsultaIncoherente as e:
+        except ejecutor.SinRespuesta as e:
+            # Se captura la RAÍZ y no sólo la incoherente: sin la red de SQLite,
+            # cualquier otro fallo del ejecutor llegaría al usuario como una
+            # pantalla rota en vez de una explicación.
             return dict(rechazos.a_respuesta(rechazos.procesamiento(str(e)), sql=sql_seguro),
-                        veredicto="RECHAZADO: consulta incoherente")
+                        veredicto="RECHAZADO: %s" % ejecutor.motivo(e))
         n_raw = len(filas)
 
         # 3. Supresión con la regla corregida: el cero NO es confidencialidad.
