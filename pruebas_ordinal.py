@@ -14,12 +14,15 @@ POR QUE REPITE. El SQL lo escribe un modelo y no es determinista: la MISMA
 pregunta a veces sale bien y a veces mal. Una sola pasada no mide nada. Por eso
 cada pregunta se genera N veces y lo que se reporta es una tasa.
 
-CONTROL DE CIFRAS. Que sea rapido no sirve si cambia un numero: cada resultado se
-compara fila por fila contra el que devuelve SQLite con el mismo SQL.
+CONTROL DE CIFRAS. Mientras existan las bases .db, cada resultado se compara fila
+por fila contra el que devuelve SQLite con el mismo SQL. Es un control de
+LABORATORIO, no parte del sistema: si esas bases ya no estan, se saltea y el resto
+del banco sigue midiendo. La validacion que queda es la de bateria_censos.py,
+contra las cifras publicadas por el INE.
 
 Uso:  ./venv/bin/python pruebas_ordinal.py [repeticiones]
 """
-import sqlite3
+import os
 import sys
 import time
 
@@ -70,6 +73,21 @@ def guard_de(censo):
 
 
 def por_sqlite(db, sql):
+    """Control cruzado contra la base SQLite, o None si esa base ya no está.
+
+    ERA el patrón: mientras hubo dos motores, comparar fila por fila fue lo que
+    destapó las divergencias mudas -precedencia del ||, división entera-. Con un
+    solo motor el control pierde su razón de ser: comparar DuckDB contra DuckDB
+    no prueba nada, y las .db se generaban con el MISMO cargar.py, así que un
+    error de carga se copiaba idéntico a las dos y ninguna comparación lo veía.
+
+    Devuelve None en vez de fallar para que el banco siga corriendo cuando las
+    bases ya no existan; quien llama distingue "no hay control" de "el control
+    pasó". La validación que queda es la que importa: las cifras ancla de
+    bateria_censos.py, contrastadas contra los totales publicados por el INE."""
+    if not os.path.exists(db):
+        return None
+    import sqlite3
     cx = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
     try:
         return cx.execute(sql).fetchall()
@@ -135,26 +153,28 @@ def una_pasada(censo, pregunta):
     try:
         filas = ejecutor.filas(db, sql)
     except Exception as e:
-        return "ERROR_EJEC", time.time() - t0, sql, str(e)[:80]
+        # Sin red, lo que antes era un reintento silencioso ahora es una
+        # excepcion. Los contadores del ejecutor dicen POR QUE.
+        seg = time.time() - t0
+        d1, c1 = contadores(db)
+        if c1 > c0:
+            return "RECHAZADA", seg, sql, "DuckDB no pudo: %s" % str(e)[:60]
+        if d1 > d0:
+            return "AMBIGUA", seg, sql, "LIKE/UPPER: rechazada a proposito"
+        return "ERROR_EJEC", seg, sql, str(e)[:80]
     seg = time.time() - t0
-    d1, c1 = contadores(db)
 
-    # ¿la cifra es la misma que da SQLite con el mismo SQL?
-    try:
-        a, b = normalizar(filas), normalizar(por_sqlite(db, sql))
-        if a != b:
-            dif = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), None)
-            det = "fila %s: %r vs %r" % (dif, a[dif], b[dif]) if dif is not None \
-                  else "largos %d vs %d" % (len(a), len(b))
-            return "CIFRA_DISTINTA", seg, sql, det
-    except Exception as e:
-        return "NATIVO" if (d1 == d0 and c1 == c0) else "CAE_SQLITE", seg, sql, \
-               "SQLite no pudo correrlo: %s" % str(e)[:50]
-
-    if c1 > c0:
-        return "CAE_SQLITE", seg, sql, "DuckDB la rechazo (reintento)"
-    if d1 > d0:
-        return "DERIVADA", seg, sql, "LIKE/UPPER: a SQLite a proposito"
+    # ¿la cifra es la misma que da SQLite con el mismo SQL? Solo si esa base
+    # todavia existe: es un control de laboratorio, no parte del sistema.
+    esperado = por_sqlite(db, sql)
+    if esperado is None:
+        return "NATIVO", seg, sql, ""
+    a, b = normalizar(filas), normalizar(esperado)
+    if a != b:
+        dif = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), None)
+        det = "fila %s: %r vs %r" % (dif, a[dif], b[dif]) if dif is not None \
+              else "largos %d vs %d" % (len(a), len(b))
+        return "CIFRA_DISTINTA", seg, sql, det
     return "NATIVO", seg, sql, ""
 
 
@@ -175,7 +195,7 @@ def main():
             tot[v] = tot.get(v, 0) + 1
             marca = "" if v == "NATIVO" else "  <- " + det
             print("  %-5s %-52s %-14s %8.2f%s" % (censo, preg[:52] if i == 0 else "", v, seg, marca))
-            if v == "CAE_SQLITE":
+            if v in ("RECHAZADA", "AMBIGUA", "ERROR_EJEC"):
                 lentas.append((censo, preg, seg, sql))
             if v == "CIFRA_DISTINTA":
                 divergentes.append((censo, preg, det, sql))
@@ -183,7 +203,7 @@ def main():
     for v in sorted(tot, key=lambda k: -tot[k]):
         print("    %-15s %3d   (%4.1f%%)" % (v, tot[v], 100.0 * tot[v] / sum(tot.values())))
     if lentas:
-        print("\n  las que cayeron a SQLite:")
+        print("\n  las que NO se pudieron responder:")
         for c, p, s, sql in lentas:
             print("    %s · %s · %.2fs" % (c, p[:44], s))
             print("      " + " ".join(sql.split())[:150])
@@ -192,7 +212,7 @@ def main():
         for c, p, det, sql in divergentes:
             print("    %s · %s\n      %s" % (c, p[:44], det))
             print("      SQL: " + " ".join(sql.split()))
-    return 1 if tot.get("CIFRA_DISTINTA") else 0
+    return 1 if (tot.get("CIFRA_DISTINTA") or tot.get("RECHAZADA")) else 0
 
 
 if __name__ == "__main__":

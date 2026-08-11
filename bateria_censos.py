@@ -19,7 +19,6 @@ Uso:  bateria_censos.py [A|B|AB]     (por defecto A)
 """
 import json
 import os
-import sqlite3
 import sys
 import time
 
@@ -27,7 +26,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 os.chdir(AQUI)
 sys.path.insert(0, AQUI)
 
-from comun import edad, indicadores, nomenclator as nom, rechazos, supresion
+from comun import edad, ejecutor, indicadores, nomenclator as nom, rechazos, supresion
 from comun.resolver import AMBIGUO, FRAGMENTADO, NO_ENCONTRADO, OTRO_CENSO, UNICO, resolver
 from comun.sql_entidades import EntidadNoResuelta, preparar_1996, resolver_en_sql
 
@@ -73,11 +72,12 @@ def control(seccion, nombre, ok, obtenido="", esperado=""):
 
 
 def _q(censo, sql):
-    con = sqlite3.connect("file:%s?mode=ro" % nom.BASES[censo], uri=True)
-    try:
-        return con.execute(sql).fetchone()[0]
-    finally:
-        con.close()
+    """Escalar por el MISMO camino que usa producción.
+
+    Antes abría el .db con sqlite3 directo. Eso hacía que el control de regresión
+    midiera una base que la app ya no usa -y que borrar las bases dejara ciego al
+    instrumento con el que se verifica que nada se rompió-."""
+    return ejecutor.escalar(nom.BASES[censo], sql)
 
 
 # ══ CAPA A ═══════════════════════════════════════════════════════════════

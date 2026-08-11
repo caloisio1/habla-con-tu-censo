@@ -5,7 +5,6 @@ Todo lo que se prueba acá es DETERMINISTA: no hay llamadas al modelo, así que 
 suite corre en segundos y no cuesta tokens.
 """
 import os
-import sqlite3
 import sys
 
 import pytest
@@ -13,7 +12,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-dummy")
 
-from comun import edad, indicadores, nomenclator as nom, perdidos, rechazos, supresion
+from comun import edad, ejecutor, indicadores, nomenclator as nom, perdidos, rechazos, supresion
 from comun.resolver import (AMBIGUO, FRAGMENTADO, NO_ENCONTRADO, OTRO_CENSO, UNICO,
                             resolver)
 from comun.sql_entidades import EntidadNoResuelta, preparar_1996, resolver_en_sql
@@ -230,11 +229,8 @@ SQL_1996_LOCALIDAD = (
 
 
 def _total(sql):
-    con = sqlite3.connect("file:%s?mode=ro" % nom.BASES["1996"], uri=True)
-    try:
-        return con.execute("SELECT SUM(personas) FROM (%s)" % sql).fetchone()[0]
-    finally:
-        con.close()
+    return ejecutor.escalar(nom.BASES["1996"],
+                            "SELECT SUM(personas) FROM (%s)" % sql)
 
 
 def test_el_join_al_cruzado_sin_deduplicar_infla_las_cifras():
@@ -312,16 +308,13 @@ def test_excluir_el_centinela_cambia_el_promedio_de_2011():
     Excluir SOLO el 88 ya no alcanza: quedan 12 filas de Montevideo con 5555 que
     llevan el promedio a 8,66. Hay que excluir los dos códigos declarados.
     """
-    con = sqlite3.connect("file:%s?mode=ro" % nom.BASES["2011"], uri=True)
+    db = nom.BASES["2011"]
     mvd = "FROM personas WHERE departamento='MONTEVIDEO'"
-    try:
-        crudo = con.execute('SELECT ROUND(AVG("Años_estudio"),2) ' + mvd).fetchone()[0]
-        solo_88 = con.execute('SELECT ROUND(AVG("Años_estudio"),2) ' + mvd +
-                              ' AND "Años_estudio" NOT IN (88)').fetchone()[0]
-        limpio = con.execute('SELECT ROUND(AVG("Años_estudio"),2) ' + mvd +
-                             ' AND "Años_estudio" NOT IN (88, 5555)').fetchone()[0]
-    finally:
-        con.close()
+    crudo = ejecutor.escalar(db, 'SELECT ROUND(AVG("Años_estudio"),2) ' + mvd)
+    solo_88 = ejecutor.escalar(db, 'SELECT ROUND(AVG("Años_estudio"),2) ' + mvd +
+                               ' AND "Años_estudio" NOT IN (88)')
+    limpio = ejecutor.escalar(db, 'SELECT ROUND(AVG("Años_estudio"),2) ' + mvd +
+                              ' AND "Años_estudio" NOT IN (88, 5555)')
     assert crudo == 13.8 and solo_88 == 8.66 and limpio == 8.6
 
 

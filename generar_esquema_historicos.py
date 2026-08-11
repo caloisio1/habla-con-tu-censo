@@ -15,10 +15,13 @@ Uso:  python3 generar_esquema_historicos.py
 """
 import json
 import os
-import sqlite3
+import sys
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 DATOS = os.path.join(AQUI, "datos")
+sys.path.insert(0, AQUI)
+
+from comun import ejecutor  # noqa: E402  (después de fijar el sys.path)
 
 # Variables cuyos códigos NO se enumeran en el esquema: son de alta cardinalidad
 # (geografía, clasificadores de ocupación y de estudios). Listarlas gastaría miles
@@ -41,9 +44,11 @@ def columnas_de(cx, tabla):
 
 
 def tablas_de(cx):
+    # information_schema y no sqlite_master: es lo que corresponde ahora que la
+    # base se lee con DuckDB, y además evita el LIKE del filtro viejo, que el
+    # ejecutor rechaza por resolverse distinto en cada motor.
     return [r[0] for r in cx.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
-        "ORDER BY name")]
+        "SELECT table_name FROM information_schema.tables ORDER BY table_name")]
 
 
 def _linea(nombre, etiqueta, codigos, perdidos):
@@ -146,8 +151,27 @@ Supresión de confidencialidad: SIEMPRE agregá COUNT(*) AS n_crudo por celda.
 """
 
 
+class _Conexion:
+    """Adaptador mínimo: expone `.execute()` como sqlite3 pero ejecuta por el
+    ejecutor, o sea por DuckDB.
+
+    Se hace así, y no reescribiendo cada función, porque las de este archivo
+    reciben una conexión y hacen `cx.execute(...).__iter__()`. El adaptador
+    devuelve tuplas, que es lo que ya esperaban. `PRAGMA table_info` sigue
+    funcionando: DuckDB lo soporta igual."""
+
+    def __init__(self, db):
+        self.db = db
+
+    def execute(self, sql):
+        return ejecutor.tuplas(self.db, sql)
+
+    def close(self):
+        pass
+
+
 def generar(censo, db, cabecera, tablas_hechos, nomenclator):
-    cx = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
+    cx = _Conexion(db)
     if censo == "1996":
         dv, dval, dperd = cargar_diccionario_1996(cx)
     else:
