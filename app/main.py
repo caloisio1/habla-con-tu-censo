@@ -217,6 +217,10 @@ métrica como segunda.
 - "... por barrio"         -> GROUP BY BARRIO85 con WHERE departamento='MONTEVIDEO'
 - "... por CCZ"            -> GROUP BY CCZ con WHERE departamento='MONTEVIDEO'
 BARRIO85 y CCZ existen SOLO en Montevideo: barrio/CCZ de otro departamento -> NO_RESPONDIBLE.
+Si la pregunta PIDE UN MAPA ("mostralo en un mapa", "en un mapa") pero NO nombra la unidad,
+elegí igual una de estas cuatro y agrupá por ella: departamento si la pregunta es nacional o
+de varios departamentos; barrio85 si se acota a Montevideo. Sin GROUP BY por una de estas
+unidades no se dibuja mapa: sale solo la tabla.
 
 FRECUENCIAS de una variable de hogar o vivienda:
 - hogares por categoría -> COUNT(DISTINCT hogar_key) ... GROUP BY <var>

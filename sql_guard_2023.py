@@ -13,15 +13,27 @@ UMBRAL_SUPRESION), NO modifica el guard 2011. Reglas propias 2023:
   d) Identificadores (vivienda_key, hogar_key, DIRECCION_ID, VIVID, HOGID, PERID,
      ID_HOGAR) libres en subconsultas/GROUP BY interno; en la proyección externa SOLO
      dentro de COUNT(DISTINCT ...). (Regla 2011 replicada.)
+  e) HOGARES ponderados: COUNT(DISTINCT hogar_key) es un conteo de registros y NO es
+     la cifra publicada de hogares. La cifra sale de sumar el ponderador una vez por
+     hogar. Ver `_metrica_publicada_ok`.
+  f) FUERA DE UNIVERSO: las categorías que marcan que la pregunta no correspondía
+     ('Menor de 25 años' en nivel educativo) se excluyen SIEMPRE, y la exclusión la
+     inyecta el guard en vez de confiarla al modelo. Ver `_excluir_fuera_de_universo`.
 """
 import json, os
 import sqlglot
 from sqlglot import exp
 
-from comun import orden
+from comun import orden, universo
 
 UMBRAL_SUPRESION = 5
-LIMITE_MAXIMO = 300
+# Tope de filas de la TABLA de resultados. Cubre el desglose completo más grande que
+# tiene el censo 2023 (4.297 segmentos censales con población): con 300 —el valor
+# anterior— una pregunta por segmento devolvía 300 filas y las otras 3.997 se perdían
+# sin que nada lo dijera. El tope del MAPA es otro y mucho más chico (no se pueden
+# dibujar miles de polígonos legibles): vive en consultar_2023.LIMITE_MAPA.
+LIMITE_MAXIMO = 5000
+_DICCIONARIO = os.path.join(os.path.dirname(__file__), "diccionario_llm_2023.json")
 
 _COLS = json.load(open(os.path.join(os.path.dirname(__file__), "cols_2023.json")))
 FACT_TABLES = {"personas_2023", "viviendas_2023"}
@@ -178,10 +190,17 @@ def _cuerpos_de_fuentes(sel, ctes):
     return cuerpos
 
 
-def _col_libre(sel):
+def _col_libre(sel, ctes=None):
     """Primera columna de la proyección de `sel` que no está agregada ni en su
     GROUP BY; None si están todas cubiertas. Las del nomenclátor no cuentan:
-    son lookup (el nombre de un código), no microdato."""
+    son lookup (el nombre de un código), no microdato.
+
+    NO se afloja para las columnas que vienen de una subconsulta agregada por CROSS
+    JOIN (`SUM(p.W) / h.hogares`). Se probó el 12-ago y es un callejón: DuckDB —el
+    único motor desde el 11-ago— rechaza igual esa consulta porque `h.hogares` no
+    está agregada, así que aflojar acá sólo cambia un rechazo con explicación por un
+    error de ejecución. La forma buena de una razón se le pide al modelo en el
+    prompt: se calculan las dos cifras en la MISMA subconsulta por hogar."""
     alias_tab = _alias_de_tablas(sel)
     grupo = sel.args.get("group")
     group_exprs = _resolver_group_by(sel, grupo.expressions if grupo else [])
@@ -206,7 +225,7 @@ def _es_scope_agregado(sel, ctes, prof=0):
     if prof > 4 or not isinstance(sel, exp.Select):
         return False
     resume = bool(sel.args.get("group")) or any(sel.find_all(exp.AggFunc))
-    if resume and _col_libre(sel) is None:
+    if resume and _col_libre(sel, ctes) is None:
         return True
     cuerpos = _cuerpos_de_fuentes(sel, ctes)
     return bool(cuerpos) and all(_es_scope_agregado(c, ctes, prof + 1) for c in cuerpos)
@@ -241,10 +260,17 @@ def _nombres_conteo(sel, ctes, prof=0):
 
 
 def _metrica_publicada_ok(sel, ctes, prof=0):
-    """La cifra de personas sale de SUM(W) (o de COUNT(DISTINCT hogar_key)).
-    Cuando la salida solo arrastra un agregado calculado en un CTE, la métrica
-    hay que buscarla ahí: si no, la consulta correcta se rechaza."""
-    if _suma_sobre_w(sel) or _count_distinct_hogar(sel):
+    """La cifra publicada sale de SUMAR EL PONDERADOR, tanto para personas como
+    para hogares. Cuando la salida solo arrastra un agregado calculado en un CTE,
+    la métrica hay que buscarla ahí: si no, la consulta correcta se rechaza.
+
+    COUNT(DISTINCT hogar_key) YA NO ALCANZA. Cuenta hogares censados, no hogares
+    estimados: da 1.255.062 contra los 1.376.921 que publica el INE, un 9,7 %
+    menos. Y el error no es parejo —la ponderación corrige la omisión censal, que
+    se concentró en los estratos bajos—, así que contestar el crudo deshace esa
+    corrección justo donde más pesa. Sigue siendo válido como conteo de control
+    (n crudo para la supresión), nunca como la cifra que se muestra."""
+    if _suma_sobre_w(sel):
         return True
     if prof > 4:
         return False
@@ -252,6 +278,86 @@ def _metrica_publicada_ok(sel, ctes, prof=0):
     if not cuerpos or not all(_es_scope_agregado(c, ctes) for c in cuerpos):
         return False
     return any(_metrica_publicada_ok(c, ctes, prof + 1) for c in cuerpos)
+
+
+def _tablas_directas(sel):
+    """Tablas nombradas en el FROM/JOIN de ESTE ámbito, sin bajar a subconsultas.
+    Distingue 'este SELECT lee los microdatos' de 'este SELECT lee lo que otro ya
+    agregó', que es lo que decide dónde hay que poner el filtro de universo."""
+    nombres = set()
+    fuentes = []
+    frm = sel.args.get("from_") or sel.args.get("from")
+    if frm is not None:
+        fuentes.append(frm.this)
+    for j in sel.args.get("joins") or []:
+        fuentes.append(j.this)
+    for f in fuentes:
+        if isinstance(f, exp.Table):
+            nombres.add(f.name.lower())
+    return nombres
+
+
+def _apunta_al_fuera(sel, var, codigos):
+    """¿Este ámbito pide EXPLÍCITAMENTE la categoría de fuera de universo?
+
+    Si alguien escribió `WHERE NIVELEDU25MAS = '0'` está preguntando a propósito por
+    los menores de 25, y agregarle la exclusión convertiría la consulta en una
+    contradicción que devuelve 0 sin explicar por qué. En ese caso el filtro no se
+    inyecta: la consulta es rara, pero un cero silencioso es peor."""
+    donde = sel.args.get("where")
+    if donde is None:
+        return False
+    objetivo = {str(c).lower() for c in codigos}
+    for nodo in donde.find_all(exp.EQ, exp.In):
+        if nodo.find_ancestor(exp.Not) is not None:
+            continue
+        izq = nodo.this
+        if not (isinstance(izq, exp.Column) and izq.name.lower() == var):
+            continue
+        valores = ([nodo.expression] if isinstance(nodo, exp.EQ)
+                   else list(nodo.expressions))
+        for v in valores:
+            if isinstance(v, exp.Literal) and str(v.name).lower() in objetivo:
+                return True
+    return False
+
+
+def _excluir_fuera_de_universo(arbol, fuera):
+    """Inyecta la exclusión de los códigos de fuera de universo en cada ámbito que
+    lee personas_2023 y nombra una de esas variables. Devuelve las que aplicó.
+
+    POR QUÉ LO HACE EL GUARD Y NO EL PROMPT. El prompt ya lo pide, pero pedirlo no
+    alcanza: medido el 12-ago, la misma pregunta por nivel educativo excluía el
+    código 0 en una corrida y no lo excluía en la siguiente. Un error que aparece
+    una de cada dos veces no se cierra mirando la pantalla, y en la corrida mala la
+    cifra sale 48,8 % baja. Acá es determinista: si la variable está en la consulta,
+    el filtro está.
+
+    `NOT IN (...)` deja afuera también los NULL —en SQL `NULL NOT IN (...)` no es
+    verdadero—, que es justo lo que ya pedían las reglas para los denominadores."""
+    aplicadas = []
+    for sel in list(arbol.find_all(exp.Select)):
+        if "personas_2023" not in _tablas_directas(sel):
+            continue
+        usadas = []
+        for c in sel.find_all(exp.Column):
+            if c.find_ancestor(exp.Select) is not sel:
+                continue
+            nombre = c.name.lower()
+            if nombre in fuera and nombre not in usadas:
+                usadas.append(nombre)
+        for var in usadas:
+            info = fuera[var]
+            if _apunta_al_fuera(sel, var, info["codigos"]):
+                continue
+            if info["tipo"] == "TEXT":
+                lits = ", ".join("'%s'" % c.replace("'", "''") for c in info["codigos"])
+            else:
+                lits = ", ".join(str(c) for c in info["codigos"])
+            sel.where(sqlglot.condition("%s NOT IN (%s)" % (info["nombre"], lits),
+                                        dialect="sqlite"), copy=False)
+            aplicadas.append(var)
+    return sorted(set(aplicadas))
 
 
 def _aplicar_limite(arbol):
@@ -330,14 +436,22 @@ def validar(sql):
     #     nunca un COUNT(*) crudo como cifra de personas.
     ctes_cuerpos = _mapa_ctes(arbol)
     if "personas_2023" in tablas and not _metrica_publicada_ok(arbol, ctes_cuerpos):
+        if _count_distinct_hogar(arbol):
+            raise SQLNoSeguro(
+                "Hogares sin ponderar: COUNT(DISTINCT hogar_key) cuenta hogares censados, no los "
+                "publicados por el INE. La cifra de hogares se calcula sumando el ponderador una "
+                "vez por hogar: FROM (SELECT hogar_key, MAX(W) AS w FROM personas_2023 WHERE "
+                "hogar_key IS NOT NULL GROUP BY hogar_key) y en la salida SUM(w)."
+            )
         raise SQLNoSeguro(
-            "Métrica de personas inválida: usá SUM(W) (personas) o COUNT(DISTINCT hogar_key) "
-            "(hogares); COUNT(*) es solo el conteo crudo para la supresión, no la cifra publicada."
+            "Métrica inválida: la cifra publicada sale de sumar el ponderador —SUM(W) para "
+            "personas, SUM(w) sobre un W por hogar para hogares—; COUNT(*) es solo el conteo "
+            "crudo para la supresión, no la cifra publicada."
         )
 
     # solo agregados en la proyección externa (nunca filas individuales de las tablas de hechos).
     # Se permiten columnas SIN agregar si pertenecen al NOMENCLÁTOR (lookup, no microdato).
-    libre = _col_libre(arbol)
+    libre = _col_libre(arbol, ctes_cuerpos)
     # Una columna suelta NO es una persona si la fila que la trae ya es una celda
     # agregada: es el caso del CTE que cuenta y la consulta de salida que solo
     # calcula el porcentaje sobre ese conteo.
@@ -385,6 +499,11 @@ def validar(sql):
             "La consulta arrastra celdas ya agregadas pero no expone el conteo crudo: "
             "sin él no puede aplicarse la supresión."
         )
+
+    # (f) fuera de universo: se inyecta acá, con la consulta ya validada y antes del
+    # LIMIT, para que el filtro entre a todos los ámbitos que leen microdatos.
+    if "personas_2023" in tablas:
+        _excluir_fuera_de_universo(arbol, universo.tabla(_DICCIONARIO))
 
     arbol = _aplicar_limite(arbol)
     arbol = orden.desempatar(arbol)

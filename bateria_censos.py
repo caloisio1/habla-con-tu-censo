@@ -49,9 +49,18 @@ ANCLAS = {
     "2011": [("personas", "SELECT COUNT(*) FROM personas", 3285877),
              ("hogares", "SELECT COUNT(DISTINCT hogar_key) FROM personas", 1166270),
              ("viviendas", "SELECT COUNT(DISTINCT vivienda_key) FROM personas", 1136432)],
+    # 12-ago-2026: los hogares 2023 llevan DOS controles y no hay que confundirlos. El
+    # crudo (1.255.062) verifica que la base cargó bien; el PONDERADO (1.376.921) es la
+    # cifra que el INE publica y la única que la app puede mostrar. Tenerlos separados es
+    # justamente lo que faltaba: durante meses el único control era el crudo, así que el
+    # motor podía contestar el crudo y la batería daba verde.
     "2023": [("personas (ponderadas)", "SELECT ROUND(SUM(W)) FROM personas_2023", 3499451),
-             ("hogares", "SELECT COUNT(DISTINCT hogar_key) FROM personas_2023 "
-                         "WHERE hogar_key IS NOT NULL", 1255062),
+             ("hogares censados (control de carga, NO se publica)",
+              "SELECT COUNT(DISTINCT hogar_key) FROM personas_2023 "
+              "WHERE hogar_key IS NOT NULL", 1255062),
+             ("hogares ponderados (cifra publicada)",
+              "SELECT ROUND(SUM(w)) FROM (SELECT hogar_key, MAX(W) AS w FROM personas_2023 "
+              "WHERE hogar_key IS NOT NULL GROUP BY hogar_key)", 1376921),
              ("viviendas", "SELECT COUNT(*) FROM viviendas_2023", 1659044)],
 }
 
@@ -186,7 +195,33 @@ PREGUNTAS_B = [
     # 182.708 (total menos condocup='1'), que mete adentro las 42.232 viviendas
     # OCUPADAS con moradores ausentes, o contestar el total de viviendas sin filtrar.
     ("viv-desocupadas", "1996", "¿Cuántas viviendas estaban desocupadas?", "desocupadas_1996"),
+    # 12-ago-2026 · las tres observaciones del muestrista del INE. Van acá, extremo a
+    # extremo con el modelo, porque las tres fallaban en la traducción pregunta->SQL y
+    # ninguna capa de abajo las veía: la base estaba bien en los tres casos.
+    ("ine-hogares", "2023", "¿Cuántos hogares hay en el país?", "cifra:1376921"),
+    ("ine-tamano", "2023", "¿Cuál es el tamaño medio del hogar en Uruguay?", "cifra:2.54"),
+    # Montevideo ponderado = 523.829 hogares (crudo 491.206). Controla que el desglose
+    # también salga ponderado y no sólo el total del país.
+    ("ine-hogares-depto", "2023", "¿Cuántos hogares hay en cada departamento?", "cifra:523829"),
+    ("ine-universo-edu", "2023", "¿Qué porcentaje de la población tiene nivel universitario?",
+     "cifra:16.48"),
+    ("ine-universo-disc", "2023", "¿Qué porcentaje de personas tiene alguna discapacidad?",
+     "cifra:6.71"),
+    ("ine-segmentos", "2023", "¿Cuántas personas hay en cada segmento censal del país?",
+     "tabla_completa"),
 ]
+
+
+def _cifra_esperada(r, esperado):
+    """¿Alguna cifra de la primera fila es la esperada? Se controla el NÚMERO y no el
+    SQL: hay más de una forma correcta de escribirlo y una sola respuesta correcta."""
+    tolerancia = 1.0 if abs(esperado) >= 1000 else 0.011
+    for fila in (r.get("datos") or []):
+        for v in fila.values():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                if abs(float(v) - esperado) <= tolerancia:
+                    return True
+    return False
 
 
 def capa_b():
@@ -218,6 +253,13 @@ def capa_b():
                 ok = bool(r.get("ok")) and bool(r.get("opciones"))
             elif comprobacion == "sin_filtro_sexo":
                 ok = not any(p in sql for p in ("perph02", "sexo ="))
+            elif comprobacion.startswith("cifra:"):
+                ok = bool(r.get("ok")) and _cifra_esperada(r, float(comprobacion.split(":")[1]))
+            elif comprobacion == "tabla_completa":
+                # Dos cosas juntas: la tabla llega entera (4.297 segmentos, antes 300) y
+                # el redactor NO se queda mudo por el tamaño del resultado.
+                filas = r.get("datos") or []
+                ok = bool(r.get("ok")) and len(filas) >= 4000 and len(texto.strip()) > 80
             elif comprobacion == "desocupadas_1996":
                 # Se controla la CIFRA, no el SQL: hay más de una forma correcta de
                 # escribir el filtro, y una sola respuesta correcta.

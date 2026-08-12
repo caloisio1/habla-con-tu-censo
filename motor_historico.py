@@ -192,6 +192,12 @@ por BARRIO DE MONTEVIDEO, agregá el código de la unidad geográfica con el ali
     Montevideo hay UN solo segmento con polígono. Si la pregunta pide "Montevideo por
     segmento", respondé por SECCIÓN CENSAL o por BARRIO, que sí tienen cartografía
     completa, y aclaralo en el geo_nombre.
+Si la pregunta PIDE UN MAPA ("mostralo en un mapa", "en un mapa") pero NO nombra la unidad,
+elegí igual una unidad dibujable y agrupá por ella: departamento si la pregunta es nacional
+o de varios departamentos; sección censal si se acota a UN departamento; barrio si se acota
+a Montevideo. NO elijas segmento en este caso: su cartografía está incompleta y solo se usa
+cuando la pregunta pide segmentos de UNA localidad o UNA sección concreta. Sin GROUP BY por
+una unidad dibujable no se dibuja mapa: sale solo la tabla.
 NO uses geo_codigo en ningún otro corte geográfico (zona, localidad): la aplicación no
 tiene la cartografía de esos marcos para este censo.
 - Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE"""

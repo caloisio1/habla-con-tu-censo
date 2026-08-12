@@ -12,7 +12,18 @@ sys.path.insert(0, AQUI)
 from sql_guard_2023 import validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
 import registro
 import usage_log
-from comun import ejecutor, llm, pipeline, rechazos, sinonimos
+from comun import ejecutor, llm, pipeline, rechazos, sinonimos, universo
+
+# Cuántas unidades geográficas se pueden DIBUJAR de una vez. Es otra cosa que el tope de
+# filas de la tabla (sql_guard_2023.LIMITE_MAXIMO): la tabla de los 4.297 segmentos se
+# entrega entera, pero 4.297 polígonos en un mapa de pantalla no se leen. Por encima de
+# este número se entregan los datos y se explica por qué no hay mapa.
+LIMITE_MAPA = 300
+# Cuántas filas ve el REDACTOR. Con el desglose completo en el prompt el modelo gasta el
+# presupuesto de salida razonando y devuelve la respuesta VACÍA (medido el 12-ago con 300
+# filas: el usuario recibió sólo la tabla y ni una frase). Los totales los suma Python
+# aparte —pipeline.totales_para_redactor—, así que la muestra alcanza para narrar.
+FILAS_AL_REDACTOR = 60
 
 DB = os.environ.get("CENSO2023_DB", os.path.join(AQUI, "datos", "censo2023.db"))
 MODELO = os.environ.get("CENSO_MODELO", llm.MODELO_POR_DEFECTO)
@@ -42,9 +53,31 @@ REGLAS = """Reglas estrictas (dialecto SQLite):
 - PERSONAS: la cifra publicada es SUM(W) (redondeada); agregá SIEMPRE COUNT(*) AS n_crudo
   (conteo sin ponderar) para la supresión de celdas chicas. NUNCA presentes COUNT(*) como
   cantidad de personas.
-- HOGARES: usá la columna derivada hogar_key directamente -> COUNT(DISTINCT hogar_key) AS hogares
-  con hogar_key IS NOT NULL (ya viene NULL fuera de UNIVERSO 1/2). NO reconstruyas la clave desde
-  DIRECCION_ID/VIVID/HOGID. Agregá COUNT(*) AS n_crudo.
+- HOGARES: la cifra publicada es PONDERADA, igual que la de personas. El ponderador es de
+  hogar (vale lo mismo para todos sus integrantes), así que se suma UNA VEZ POR HOGAR con una
+  subconsulta que colapsa el hogar a una fila. Forma canónica, usala tal cual:
+    SELECT ROUND(SUM(w)) AS hogares, COUNT(*) AS n_crudo
+      FROM (SELECT hogar_key, MAX(W) AS w FROM personas_2023
+             WHERE hogar_key IS NOT NULL GROUP BY hogar_key)
+  Con desglose, las columnas del corte van DENTRO de la subconsulta y también en su GROUP BY:
+    SELECT d.codigo AS geo_codigo, d.nombre AS geo_nombre, ROUND(SUM(h.w)) AS hogares,
+           COUNT(*) AS n_crudo
+      FROM (SELECT DEPARTAMENTO, hogar_key, MAX(W) AS w FROM personas_2023
+             WHERE hogar_key IS NOT NULL GROUP BY DEPARTAMENTO, hogar_key) h
+      JOIN departamentos_2023 d ON h.DEPARTAMENTO = d.codigo
+     GROUP BY d.codigo, d.nombre
+  Ahí COUNT(*) cuenta hogares (el n crudo que corresponde a la unidad). NO uses
+  COUNT(DISTINCT hogar_key) como cifra de hogares: es el conteo SIN PONDERAR (1.255.062 contra
+  los 1.376.921 publicados, 9,7 % menos) y el guard lo RECHAZA. NO reconstruyas la clave desde
+  DIRECCION_ID/VIVID/HOGID.
+- TAMAÑO MEDIO DEL HOGAR y cualquier razón personas/hogares: las DOS cifras se calculan en la
+  MISMA subconsulta por hogar y se dividen las sumas. Forma canónica:
+    SELECT ROUND(SUM(personas) / SUM(w), 2) AS tamano_medio_hogar, COUNT(*) AS n_crudo
+      FROM (SELECT hogar_key, MAX(W) AS w, SUM(W) AS personas FROM personas_2023
+             WHERE hogar_key IS NOT NULL GROUP BY hogar_key)
+  Da 2,54; con el conteo crudo en el denominador da 2,79. NO dividas por un escalar traído con
+  CROSS JOIN (`SUM(p.W) / h.hogares`): esa consulta NO CORRE —la columna del escalar no está
+  agregada y el motor la rechaza—, y el usuario se queda sin respuesta.
 - VIVIENDAS: consultá la tabla viviendas_2023 y usá COUNT(*) (esa tabla no tiene ponderador).
 - W es el PONDERADOR (siempre válido): NO le apliques filtros de perdidos (nada de W IN (7777,...)).
 - SEXO es PERPH02 (1=Varón, 2=Mujer). "Mujeres" es PERPH02=2. NO lo confundas con PERMI01,
@@ -61,6 +94,22 @@ REGLAS = """Reglas estrictas (dialecto SQLite):
 - PERDIDOS: excluí SIEMPRE los NULL (y códigos perdidos) de conteos, totales y denominadores.
   En porcentajes el denominador excluye NULL (usá SUM(CASE WHEN ... THEN W END)/SUM(W) sobre
   filas con la variable no nula).
+- FUERA DE UNIVERSO (distinto de perdidos, y más peligroso). Algunas variables traen una
+  categoría que NO es una respuesta: dice que a esa persona no le correspondía la pregunta.
+  Tiene código chico y etiqueta amable, así que se cuela en el denominador:
+    NIVELEDU25MAS = 0  -> 'Menor de 25 años'   (1.128.699 personas, un tercio del país)
+    POBPCOAC      = 1  -> 'Menor de 12 años'
+    DISC_TIENE    = 2  -> 'Menor de 5 años'
+    DIFICULTAD    = 0  -> 'Menor de 5 años'
+  Excluilas SIEMPRE del numerador Y del denominador, y no las muestres como categoría en un
+  desglose. Con el 0 adentro, el porcentaje de nivel universitario da 11,07 % en vez de
+  16,48 %: subestima casi un 49 %.
+- TASAS DEL MERCADO DE TRABAJO: la tasa de desempleo se calcula sobre la POBLACIÓN
+  ECONÓMICAMENTE ACTIVA (POBPCOAC IN (2,3)), no sobre la población total ni sobre los de 12 y
+  más. Denominador SUM(CASE WHEN POBPCOAC IN (2,3) THEN W END); numerador POBPCOAC=3. Sobre la
+  población entera da 4,98 % en lugar del 9,35 % que es la tasa. Lo mismo para la tasa de
+  actividad (PEA sobre población de 14 y más) y la de empleo (ocupados sobre población de 14 y
+  más): si la pregunta dice 'tasa', el denominador NO es la población total.
 - Identificadores (vivienda_key, hogar_key, DIRECCION_ID, VIVID, HOGID, PERID, ID_HOGAR):
   libres en subconsultas/GROUP BY interno, PROHIBIDOS en el SELECT externo salvo dentro de
   COUNT(DISTINCT ...).
@@ -183,6 +232,39 @@ def leyenda_codificaciones(sql):
     return "\n".join(out)
 
 
+# Columnas que NO se pueden sumar entre filas: sumar porcentajes, promedios o tasas da
+# un número sin significado, y un número sin significado en el prompt es peor que
+# ninguno (el redactor lo narra igual).
+_RX_NO_SUMABLE = re.compile(r"pct|porc|proporcion|promedio|medio|media|tasa|razon|indice",
+                            re.I)
+
+
+def _total_metrica(filas, columnas_conteo):
+    """Total de la MÉTRICA PUBLICADA (personas ponderadas, hogares), sumado en Python.
+
+    `pipeline.totales_para_redactor` suma sólo las columnas de CONTEO, que en 2023 son
+    el n crudo y ni siquiera se muestran. En un desglose grande el redactor se quedaba
+    sin el total del país y lo decía en la respuesta —'el total de personas no fue
+    provisto'—, que es una frase de plomería asomando en la cara del usuario."""
+    if len(filas) < 2:
+        return ""
+    conteo = {c.lower() for c in columnas_conteo}
+    sumas = {}
+    for fila in filas:
+        for col, valor in fila.items():
+            clave = col.lower()
+            if clave in conteo or clave.startswith("geo_") or _RX_NO_SUMABLE.search(clave):
+                continue
+            if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+                continue
+            sumas[col] = sumas.get(col, 0) + valor
+    if not sumas:
+        return ""
+    detalle = "; ".join("%s=%d" % (c, round(v)) for c, v in sumas.items())
+    return ("\nTOTAL de todas las filas, ya sumado por el sistema (%s). Si narrás el total, "
+            "usá EXACTAMENTE este número." % detalle)
+
+
 def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False,
              interpretaciones=(), contexto=None, emitir=None):
     """Si emitir no es None, se la llama con cada fragmento a medida que llega.
@@ -249,8 +331,20 @@ def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False,
     # El redactor solo NARRA: con esfuerzo bajo el razonamiento no llega a agotar el
     # presupuesto ni a vaciar la respuesta en preguntas de mapa. El tope holgado
     # (1600) es justamente ese margen: no bajarlo sin volver a medir.
-    _usuario = (f"Pregunta: {pregunta}\nSQL: {sql}\nResultados: {filas}"
-                + pipeline.totales_para_redactor(filas, columnas_conteo))
+    # La muestra va con su cartel: sin él, el modelo lee 60 filas y narra "los
+    # departamentos son 60". Los totales de abajo son sobre TODAS las filas.
+    totales = (pipeline.totales_para_redactor(filas, columnas_conteo)
+               + _total_metrica(filas, columnas_conteo))
+    if len(filas) > FILAS_AL_REDACTOR:
+        muestra = filas[:FILAS_AL_REDACTOR]
+        aviso_muestra = (f"\nATENCIÓN: se te muestran las primeras {FILAS_AL_REDACTOR} filas de "
+                         f"{len(filas)}. El usuario SÍ recibe la tabla completa. Narrá el panorama "
+                         f"y los totales; no digas que hay {FILAS_AL_REDACTOR} unidades ni "
+                         "enumeres una por una.")
+    else:
+        muestra, aviso_muestra = filas, ""
+    _usuario = (f"Pregunta: {pregunta}\nSQL: {sql}\nResultados: {muestra}"
+                + aviso_muestra + totales)
     _comun = dict(modelo=MODELO_REDACTOR, esfuerzo=ESFUERZO_REDACTOR,
                   tope=TOPE_REDACTOR, sistema=sys_prompt, usuario=_usuario)
     r = (llm.completar_stream(emitir=emitir, **_comun) if emitir
@@ -398,16 +492,33 @@ def preguntar(texto, verbose=False, avisar=None):
     # Otras lecturas posibles del nombre consultado: se ofrecen junto a la respuesta.
     if alternativas:
         resultado["opciones"] = alternativas
+    # Universo aplicado: si la consulta usa una variable con categorías de fuera de
+    # universo, el guard las excluyó. Se dice, porque un denominador que cambia sin
+    # avisar es exactamente lo que hace que una cifra no se pueda auditar.
+    _fuera = universo.tabla(os.path.join(AQUI, "diccionario_llm_2023.json"))
+    _frase = universo.frase_universo(universo.presentes_en(sql_seguro, _fuera), _fuera)
+    if _frase:
+        resultado["respuesta"] += "\n" + _frase
+
+    # Anti-truncamiento de la TABLA. Distinto del mapa: acá lo que falta son FILAS DE
+    # DATOS, y antes se entregaban recortadas sin decirlo (300 de 4.297 segmentos).
+    if n_geo_raw >= LIMITE_MAXIMO:
+        total_filas = _contar_unidades_geo(sql_seguro)
+        resultado["respuesta"] += (
+            f"\n\n_Nota: la consulta devuelve {total_filas} filas y se muestran las primeras "
+            f"{LIMITE_MAXIMO}. Acotá la pregunta a un ámbito menor para ver el resto._")
+
     mapa = construir_mapa_2023(filas, columnas_conteo, suprimidas, sql_seguro)
     if mapa and mapa["datos"]:
         # Anti-truncamiento: nunca mostrar un mapa nacional recortado en silencio.
         total = _contar_unidades_geo(sql_seguro) if n_geo_raw >= LIMITE_MAXIMO else len(mapa["datos"])
-        if total > LIMITE_MAXIMO:
+        if total > LIMITE_MAPA:
             nivel_txt = _NIVEL_TXT.get(mapa["nivel"], "unidad")
             resultado["respuesta"] += (
                 f"\n\n_Nota: el desglose por {nivel_txt} tiene {total} unidades y supera el máximo de "
-                f"{LIMITE_MAXIMO} que se pueden mapear a la vez, por lo que NO se muestra el mapa (sería un "
-                f"recorte parcial). Acotá la pregunta a un ámbito menor —un departamento o una sección— para verlo._")
+                f"{LIMITE_MAPA} que se pueden dibujar a la vez, por lo que NO se muestra el mapa (sería un "
+                f"recorte parcial). La tabla de datos sí viene completa. Acotá la pregunta a un ámbito "
+                f"menor —un departamento o una sección— para ver el mapa._")
         else:
             resultado["mapa"] = mapa
     pipeline.recordar_resultado(sql_seguro, "2023", resultado)
