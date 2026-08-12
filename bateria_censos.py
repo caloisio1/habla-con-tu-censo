@@ -217,6 +217,14 @@ PREGUNTAS_B = [
     # antes devolvía 5,84 % o 9,35 % según la corrida.
     ("ine-desocupacion", "2023", "¿Qué porcentaje de la población está desocupada?",
      "cifra:9.35"),
+    # "Universitario" no se contesta solo: con posgrado 16,48 %, sin posgrado 13,61 %.
+    # Se controla en 2023 y 2011, que comparten la estructura del diccionario; en 1996
+    # NO debe pedir opciones porque no hay ambigüedad (una sola categoría universitaria).
+    ("ine-universitario", "2023", "¿Qué porcentaje de la población tiene nivel universitario?",
+     "pide_opciones"),
+    ("ine-universitario-11", "2011", "¿Cuántas personas tienen educación universitaria?",
+     "pide_opciones"),
+    ("ine-universitario-96", "1996", "¿Cuántas personas tienen educación universitaria?", "ok"),
     ("ine-actividad", "2023", "¿Cuál es la tasa de actividad?", "cifra:62.82"),
     ("ine-empleo", "2023", "¿Cuál es la tasa de empleo?", "cifra:56.95"),
     ("ine-segmentos", "2023", "¿Cuántas personas hay en cada segmento censal del país?",

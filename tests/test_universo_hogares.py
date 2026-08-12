@@ -16,7 +16,7 @@ AQUI = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, AQUI)
 
 from sql_guard_2023 import LIMITE_MAXIMO, SQLNoSeguro, validar   # noqa: E402
-from comun import universo                                       # noqa: E402
+from comun import indicadores, universo                          # noqa: E402
 
 DICC = os.path.join(AQUI, "diccionario_llm_2023.json")
 
@@ -178,3 +178,40 @@ def test_la_frase_de_universo_nombra_la_categoria_excluida():
     frase = universo.frase_universo(universo.presentes_en(
         "SELECT NIVELEDU25MAS FROM personas_2023", fuera), fuera)
     assert "Menor de 25" in frase
+
+
+# ------------------------------- 5. "universitario": con o sin posgrado, se pregunta
+
+def test_universitario_no_se_contesta_solo():
+    """Decisión de Carlos (12-ago): con posgrado da 16,48 % y sin posgrado 13,61 %;
+    el sistema no elige por su cuenta."""
+    for pregunta in ("¿Qué porcentaje de la población tiene nivel universitario?",
+                     "¿Cuántas personas tienen educación universitaria?",
+                     "¿Cuántos universitarios hay en Salto?"):
+        r = indicadores.desambiguar(pregunta, "2023")
+        assert r is not None and r["motivo"] == "consulta_ambigua"
+        assert len(r["opciones"]) == 2
+
+
+def test_postgrado_solo_no_es_ambiguo():
+    assert indicadores.desambiguar("¿Qué porcentaje tiene nivel de postgrado?",
+                                   "2023") is None
+
+
+@pytest.mark.parametrize("censo", ["2011", "2023"])
+def test_las_opciones_no_vuelven_a_disparar(censo):
+    """Si la pregunta del chip disparara la desambiguación, el usuario quedaría en un
+    bucle: elige una opción y el sistema le vuelve a preguntar lo mismo."""
+    for o in indicadores.desambiguar("nivel universitario", censo)["opciones"]:
+        assert indicadores.detectar(o["pregunta"]) is None
+
+
+def test_en_1996_no_hay_ambiguedad_y_se_contesta():
+    """`nivel` tiene UNA sola categoría universitaria (6 = Universidad): no hay nada
+    que preguntar, y decir 'no relevado' sería falso."""
+    assert indicadores.desambiguar("¿Cuántos universitarios hay?", "1996") is None
+
+
+def test_en_2004_se_dice_que_no_se_relevo():
+    r = indicadores.desambiguar("¿Cuántos universitarios hay?", "2004")
+    assert r is not None and r["motivo"] == "variable_no_relevada"
