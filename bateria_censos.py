@@ -229,6 +229,11 @@ PREGUNTAS_B = [
     ("ine-empleo", "2023", "¿Cuál es la tasa de empleo?", "cifra:56.95"),
     ("ine-segmentos", "2023", "¿Cuántas personas hay en cada segmento censal del país?",
      "tabla_completa"),
+    # La Sección Censal 99 de Montevideo es real (75.855 ponderadas). El modelo la
+    # descartaba como si '99' fuera un código de no respuesta, y el desglose por sección
+    # de Montevideo salía con 24 secciones en vez de 25.
+    ("ine-seccion-99", "2023", "¿Cuántas personas hay en cada sección censal de Montevideo?",
+     "cifra:75855"),
 ]
 
 

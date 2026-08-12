@@ -215,3 +215,51 @@ def test_en_1996_no_hay_ambiguedad_y_se_contesta():
 def test_en_2004_se_dice_que_no_se_relevo():
     r = indicadores.desambiguar("¿Cuántos universitarios hay?", "2004")
     assert r is not None and r["motivo"] == "variable_no_relevada"
+
+
+# ------------------------------------- 6. la geografía NO tiene códigos centinela
+
+_GEO_BASE = ("SELECT DEPARTAMENTO || SECCION || SEGMENTO AS geo_codigo, "
+             "ROUND(SUM(W)) AS personas, COUNT(*) AS n_crudo FROM personas_2023 "
+             "WHERE %s GROUP BY DEPARTAMENTO, SECCION, SEGMENTO")
+
+
+def test_no_se_descarta_la_seccion_99_de_montevideo():
+    """Es una sección real con 75.855 personas ponderadas (2,17 % del país) y polígono
+    propio. La perdían las dos formas del filtro."""
+    for lit in ("'99'", "99"):
+        sql, _ = validar(_GEO_BASE % ("SECCION NOT IN (7777, 8888, 9898, 9999, %s)" % lit))
+        assert "99" not in sql.split("WHERE")[1].split("GROUP")[0]
+
+
+def test_el_filtro_numerico_no_se_lleva_el_segmento_099():
+    """`SEGMENTO NOT IN (..., 99)` sin comillas hace que DuckDB castee '099' a 99 y lo
+    saque: 7.825 personas. Con comillas no pasaba. La misma divergencia muda entre texto
+    y número de siempre."""
+    sql, _ = validar(_GEO_BASE % "SEGMENTO NOT IN (7777, 8888, 9898, 9999, 99)")
+    assert "99" not in sql.split("WHERE")[1].split("GROUP")[0]
+
+
+def test_se_limpia_tambien_el_distinto_de():
+    sql, _ = validar(_GEO_BASE % "SECCION <> '99'")
+    assert "'99'" not in sql
+
+
+def test_preguntar_POR_la_seccion_99_sigue_funcionando():
+    """Sólo se limpian los contextos negativos: un `SECCION = '99'` es alguien
+    preguntando por esa sección, y borrarlo sería el mismo error al revés."""
+    sql, _ = validar("SELECT ROUND(SUM(W)) AS personas, COUNT(*) AS n_crudo "
+                     "FROM personas_2023 WHERE DEPARTAMENTO = '01' AND SECCION = '99'")
+    assert "SECCION = '99'" in sql
+
+
+def test_no_se_toca_la_exclusion_de_nulos_en_geografia():
+    """NULL sí es inválido en la geografía: 1.868 registros sin sección ni segmento."""
+    sql, _ = validar(_GEO_BASE % "SECCION IS NOT NULL AND SEGMENTO IS NOT NULL")
+    assert "IS NULL" in sql.upper()
+
+
+def test_los_perdidos_de_una_variable_normal_no_se_tocan():
+    sql, _ = validar("SELECT ROUND(SUM(W)) AS p, COUNT(*) AS n FROM personas_2023 "
+                     "WHERE PERPA01 NOT IN ('7777', '8888', '9898', '9999')")
+    assert "7777" in sql

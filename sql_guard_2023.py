@@ -450,6 +450,66 @@ def _tasas_del_mercado_de_trabajo(arbol):
     return set()
 
 
+# Columnas geográficas: NINGUNA tiene códigos centinela. Verificado contra la base el
+# 12-ago-2026, valor por valor: el único valor inválido es NULL (1.868 registros en
+# SECCION/SEGMENTO, 259 en LOCALIDAD). Todo lo que "parece" un perdido es un lugar real.
+_GEO = {"departamento", "seccion", "segmento", "localidad", "barrio85", "ccz"}
+# Los códigos genéricos de no respuesta del diccionario. En cualquier otra variable
+# excluirlos es correcto; en las geográficas borra lugares que existen.
+_CENTINELAS = {"7", "8", "9", "99", "999", "7777", "8888", "9898", "9999"}
+
+
+def _es_centinela(nodo):
+    return isinstance(nodo, exp.Literal) and str(nodo.name) in _CENTINELAS
+
+
+def _limpiar_centinelas_geograficos(arbol):
+    """Saca los filtros de 'perdido' que el modelo le pone a la geografía.
+
+    QUÉ PASABA. El modelo arrastra el reflejo de excluir 7777/8888/9898/9999/99 a las
+    columnas geográficas, donde no hay nada que excluir, y ahí ese reflejo BORRA LUGARES:
+
+      · SECCION '99' es la Sección Censal 99 de Montevideo —75.855 personas ponderadas,
+        el 2,17 % del país, con polígono propio en la cartografía—. La perdían las dos
+        formas del filtro, la de texto y la numérica.
+      · SEGMENTO '099' son 7.825 personas. Ésas las perdía SÓLO la forma numérica:
+        `SEGMENTO NOT IN (..., 99)` con literales sin comillas hace que DuckDB castee
+        '099' a 99 y lo saque. Con comillas no pasa. La misma divergencia muda entre
+        texto y número que ya nos mordió al unificar motores.
+      · LOCALIDAD '999' son EL QUINTÓN y MIRADOR DE LA TAHONA, las dos en el nomenclátor.
+
+    Y como depende de cómo el modelo redacte el literal, desaparecía y volvía entre
+    corridas, igual que los otros tres defectos de esta tanda.
+
+    SÓLO se limpian los contextos NEGATIVOS (`NOT IN`, `<>`). Un `SECCION = '99'` es
+    alguien preguntando POR la sección 99 y se respeta: sacarlo sería el mismo error al
+    revés. La exclusión de NULL no se toca: NULL sí es inválido en la geografía."""
+    tocados = []
+    for nodo in list(arbol.find_all(exp.Not)):
+        interno = nodo.this
+        if not isinstance(interno, exp.In):
+            continue
+        col = interno.this
+        if not (isinstance(col, exp.Column) and col.name.lower() in _GEO):
+            continue
+        quedan = [e for e in interno.expressions if not _es_centinela(e)]
+        if len(quedan) == len(interno.expressions):
+            continue
+        tocados.append(col.name)
+        if quedan:
+            interno.set("expressions", quedan)
+        else:
+            nodo.replace(exp.true())
+    for nodo in list(arbol.find_all(exp.NEQ)):
+        col, otro = nodo.this, nodo.expression
+        if not (isinstance(col, exp.Column) and col.name.lower() in _GEO):
+            continue
+        if _es_centinela(otro):
+            tocados.append(col.name)
+            nodo.replace(exp.true())
+    return tocados
+
+
 def _aplicar_limite(arbol):
     lim = arbol.args.get("limit")
     if lim is None:
@@ -598,6 +658,9 @@ def validar(sql):
         # filtro de universo no la altera) y después el fuera de universo, idempotente.
         _exentos = _tasas_del_mercado_de_trabajo(arbol)
         _excluir_fuera_de_universo(arbol, _fuera, _exentos)
+    # Vale para las dos tablas de hechos: viviendas_2023 tiene las mismas columnas
+    # geográficas y el mismo reflejo del modelo.
+    _limpiar_centinelas_geograficos(arbol)
 
     arbol = _aplicar_limite(arbol)
     arbol = orden.desempatar(arbol)
