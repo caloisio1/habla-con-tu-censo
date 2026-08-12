@@ -203,8 +203,13 @@ PREGUNTAS_B = [
     # Montevideo ponderado = 523.829 hogares (crudo 491.206). Controla que el desglose
     # también salga ponderado y no sólo el total del país.
     ("ine-hogares-depto", "2023", "¿Cuántos hogares hay en cada departamento?", "cifra:523829"),
-    ("ine-universo-edu", "2023", "¿Qué porcentaje de la población tiene nivel universitario?",
-     "cifra:16.48"),
+    # Se controla con POSTGRADO y no con "universitario": el universo (el denominador) es
+    # el mismo en las dos, pero "universitario" es ambiguo en el NUMERADOR —el modelo lo
+    # lee unas veces como 'Universidad o similar' (13,61 %) y otras como universidad más
+    # postgrado (16,48 %)—, y un control que acepta dos respuestas no controla nada. La
+    # ambigüedad es de definición, es anterior a este arreglo y está anotada aparte.
+    ("ine-universo-edu", "2023", "¿Qué porcentaje de la población tiene nivel de postgrado?",
+     "cifra:2.88"),
     ("ine-universo-disc", "2023", "¿Qué porcentaje de personas tiene alguna discapacidad?",
      "cifra:6.71"),
     ("ine-segmentos", "2023", "¿Cuántas personas hay en cada segmento censal del país?",
