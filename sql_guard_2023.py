@@ -322,7 +322,7 @@ def _apunta_al_fuera(sel, var, codigos):
     return False
 
 
-def _excluir_fuera_de_universo(arbol, fuera):
+def _excluir_fuera_de_universo(arbol, fuera, exentos_actividad=()):
     """Inyecta la exclusión de los códigos de fuera de universo en cada ámbito que
     lee personas_2023 y nombra una de esas variables. Devuelve las que aplicó.
 
@@ -350,6 +350,13 @@ def _excluir_fuera_de_universo(arbol, fuera):
             info = fuera[var]
             if _apunta_al_fuera(sel, var, info["codigos"]):
                 continue
+            # En las tasas sobre la PET el universo lo define la EDAD, no la variable de
+            # actividad: quien no contestó condición de actividad igual está en la
+            # población en edad de trabajar. Excluirlo achica el denominador y sube la
+            # tasa (actividad 64,43 % en vez de 62,82 %). El filtro de edad ya dejó
+            # afuera a los 'Menor de 12 años', así que no se pierde nada.
+            if var == _POBPCOAC and id(sel) in exentos_actividad:
+                continue
             if info["tipo"] == "TEXT":
                 lits = ", ".join("'%s'" % c.replace("'", "''") for c in info["codigos"])
             else:
@@ -358,6 +365,89 @@ def _excluir_fuera_de_universo(arbol, fuera):
                                         dialect="sqlite"), copy=False)
             aplicadas.append(var)
     return sorted(set(aplicadas))
+
+
+# Condición de actividad: 1=Menor de 12, 2=Ocupados, 3=Desocupados, 4 y 5=Inactivos.
+_POBPCOAC = "pobpcoac"
+# Las tres tasas del mercado de trabajo, con sus DOS denominadores distintos
+# (definiciones del INE, confirmadas por Carlos el 12-ago-2026):
+#   desocupación = desocupados / PEA          PEA = ocupados + desocupados
+#   actividad    = PEA / PET                  PET = población en edad de trabajar
+#   empleo       = ocupados / PET             PET = 14 años y más en Uruguay
+# La clave del mapa es el conjunto de códigos que suma el NUMERADOR; el valor, la
+# condición que define su denominador.
+_EDAD = "perna01"
+_TASAS = {
+    ("3",): ("POBPCOAC IN ('2', '3')", "desocupación sobre la PEA"),
+    ("2", "3"): ("%s >= 14" % _EDAD.upper(), "actividad sobre la PET"),
+    ("2",): ("%s >= 14" % _EDAD.upper(), "empleo sobre la PET"),
+}
+
+
+def _codigos_del_numerador(nodo):
+    """Los códigos de POBPCOAC que suma este numerador, o None si no es de esa forma.
+    Reconoce SUM(CASE WHEN POBPCOAC = 3 ...) y SUM(CASE WHEN POBPCOAC IN (2,3) ...)."""
+    sumas = list(nodo.find_all(exp.Sum))
+    if len(sumas) != 1:
+        return None
+    casos = list(sumas[0].find_all(exp.Case))
+    if len(casos) != 1:
+        return None
+    condiciones = list(casos[0].find_all(exp.EQ, exp.In))
+    if len(condiciones) != 1:
+        return None
+    cond = condiciones[0]
+    if not (isinstance(cond.this, exp.Column) and cond.this.name.lower() == _POBPCOAC):
+        return None
+    valores = ([cond.expression] if isinstance(cond, exp.EQ) else list(cond.expressions))
+    if not all(isinstance(v, exp.Literal) for v in valores) or not valores:
+        return None
+    return tuple(sorted(str(v.name) for v in valores))
+
+
+def _es_denominador_poblacion(nodo):
+    """¿El denominador es la población entera del ámbito? SUM(W) sin condición."""
+    if list(nodo.find_all(exp.Case)):
+        return False
+    sumas = list(nodo.find_all(exp.Sum))
+    return (len(sumas) == 1
+            and all(c.name.lower() == "w" for c in sumas[0].find_all(exp.Column)))
+
+
+def _tasas_del_mercado_de_trabajo(arbol):
+    """Las tres tasas se calculan sobre SU denominador, y eso se hace cumplir acá.
+
+    Decisión de Carlos, 12-ago: 'el porcentaje de desocupados es idéntico a la tasa de
+    desocupación, por eso siempre es sobre la PEA'; actividad y empleo van sobre la PET
+    (14 y más). Sin esto la misma pregunta contestaba 5,84 % (sobre los de 12 y más) o
+    9,35 % (la tasa) según la corrida, porque 'porcentaje de la población desocupada'
+    admite las dos lecturas y el prompt no alcanza para cerrarlas —es el mismo modo de
+    falla que el fuera de universo, documentado el mismo día—.
+
+    Es DELIBERADAMENTE angosto: sólo dispara cuando la proyección tiene UNA razón cuyo
+    numerador suma exclusivamente uno de los tres conjuntos de códigos y cuyo
+    denominador es la población entera del ámbito. Un desglose por condición de
+    actividad (GROUP BY POBPCOAC) no entra, y no debe: ahí restringir borraría a los
+    inactivos, que son parte de la respuesta.
+
+    El filtro entra al ÁMBITO, así que alcanza al numerador y al denominador a la vez.
+    Es lo correcto en los tres casos: los desocupados ya están dentro de la PEA (el
+    numerador no se mueve), y la tasa de actividad es PEA de 14 y más sobre PET, no la
+    PEA entera sobre PET —hay 859 registros activos de menos de 14 años—."""
+    for sel in list(arbol.find_all(exp.Select)):
+        if "personas_2023" not in _tablas_directas(sel):
+            continue
+        razones = [d for proj in sel.expressions for d in proj.find_all(exp.Div)]
+        if len(razones) != 1:
+            continue
+        div = razones[0]
+        codigos = _codigos_del_numerador(div.this)
+        if codigos not in _TASAS or not _es_denominador_poblacion(div.expression):
+            continue
+        condicion, _ = _TASAS[codigos]
+        sel.where(sqlglot.condition(condicion, dialect="sqlite"), copy=False)
+        return {id(sel)}
+    return set()
 
 
 def _aplicar_limite(arbol):
@@ -503,7 +593,11 @@ def validar(sql):
     # (f) fuera de universo: se inyecta acá, con la consulta ya validada y antes del
     # LIMIT, para que el filtro entre a todos los ámbitos que leen microdatos.
     if "personas_2023" in tablas:
-        _excluir_fuera_de_universo(arbol, universo.tabla(_DICCIONARIO))
+        _fuera = universo.tabla(_DICCIONARIO)
+        # El orden importa: primero las tasas (que miran la FORMA de la razón, y el
+        # filtro de universo no la altera) y después el fuera de universo, idempotente.
+        _exentos = _tasas_del_mercado_de_trabajo(arbol)
+        _excluir_fuera_de_universo(arbol, _fuera, _exentos)
 
     arbol = _aplicar_limite(arbol)
     arbol = orden.desempatar(arbol)

@@ -104,12 +104,22 @@ REGLAS = """Reglas estrictas (dialecto SQLite):
   Excluilas SIEMPRE del numerador Y del denominador, y no las muestres como categoría en un
   desglose. Con el 0 adentro, el porcentaje de nivel universitario da 11,07 % en vez de
   16,48 %: subestima casi un 49 %.
-- TASAS DEL MERCADO DE TRABAJO: la tasa de desempleo se calcula sobre la POBLACIÓN
-  ECONÓMICAMENTE ACTIVA (POBPCOAC IN (2,3)), no sobre la población total ni sobre los de 12 y
-  más. Denominador SUM(CASE WHEN POBPCOAC IN (2,3) THEN W END); numerador POBPCOAC=3. Sobre la
-  población entera da 4,98 % en lugar del 9,35 % que es la tasa. Lo mismo para la tasa de
-  actividad (PEA sobre población de 14 y más) y la de empleo (ocupados sobre población de 14 y
-  más): si la pregunta dice 'tasa', el denominador NO es la población total.
+- LAS TRES TASAS DEL MERCADO DE TRABAJO. Tienen DOS denominadores distintos y no se
+  mezclan. PEA (población económicamente activa) = ocupados + desocupados = POBPCOAC IN (2,3).
+  PET (población en edad de trabajar) = en Uruguay, los de 14 años y más = PERNA01 >= 14.
+    · desocupación = desocupados / PEA  -> 9,35 %   (numerador POBPCOAC=3)
+    · actividad    = PEA / PET          -> 62,82 %
+    · empleo       = ocupados / PET     -> 56,95 %  (numerador POBPCOAC=2)
+  "Porcentaje de desocupados" es IDÉNTICO a "tasa de desocupación": siempre sobre la PEA, sin
+  importar cómo esté redactada la pregunta. Sobre la población total da 4,98 % y sobre los de
+  12 y más 5,84 %; las dos están mal.
+  En las tasas sobre la PET el denominador son TODOS los de 14 y más, incluidos los que no
+  contestaron condición de actividad: la PET la define la edad, no la variable. No los saques
+  del denominador (da 64,43 % en vez de 62,82 %).
+  Declará el denominador en la respuesta ("sobre la población económicamente activa", "sobre
+  la población de 14 y más"), igual que se declara el criterio de edad.
+  Esto NO aplica al desglose por condición de actividad ("¿cómo se reparte la población por
+  condición de actividad?"): ahí los inactivos son parte de la respuesta y van todos.
 - Identificadores (vivienda_key, hogar_key, DIRECCION_ID, VIVID, HOGID, PERID, ID_HOGAR):
   libres en subconsultas/GROUP BY interno, PROHIBIDOS en el SELECT externo salvo dentro de
   COUNT(DISTINCT ...).

@@ -129,6 +129,50 @@ def test_no_se_toca_una_consulta_que_no_usa_esas_variables():
         assert var not in sql
 
 
+# ------------------------------------------ 4. las tres tasas del mercado de trabajo
+
+def _tasa(codigos):
+    return validar("SELECT ROUND(100.0*SUM(CASE WHEN POBPCOAC %s THEN W ELSE 0 END)/SUM(W),2) "
+                   "AS pct, COUNT(*) AS n_crudo FROM personas_2023" % codigos)[0]
+
+
+def test_la_desocupacion_va_sobre_la_pea():
+    """Decisión de Carlos (12-ago): 'el porcentaje de desocupados es idéntico a la tasa
+    de desocupación, por eso siempre es sobre la PEA'. Antes daba 5,84 % o 9,35 % según
+    la corrida."""
+    assert "POBPCOAC IN ('2', '3')" in _tasa("= 3")
+
+
+def test_actividad_y_empleo_van_sobre_la_pet():
+    """PET = 14 y más. Son otro denominador, no el mismo de la desocupación."""
+    for codigos in ("IN (2, 3)", "= 2"):
+        sql = _tasa(codigos)
+        assert "PERNA01 >= 14" in sql
+        assert "POBPCOAC IN ('2', '3')" not in sql
+
+
+def test_la_pet_no_pierde_a_quien_no_contesto_actividad():
+    """La PET la define la EDAD. Sacar del denominador a los que no contestaron condición
+    de actividad sube la tasa de 62,82 % a 64,43 %."""
+    sql = _tasa("IN (2, 3)")
+    assert "POBPCOAC NOT IN" not in sql and "NOT POBPCOAC IN" not in sql
+
+
+def test_la_tasa_ya_bien_escrita_no_se_toca():
+    sql, _ = validar(
+        "SELECT ROUND(100.0*SUM(CASE WHEN POBPCOAC = 3 THEN W ELSE 0 END)/"
+        "SUM(CASE WHEN POBPCOAC IN (2,3) THEN W ELSE 0 END),2) AS pct, "
+        "COUNT(*) AS n_crudo FROM personas_2023")
+    assert "POBPCOAC IN ('2', '3')" not in sql
+
+
+def test_el_desglose_por_condicion_conserva_a_los_inactivos():
+    """Restringir acá borraría a los inactivos, que SON la respuesta."""
+    sql, _ = validar("SELECT POBPCOAC, ROUND(SUM(W)) AS personas, COUNT(*) AS n_crudo "
+                     "FROM personas_2023 GROUP BY POBPCOAC")
+    assert "POBPCOAC IN ('2', '3')" not in sql and "PERNA01 >= 14" not in sql
+
+
 def test_la_frase_de_universo_nombra_la_categoria_excluida():
     fuera = universo.tabla(DICC)
     frase = universo.frase_universo(universo.presentes_en(

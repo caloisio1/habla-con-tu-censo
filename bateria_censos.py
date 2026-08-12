@@ -212,6 +212,13 @@ PREGUNTAS_B = [
      "cifra:2.88"),
     ("ine-universo-disc", "2023", "¿Qué porcentaje de personas tiene alguna discapacidad?",
      "cifra:6.71"),
+    # La desocupación se mide sobre la PEA (decisión de Carlos, 12-ago). Se pregunta con
+    # la formulación AMBIGUA a propósito —"porcentaje de la población"—, que es la que
+    # antes devolvía 5,84 % o 9,35 % según la corrida.
+    ("ine-desocupacion", "2023", "¿Qué porcentaje de la población está desocupada?",
+     "cifra:9.35"),
+    ("ine-actividad", "2023", "¿Cuál es la tasa de actividad?", "cifra:62.82"),
+    ("ine-empleo", "2023", "¿Cuál es la tasa de empleo?", "cifra:56.95"),
     ("ine-segmentos", "2023", "¿Cuántas personas hay en cada segmento censal del país?",
      "tabla_completa"),
 ]
