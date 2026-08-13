@@ -263,3 +263,33 @@ def test_los_perdidos_de_una_variable_normal_no_se_tocan():
     sql, _ = validar("SELECT ROUND(SUM(W)) AS p, COUNT(*) AS n FROM personas_2023 "
                      "WHERE PERPA01 NOT IN ('7777', '8888', '9898', '9999')")
     assert "7777" in sql
+
+
+# --------------------- 7. ASISTENCIA: sólo 1 y 2 son valores aceptables
+
+def test_asistencia_se_acota_a_los_valores_validos():
+    """Regla de Carlos (12-ago): asiste a un establecimiento educativo, y sólo 1 y 2 son
+    respuestas. Acá el fuera de universo viene en NULL y no en un código —a los 118.249
+    chicos de 0 a 3 años no se les preguntó—, así que la exclusión de `universo.tabla`
+    no lo veía y quedaba a cargo del prompt."""
+    sql, _ = validar("SELECT ROUND(100.0*SUM(CASE WHEN ASISTENCIA = 1 THEN W ELSE 0 END)"
+                     "/SUM(W),2) AS pct, COUNT(*) AS n_crudo FROM personas_2023")
+    assert "ASISTENCIA IN ('1', '2')" in sql
+
+
+def test_los_valores_validos_salen_del_diccionario():
+    """Aceptable = está en value_labels y no es un perdido. Sin listas escritas a mano."""
+    v = universo.valores_validos(DICC, ("ASISTENCIA",))
+    assert v["asistencia"]["codigos"] == ["1", "2"]
+
+
+def test_la_restriccion_llega_aunque_la_pregunta_traiga_su_propio_filtro():
+    sql, _ = validar("SELECT ROUND(100.0*SUM(CASE WHEN ASISTENCIA = 1 THEN W ELSE 0 END)"
+                     "/SUM(W),2) AS pct, COUNT(*) AS n_crudo FROM personas_2023 "
+                     "WHERE PERNA01 < 5")
+    assert "ASISTENCIA IN ('1', '2')" in sql
+
+
+def test_una_consulta_sin_asistencia_no_se_toca():
+    sql, _ = validar("SELECT ROUND(SUM(W)) AS personas, COUNT(*) AS n_crudo FROM personas_2023")
+    assert "ASISTENCIA" not in sql

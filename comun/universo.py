@@ -73,6 +73,38 @@ def tabla(ruta_diccionario, tabla_datos="personas_2023"):
     return _CACHE[clave]
 
 
+def valores_validos(ruta_diccionario, variables, tabla_datos="personas_2023"):
+    """{variable: [códigos aceptables]} para las variables pedidas.
+
+    Aceptable = está en value_labels y NO es un perdido. Todo lo demás —NULL, códigos
+    sin etiqueta, los 7777/8888/9898/9999— queda fuera del universo de la variable.
+
+    POR QUÉ EXISTE, aparte del fuera de universo de arriba. En ASISTENCIA el universo
+    no viene como categoría sino como NULL: a los 118.249 chicos de 0 a 3 años no se
+    les preguntó, y sus filas son nulas. Excluirlos era una regla del prompt, o sea la
+    clase de cosa que el 12-ago demostramos que se cumple una de cada dos veces.
+    Definir el universo por sus valores ACEPTABLES lo vuelve determinista y no depende
+    de cómo esté codificado el hueco.
+
+    Se pide variable por variable a propósito: aplicar esto a las 147 de un saque
+    cambiaría el denominador de medio censo sin haberlo medido."""
+    with open(ruta_diccionario, encoding="utf-8") as f:
+        dicc = json.load(f)
+    pedidas = {v.lower() for v in variables}
+    salida = {}
+    for var in dicc.get("tablas", {}).get(tabla_datos, {}).get("variables", []):
+        nombre = (var.get("nombre") or "")
+        if nombre.lower() not in pedidas:
+            continue
+        perdidos = set(str(k) for k in (var.get("perdidos") or {}))
+        validos = sorted(str(k) for k in (var.get("value_labels") or {})
+                         if str(k) not in perdidos)
+        if validos:
+            salida[nombre.lower()] = {"nombre": nombre, "codigos": validos,
+                                      "tipo": (var.get("tipo") or "TEXT").upper()}
+    return salida
+
+
 def presentes_en(sql, fuera):
     """Las variables con fuera de universo que aparecen NOMBRADAS en el SQL.
 

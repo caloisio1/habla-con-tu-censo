@@ -280,6 +280,45 @@ def _metrica_publicada_ok(sel, ctes, prof=0):
     return any(_metrica_publicada_ok(c, ctes, prof + 1) for c in cuerpos)
 
 
+# Variables cuyo universo se define por sus VALORES ACEPTABLES y no por una categoría.
+# ASISTENCIA es "¿asiste a un establecimiento educativo?": sólo 1 y 2 son respuestas
+# (regla de Carlos, 12-ago). Lo demás —NULL incluido— no pertenece al universo. Acá el
+# hueco viene en NULL y no en un código, así que `_excluir_fuera_de_universo` no lo veía:
+# a los 118.249 chicos de 0 a 3 años no se les preguntó y sus filas son nulas.
+# La lista es explícita a propósito: hacérselo a las 147 variables de un saque cambiaría
+# el denominador de medio censo sin haberlo medido.
+_SOLO_VALIDOS = ("ASISTENCIA",)
+
+
+def _restringir_a_valores_validos(arbol, validos):
+    """Acota cada ámbito que lee microdatos a los valores aceptables de esas variables.
+
+    Ojo con un caso de borde que esto vuelve imposible: preguntar CUÁNTOS no tienen dato
+    de asistencia. Es coherente con la regla —el resto no pertenece al universo— pero
+    conviene saberlo si algún día alguien lo pide."""
+    aplicadas = []
+    for sel in list(arbol.find_all(exp.Select)):
+        if "personas_2023" not in _tablas_directas(sel):
+            continue
+        usadas = []
+        for c in sel.find_all(exp.Column):
+            if c.find_ancestor(exp.Select) is not sel:
+                continue
+            nombre = c.name.lower()
+            if nombre in validos and nombre not in usadas:
+                usadas.append(nombre)
+        for var in usadas:
+            info = validos[var]
+            if info["tipo"] == "TEXT":
+                lits = ", ".join("'%s'" % c.replace("'", "''") for c in info["codigos"])
+            else:
+                lits = ", ".join(str(c) for c in info["codigos"])
+            sel.where(sqlglot.condition("%s IN (%s)" % (info["nombre"], lits),
+                                        dialect="sqlite"), copy=False)
+            aplicadas.append(var)
+    return sorted(set(aplicadas))
+
+
 def _tablas_directas(sel):
     """Tablas nombradas en el FROM/JOIN de ESTE ámbito, sin bajar a subconsultas.
     Distingue 'este SELECT lee los microdatos' de 'este SELECT lee lo que otro ya
@@ -658,6 +697,8 @@ def validar(sql):
         # filtro de universo no la altera) y después el fuera de universo, idempotente.
         _exentos = _tasas_del_mercado_de_trabajo(arbol)
         _excluir_fuera_de_universo(arbol, _fuera, _exentos)
+        _restringir_a_valores_validos(
+            arbol, universo.valores_validos(_DICCIONARIO, _SOLO_VALIDOS))
     # Vale para las dos tablas de hechos: viviendas_2023 tiene las mismas columnas
     # geográficas y el mismo reflejo del modelo.
     _limpiar_centinelas_geograficos(arbol)
