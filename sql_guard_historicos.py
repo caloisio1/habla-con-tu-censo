@@ -29,7 +29,13 @@ from sqlglot import exp
 from comun import orden
 
 UMBRAL_SUPRESION = 5
-LIMITE_MAXIMO = 300
+
+# RESGUARDO de filas, no un tope de resultados (Carlos, 13-ago-2026: "no debería haber
+# tope"). El 300 anterior era la tercera observación del muestrista del INE: 1996 tiene
+# 3.958 segmentos y 481 localidades, 2004 tiene 3.967 y 566, así que un desglose nacional
+# salía recortado a menos del 8 % y sin decirlo. El número se elige tan alto que ninguna
+# consulta legítima lo toque; si igual se alcanza, se dice cuántas filas hay en total.
+LIMITE_MAXIMO = 50000
 
 _FUNCS_PROHIBIDAS = {"load_extension", "readfile", "writefile", "edit", "fsdir", "zipfile"}
 AQUI = os.path.dirname(os.path.abspath(__file__))

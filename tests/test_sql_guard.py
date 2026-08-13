@@ -65,8 +65,26 @@ def test_comentario_se_descarta_y_es_seguro():
 
 
 def test_limite_excesivo_rechazado():
+    """El resguardo es 50.000 (Carlos, 13-ago: "no debería haber tope"). Un LIMIT por
+    encima de eso sigue rechazándose; 5.000 ya NO, porque con el tope viejo de 300 un
+    desglose por segmento censal —4.268 en 2011— salía recortado al 7 %."""
     with pytest.raises(SQLNoSeguro):
-        validar("SELECT codsec, COUNT(*) AS personas FROM personas GROUP BY codsec LIMIT 5000")
+        validar("SELECT codsec, COUNT(*) AS personas FROM personas GROUP BY codsec LIMIT 100000")
+
+
+def test_desglose_por_segmento_no_se_recorta():
+    """La tercera observación del muestrista del INE: 4.268 segmentos, y devolvía 300."""
+    sql, _ = validar("SELECT DPTO, SECC, SEGM, COUNT(*) AS personas FROM personas "
+                     "GROUP BY DPTO, SECC, SEGM")
+    assert "LIMIT 50000" in sql.upper()
+    assert "LIMIT 300" not in sql.upper()
+
+
+def test_el_top_n_del_modelo_se_respeta():
+    """Un LIMIT chico puede ser intencional ('los 10 departamentos con más población')."""
+    sql, _ = validar("SELECT departamento, COUNT(*) AS personas FROM personas "
+                     "GROUP BY departamento ORDER BY 2 DESC LIMIT 10")
+    assert "LIMIT 10" in sql.upper()
 
 
 # ---------- Ascendencia / NBI (v1) ----------

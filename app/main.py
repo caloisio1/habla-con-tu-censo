@@ -46,6 +46,16 @@ ESFUERZO_REDACTOR = os.environ.get("CENSO_ESFUERZO_REDACTOR", "low")
 TOPE_SQL = int(os.environ.get("CENSO_TOPE_SQL", "4000"))
 TOPE_REDACTOR = int(os.environ.get("CENSO_TOPE_REDACTOR", "2000"))
 
+# Cuántas filas ve el REDACTOR. No es un tope de resultados —la tabla y 'datos' salen
+# completos—: es cuánto dato crudo necesita el narrador, que trabaja con los totales
+# calculados aparte. Mismo valor que en 2023.
+FILAS_AL_REDACTOR = 60
+
+# Máximo de unidades que se dibujan en un mapa a la vez. Estaba pegado a LIMITE_MAXIMO y
+# eran dos cosas distintas: una tabla de 4.268 segmentos es útil, un mapa de 4.268
+# polígonos es una mancha. Se separan, como se hizo en 2023 el 12-ago.
+LIMITE_MAPA = 300
+
 # Línea fija que acompaña las cifras de PERSONAS del Censo 2023 (estimaciones del
 # censo ponderado). Se agrega SOLO cuando la métrica es SUM(W) — no en viviendas
 # ni hogares, que son conteos exactos.
@@ -256,6 +266,11 @@ CONSULTAS JERÁRQUICAS (condición sobre OTROS miembros del hogar):
   "sobre la población de 12 y más"), igual que se declara el criterio de edad.
   Esto NO aplica al desglose por condición de actividad: ahí los inactivos van todos.
 
+- NO pongas LIMIT salvo que la pregunta pida explícitamente un top-N ("los 10
+  departamentos con más población"). Un desglose completo —por segmento censal, por
+  localidad— tiene que salir ENTERO: son 4.268 segmentos y 636 localidades, y recortarlos
+  devuelve una fracción sin decirlo. El sistema pone su propio resguardo.
+
 Otras aclaraciones:
 - nbi está topeada en 3 ("3 o más"); "más de 3 NBI" NO es respondible.
 - afrodescendiente = asc_afro='Si'.
@@ -389,6 +404,19 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
         "fueron suprimidas por confidencialidad estadística."
         if suprimidas else ""
     )
+    # Al redactor se le muestra una MUESTRA, no el resultado entero. Es lo que ya hacía
+    # 2023 (FILAS_AL_REDACTOR) y acá hizo falta al sacar el tope de 300: un desglose por
+    # segmento son 4.268 filas, ~184 KB, ~54.000 tokens de puro dato que el narrador no
+    # necesita —los totales van aparte, calculados en Python—. No recorta el resultado:
+    # 'datos' y la tabla que ve el usuario siguen completos.
+    muestra, aviso_muestra = filas, ""
+    if len(filas) > FILAS_AL_REDACTOR:
+        muestra = filas[:FILAS_AL_REDACTOR]
+        aviso_muestra = (
+            f"\nATENCIÓN: se te muestran las primeras {FILAS_AL_REDACTOR} filas de "
+            f"{len(filas)}. Usá los totales de abajo para las cifras globales; no digas "
+            f"que hay {FILAS_AL_REDACTOR} unidades ni narres máximos o mínimos como si "
+            "fueran del conjunto entero.")
     # (d) Si el resultado quedó recortado por el LIMIT, el redactor NO debe presentar
     # extremos (máximo/mínimo/único) como si fueran del universo completo.
     aviso_trunc = (
@@ -451,7 +479,8 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
             "son los microdatos publicados, que pueden incluir personas imputadas."
             + pipeline.instruccion_redactor(interpretaciones, contexto)
         ),
-        usuario=f"Pregunta: {pregunta}\nSQL ejecutado: {sql}\nResultados: {filas}"
+        usuario=f"Pregunta: {pregunta}\nSQL ejecutado: {sql}\nResultados: {muestra}"
+                + aviso_muestra
                 + pipeline.totales_para_redactor(filas, columnas_conteo),
     )
     r = (llm.completar_stream(emitir=emitir, **_comun) if emitir
@@ -459,6 +488,16 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
     usage_log.registrar("2011", "redactor", r.uso, MODELO_REDACTOR, ESFUERZO_REDACTOR)
     texto = pipeline.asegurar_declaracion(r.texto, interpretaciones, contexto)
     return texto + nota
+
+
+def _contar_filas_reales(sql_seguro: str) -> int:
+    """Cuántas filas devolvería la consulta SIN el resguardo, para el aviso.
+    Envuelve el SQL ya validado en un COUNT(*): no reejecuta nada del modelo."""
+    base = re.sub(r"\s+limit\s+\d+\s*$", "", sql_seguro, flags=re.I)
+    try:
+        return ejecutor.escalar(DB_PATH, f"SELECT COUNT(*) FROM ({base})")
+    except Exception:                                            # noqa: BLE001
+        return LIMITE_MAXIMO   # el aviso vale igual; no vale romper por contarlas
 
 
 # Columna geográfica del GROUP BY -> nivel de mapa. Orden = prioridad.
@@ -580,9 +619,12 @@ def responder_2011(texto: str, avisar=None) -> dict:
         return dict(rechazos.a_respuesta(rechazos.procesamiento(str(e)), sql=sql_seguro),
                     veredicto="RECHAZADO: %s" % ejecutor.motivo(e))
 
-    # Si las filas devueltas alcanzan el tope del LIMIT, el resultado puede estar
-    # recortado -> se avisa al redactor para que no narre extremos como universales (d).
+    # Si las filas devueltas alcanzan el RESGUARDO, el resultado puede estar recortado ->
+    # se avisa al redactor para que no narre extremos como universales (d). Con el
+    # resguardo en 50.000 esto ya no pasa en ningún desglose geográfico; queda para el
+    # cruce accidental, y ahí se dice cuántas filas hay en vez de recortar en silencio.
     truncado = len(filas) >= LIMITE_MAXIMO
+    n_filas_crudo = len(filas)
 
     # Supresión con la regla corregida: el conteo CERO no es confidencialidad.
     filas, suprimidas, vacias, rechazo = pipeline.sobre_filas(
@@ -606,10 +648,28 @@ def responder_2011(texto: str, avisar=None) -> dict:
     if alternativas:
         respuesta["opciones"] = alternativas
 
+    # Anti-truncamiento de la TABLA. Antes esto no existía en 2011 y era la tercera
+    # observación del muestrista: el resultado salía recortado y nadie lo decía.
+    if truncado:
+        total = _contar_filas_reales(sql_seguro)
+        respuesta["respuesta"] += (
+            f"\n\n_Nota: la consulta devuelve {total} filas y se muestran las primeras "
+            f"{LIMITE_MAXIMO}. Acotá la pregunta a un ámbito menor para ver el resto._")
+
     mapa = construir_mapa(sql_seguro, filas)
     if mapa:
-        mapa["suprimidas"] = suprimidas   # suprimidas ya no están en datos
-        respuesta["mapa"] = mapa
+        # Un mapa recortado es peor que no dibujarlo: se ve completo y no lo está.
+        # La TABLA sí viene entera, y eso se aclara.
+        if len(mapa["datos"]) > LIMITE_MAPA:
+            respuesta["respuesta"] += (
+                f"\n\n_Nota: el desglose tiene {len(mapa['datos'])} unidades y supera el "
+                f"máximo de {LIMITE_MAPA} que se pueden dibujar a la vez, por lo que NO se "
+                f"muestra el mapa (sería un recorte parcial). La tabla de datos sí viene "
+                f"completa. Acotá la pregunta a un ámbito menor —un departamento o una "
+                f"sección— para ver el mapa._")
+        else:
+            mapa["suprimidas"] = suprimidas   # suprimidas ya no están en datos
+            respuesta["mapa"] = mapa
 
     pipeline.recordar_resultado(sql_seguro, "2011", respuesta)
     return respuesta

@@ -24,7 +24,8 @@ Reglas (todas sobre el árbol parseado, no sobre texto):
   6. hogar_key / vivienda_key: libres en subconsultas, WHERE, JOIN y GROUP BY
      internos; en la proyección externa SOLO dentro de COUNT(DISTINCT ...).
      PERID sin restricciones especiales.
-  7. LIMIT obligatorio, tope LIMITE_MAXIMO (se agrega si falta).
+  7. LIMIT: se agrega LIMITE_MAXIMO si falta, como RESGUARDO (no como tope de
+     resultados: un desglose por segmento o localidad sale completo).
 """
 
 import sqlglot
@@ -38,8 +39,22 @@ from app import dicc
 # Celdas con menos personas que esto se suprimen (control de divulgación).
 UMBRAL_SUPRESION = 5
 
-# Techo de filas. 300 cubre el nivel geográfico más grande que se mapea.
-LIMITE_MAXIMO = 300
+# RESGUARDO de filas, no un tope de resultados. Decisión de Carlos, 13-ago-2026: "no
+# debería haber tope". El 300 anterior era la tercera observación del muestrista del INE
+# —"corta los resultados en 300 filas; a nivel de segmento censal te devuelve una
+# fracción"—: 2011 tiene 4.268 segmentos y 636 localidades, así que un desglose nacional
+# salía recortado al 7 % y sin decirlo.
+#
+# Este número NO se elige para cubrir un nivel geográfico: se elige tan alto que ninguna
+# consulta legítima lo toque, y sólo existe para que un cruce accidental no mande medio
+# millón de filas al navegador. Medido sobre la base 2011: por segmento 4.268, por
+# segmento×sexo 8.531, por segmento×edad 335.958, por segmento×edad×sexo 594.986.
+# Si se alcanza, NO se recorta en silencio: se dice cuántas filas hay en total.
+#
+# El LIMIT que escribe el modelo por su cuenta se respeta si es menor —un "los 10
+# departamentos con más población" es un top-N legítimo—; el prompt le pide que no ponga
+# LIMIT cuando la pregunta no lo pide.
+LIMITE_MAXIMO = 50000
 
 TABLAS_PERMITIDAS = {"personas", "localidades", "paises"}
 

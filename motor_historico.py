@@ -53,6 +53,18 @@ ESFUERZO_REDACTOR = os.environ.get("CENSO_ESFUERZO_REDACTOR", "low")
 TOPE_SQL = int(os.environ.get("CENSO_TOPE_SQL", "4000"))
 TOPE_REDACTOR = int(os.environ.get("CENSO_TOPE_REDACTOR", "1600"))
 
+# Cuántas filas ve el REDACTOR. No es un tope de resultados —la tabla y 'datos' salen
+# completos—: es cuánto dato crudo necesita el narrador, que trabaja con los totales
+# calculados aparte. Hizo falta al sacar el tope de 300: un desglose por segmento son
+# ~3.960 filas de puro dato que el narrador no usa. Mismo valor que 2011 y 2023.
+FILAS_AL_REDACTOR = 60
+
+# Máximo de unidades que se dibujan en un mapa a la vez. Estaba pegado a LIMITE_MAXIMO y
+# eran dos cosas distintas: una tabla de 3.958 segmentos es útil, un mapa de 3.958
+# polígonos es una mancha. Pesa más acá que en 2011, porque 1996 y 2004 SÍ mapean
+# segmento (1.238 y 586 con geometría).
+LIMITE_MAPA = 300
+
 # El cliente (proveedor, clave, timeout acotado y reintentos) vive en comun/llm.py,
 # compartido por los cuatro censos.
 
@@ -119,6 +131,10 @@ REGLAS_COMUNES = """Reglas estrictas (dialecto SQLite):
   en una única consulta con subconsultas o con SUM(CASE WHEN ... THEN 1 END); nunca devuelvas
   dos SELECT separados por punto y coma.
 - Solo SELECT y SIEMPRE agregado; nunca filas individuales.
+- NO pongas LIMIT salvo que la pregunta pida explícitamente un top-N ("las 10 localidades
+  más pobladas"). Un desglose completo —por segmento censal, por localidad— tiene que
+  salir ENTERO: son casi 4.000 segmentos, y recortarlos devuelve una fracción sin decirlo.
+  El sistema pone su propio resguardo.
 - Agregá SIEMPRE COUNT(*) AS n_crudo por celda: es el conteo que habilita la supresión
   de confidencialidad. NO lo narres, es control interno.
 - n_crudo va ADEMÁS de la métrica pedida, NUNCA como única columna: la métrica lleva su
@@ -318,8 +334,19 @@ class Motor:
                if leyenda else "")
             + pipeline.instruccion_redactor(interpretaciones, contexto)
         )
-        _usuario = ("Pregunta: %s\nSQL: %s\nResultados: %s%s"
-                    % (pregunta, sql, filas,
+        # Al redactor se le muestra una MUESTRA, no el resultado entero: los totales van
+        # aparte y se calculan en Python. No recorta el resultado — 'datos' y la tabla
+        # que ve el usuario siguen completos.
+        muestra, aviso_muestra = filas, ""
+        if len(filas) > FILAS_AL_REDACTOR:
+            muestra = filas[:FILAS_AL_REDACTOR]
+            aviso_muestra = (
+                "\nATENCIÓN: se te muestran las primeras %d filas de %d. Usá los totales "
+                "de abajo para las cifras globales; no digas que hay %d unidades ni "
+                "narres máximos o mínimos como si fueran del conjunto entero."
+                % (FILAS_AL_REDACTOR, len(filas), FILAS_AL_REDACTOR))
+        _usuario = ("Pregunta: %s\nSQL: %s\nResultados: %s%s%s"
+                    % (pregunta, sql, muestra, aviso_muestra,
                        pipeline.totales_para_redactor(filas, columnas_conteo)))
         _comun = dict(modelo=MODELO_REDACTOR, esfuerzo=ESFUERZO_REDACTOR,
                       tope=TOPE_REDACTOR, sistema=sys_prompt, usuario=_usuario)
@@ -329,6 +356,15 @@ class Motor:
                             MODELO_REDACTOR, ESFUERZO_REDACTOR)
         texto = pipeline.asegurar_declaracion(r.texto, interpretaciones, contexto)
         return texto + nota
+
+    def _contar_filas_reales(self, sql_seguro):
+        """Cuántas filas devolvería la consulta SIN el resguardo, para el aviso.
+        Envuelve el SQL ya validado en un COUNT(*): no reejecuta nada del modelo."""
+        base = re.sub(r"\s+limit\s+\d+\s*$", "", sql_seguro, flags=re.I)
+        try:
+            return ejecutor.escalar(self.db, "SELECT COUNT(*) FROM (%s)" % base)
+        except Exception:                                        # noqa: BLE001
+            return LIMITE_MAXIMO   # el aviso vale igual; no vale romper por contarlas
 
     # -- mapa -------------------------------------------------------------
     @staticmethod
@@ -552,10 +588,29 @@ class Motor:
         # se ofrecen junto a la respuesta, no en lugar de ella.
         if alternativas:
             respuesta["opciones"] = alternativas
+        # Anti-truncamiento de la TABLA. Antes no existía en los históricos, y era la
+        # tercera observación del muestrista del INE: el desglose salía recortado —300 de
+        # 3.958 segmentos en 1996, de 3.967 en 2004— y nadie lo decía.
+        if n_raw >= LIMITE_MAXIMO:
+            total = self._contar_filas_reales(sql_seguro)
+            respuesta["respuesta"] += (
+                "\n\n_Nota: la consulta devuelve %s filas y se muestran las primeras %s. "
+                "Acotá la pregunta a un ámbito menor para ver el resto._"
+                % (total, LIMITE_MAXIMO))
         # El mapa se arma con las filas YA suprimidas: lo que no se publica en la
         # tabla tampoco se pinta.
         mapa = self.construir_mapa(sql_seguro, filas, suprimidas, self.censo)
         if mapa:
-            respuesta["mapa"] = mapa
+            # Un mapa recortado es peor que no dibujarlo: se ve completo y no lo está.
+            # Acá pesa más que en 2011 porque los históricos SÍ dibujan segmento.
+            if len(mapa["datos"]) > LIMITE_MAPA:
+                respuesta["respuesta"] += (
+                    "\n\n_Nota: el desglose tiene %d unidades y supera el máximo de %d que "
+                    "se pueden dibujar a la vez, por lo que NO se muestra el mapa (sería un "
+                    "recorte parcial). La tabla de datos sí viene completa. Acotá la "
+                    "pregunta a un ámbito menor —un departamento o una sección— para ver "
+                    "el mapa._" % (len(mapa["datos"]), LIMITE_MAPA))
+            else:
+                respuesta["mapa"] = mapa
         pipeline.recordar_resultado(sql_seguro, self.censo, respuesta)
         return respuesta
