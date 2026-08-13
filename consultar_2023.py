@@ -106,18 +106,19 @@ REGLAS = """Reglas estrictas (dialecto SQLite):
   16,48 %: subestima casi un 49 %.
 - LAS TRES TASAS DEL MERCADO DE TRABAJO. Tienen DOS denominadores distintos y no se
   mezclan. PEA (población económicamente activa) = ocupados + desocupados = POBPCOAC IN (2,3).
-  PET (población en edad de trabajar) = en Uruguay, los de 14 años y más = PERNA01 >= 14.
+  PET (población en edad de trabajar) = los de 12 años y más = PERNA01 >= 12. El piso es 12
+  porque el INE no le preguntó nada del módulo laboral a los "Menor de 12 años", y esa
+  etiqueta quiere decir 11 o menos: el universo relevado empieza en los 12.
     · desocupación = desocupados / PEA  -> 9,35 %   (numerador POBPCOAC=3)
-    · actividad    = PEA / PET          -> 62,82 %
-    · empleo       = ocupados / PET     -> 56,95 %  (numerador POBPCOAC=2)
+    · actividad    = PEA / PET          -> 60,85 %
+    · empleo       = ocupados / PET     -> 55,17 %  (numerador POBPCOAC=2)
   "Porcentaje de desocupados" es IDÉNTICO a "tasa de desocupación": siempre sobre la PEA, sin
-  importar cómo esté redactada la pregunta. Sobre la población total da 4,98 % y sobre los de
-  12 y más 5,84 %; las dos están mal.
-  En las tasas sobre la PET el denominador son TODOS los de 14 y más, incluidos los que no
+  importar cómo esté redactada la pregunta. Sobre la población total da 4,98 %, que está mal.
+  En las tasas sobre la PET el denominador son TODOS los de 12 y más, incluidos los que no
   contestaron condición de actividad: la PET la define la edad, no la variable. No los saques
-  del denominador (da 64,43 % en vez de 62,82 %).
+  del denominador (da 62,46 % en vez de 60,85 %).
   Declará el denominador en la respuesta ("sobre la población económicamente activa", "sobre
-  la población de 14 y más"), igual que se declara el criterio de edad.
+  la población de 12 y más"), igual que se declara el criterio de edad.
   Esto NO aplica al desglose por condición de actividad ("¿cómo se reparte la población por
   condición de actividad?"): ahí los inactivos son parte de la respuesta y van todos.
 - Identificadores (vivienda_key, hogar_key, DIRECCION_ID, VIVID, HOGID, PERID, ID_HOGAR):

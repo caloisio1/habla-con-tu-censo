@@ -144,16 +144,19 @@ def test_la_desocupacion_va_sobre_la_pea():
 
 
 def test_actividad_y_empleo_van_sobre_la_pet():
-    """PET = 14 y más. Son otro denominador, no el mismo de la desocupación."""
+    """PET = 12 y más (piso fijado por Carlos el 13-ago: 'Menor de 12 años' es 11 o
+    menos, así que el universo relevado empieza en los 12). Son otro denominador, no el
+    mismo de la desocupación."""
     for codigos in ("IN (2, 3)", "= 2"):
         sql = _tasa(codigos)
-        assert "PERNA01 >= 14" in sql
+        assert "PERNA01 >= 12" in sql
+        assert "PERNA01 >= 14" not in sql
         assert "POBPCOAC IN ('2', '3')" not in sql
 
 
 def test_la_pet_no_pierde_a_quien_no_contesto_actividad():
     """La PET la define la EDAD. Sacar del denominador a los que no contestaron condición
-    de actividad sube la tasa de 62,82 % a 64,43 %."""
+    de actividad sube la tasa de 60,85 % a 62,46 %."""
     sql = _tasa("IN (2, 3)")
     assert "POBPCOAC NOT IN" not in sql and "NOT POBPCOAC IN" not in sql
 
@@ -170,7 +173,7 @@ def test_el_desglose_por_condicion_conserva_a_los_inactivos():
     """Restringir acá borraría a los inactivos, que SON la respuesta."""
     sql, _ = validar("SELECT POBPCOAC, ROUND(SUM(W)) AS personas, COUNT(*) AS n_crudo "
                      "FROM personas_2023 GROUP BY POBPCOAC")
-    assert "POBPCOAC IN ('2', '3')" not in sql and "PERNA01 >= 14" not in sql
+    assert "POBPCOAC IN ('2', '3')" not in sql and "PERNA01 >= 12" not in sql
 
 
 def test_la_frase_de_universo_nombra_la_categoria_excluida():

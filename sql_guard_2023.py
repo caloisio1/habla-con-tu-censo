@@ -392,8 +392,10 @@ def _excluir_fuera_de_universo(arbol, fuera, exentos_actividad=()):
             # En las tasas sobre la PET el universo lo define la EDAD, no la variable de
             # actividad: quien no contestó condición de actividad igual está en la
             # población en edad de trabajar. Excluirlo achica el denominador y sube la
-            # tasa (actividad 64,43 % en vez de 62,82 %). El filtro de edad ya dejó
-            # afuera a los 'Menor de 12 años', así que no se pierde nada.
+            # tasa (actividad 62,46 % en vez de 60,85 %; son 77.061 ponderados de 12 y
+            # más con POBPCOAC NULL, casi todos por cuestionario básico o incompleto).
+            # El filtro de edad ya dejó afuera a los 'Menor de 12 años' —que son
+            # exactamente los de PERNA01 < 12—, así que no se pierde nada.
             if var == _POBPCOAC and id(sel) in exentos_actividad:
                 continue
             if info["tipo"] == "TEXT":
@@ -412,14 +414,25 @@ _POBPCOAC = "pobpcoac"
 # (definiciones del INE, confirmadas por Carlos el 12-ago-2026):
 #   desocupación = desocupados / PEA          PEA = ocupados + desocupados
 #   actividad    = PEA / PET                  PET = población en edad de trabajar
-#   empleo       = ocupados / PET             PET = 14 años y más en Uruguay
+#   empleo       = ocupados / PET             PET = 12 años y más
+# EL PISO DE LA PET ES 12, decidido por Carlos el 13-ago-2026, y sale de la lectura
+# estricta de la etiqueta del INE: 'Menor de 12 años' quiere decir 11 o menos, así que
+# el universo que el censo relevó empieza en los 12. Verificado contra la base: el
+# fuera de universo POBPCOAC=1 y la condición PERNA01 < 12 son EL MISMO conjunto —
+# 439.022 registros por los dos lados, 0 excepciones—, o sea que el piso de edad y la
+# exclusión del fuera de universo son acá la misma operación. Con el piso en 14 no lo
+# eran: sacaba además a 859 registros activos de 12 y 13 años (965 ponderados), que
+# ahora son 0. Cambia las dos tasas sobre la PET (actividad 62,82 -> 60,85 %, empleo
+# 56,95 -> 55,17 %) porque entran al denominador 95.429 personas de 12 y 13 años que
+# casi no aportan al numerador. La desocupación no se mueve: 9,35 % con los dos pisos.
 # La clave del mapa es el conjunto de códigos que suma el NUMERADOR; el valor, la
 # condición que define su denominador.
 _EDAD = "perna01"
+_PISO_PET = 12
 _TASAS = {
     ("3",): ("POBPCOAC IN ('2', '3')", "desocupación sobre la PEA"),
-    ("2", "3"): ("%s >= 14" % _EDAD.upper(), "actividad sobre la PET"),
-    ("2",): ("%s >= 14" % _EDAD.upper(), "empleo sobre la PET"),
+    ("2", "3"): ("%s >= %d" % (_EDAD.upper(), _PISO_PET), "actividad sobre la PET"),
+    ("2",): ("%s >= %d" % (_EDAD.upper(), _PISO_PET), "empleo sobre la PET"),
 }
 
 
@@ -458,7 +471,7 @@ def _tasas_del_mercado_de_trabajo(arbol):
 
     Decisión de Carlos, 12-ago: 'el porcentaje de desocupados es idéntico a la tasa de
     desocupación, por eso siempre es sobre la PEA'; actividad y empleo van sobre la PET
-    (14 y más). Sin esto la misma pregunta contestaba 5,84 % (sobre los de 12 y más) o
+    (12 y más, piso fijado el 13-ago). Sin esto la misma pregunta contestaba 5,84 % o
     9,35 % (la tasa) según la corrida, porque 'porcentaje de la población desocupada'
     admite las dos lecturas y el prompt no alcanza para cerrarlas —es el mismo modo de
     falla que el fuera de universo, documentado el mismo día—.
@@ -471,8 +484,9 @@ def _tasas_del_mercado_de_trabajo(arbol):
 
     El filtro entra al ÁMBITO, así que alcanza al numerador y al denominador a la vez.
     Es lo correcto en los tres casos: los desocupados ya están dentro de la PEA (el
-    numerador no se mueve), y la tasa de actividad es PEA de 14 y más sobre PET, no la
-    PEA entera sobre PET —hay 859 registros activos de menos de 14 años—."""
+    numerador no se mueve) y, con el piso en 12, la PEA entera está por encima del piso
+    —0 registros activos de menos de 12 años, medido—, así que el numerador tampoco se
+    mueve en actividad y empleo. Con el piso en 14 sí se movía, en 859 registros."""
     for sel in list(arbol.find_all(exp.Select)):
         if "personas_2023" not in _tablas_directas(sel):
             continue

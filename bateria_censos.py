@@ -225,8 +225,11 @@ PREGUNTAS_B = [
     ("ine-universitario-11", "2011", "¿Cuántas personas tienen educación universitaria?",
      "pide_opciones"),
     ("ine-universitario-96", "1996", "¿Cuántas personas tienen educación universitaria?", "ok"),
-    ("ine-actividad", "2023", "¿Cuál es la tasa de actividad?", "cifra:62.82"),
-    ("ine-empleo", "2023", "¿Cuál es la tasa de empleo?", "cifra:56.95"),
+    # Las dos tasas sobre la PET, con el piso en 12 (Carlos, 13-ago): 'Menor de 12 años'
+    # es 11 o menos, así que el universo que relevó el INE empieza en los 12. Con el piso
+    # viejo en 14 daban 62,82 % y 56,95 %.
+    ("ine-actividad", "2023", "¿Cuál es la tasa de actividad?", "cifra:60.85"),
+    ("ine-empleo", "2023", "¿Cuál es la tasa de empleo?", "cifra:55.17"),
     ("ine-segmentos", "2023", "¿Cuántas personas hay en cada segmento censal del país?",
      "tabla_completa"),
     # La Sección Censal 99 de Montevideo es real (75.855 ponderadas). El modelo la
