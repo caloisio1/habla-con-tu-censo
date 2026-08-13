@@ -271,3 +271,56 @@ def test_group_by_ordinal():
 def test_group_by_alias_de_salida():
     _ok("SELECT CASE sexo WHEN 1 THEN 'H' ELSE 'M' END AS s, COUNT(*) AS personas "
         "FROM personas GROUP BY s")
+
+
+# --- Las tres tasas del mercado de trabajo (2011) ---------------------------
+# La codificación de 2011 NO es la de 2023: los desocupados son DOS códigos (3 y 4), así
+# que la PEA es (2,3,4). PET = 12 y más (Carlos, 13-ago-2026): 'Menor de 12 años' quiere
+# decir 11 o menos, así que el universo relevado empieza en los 12.
+
+def _tasa(numerador, where=""):
+    sql, _ = validar("SELECT 100.0 * SUM(CASE WHEN pobpcoac %s THEN 1 ELSE 0 END) / "
+                     "COUNT(*) AS tasa, COUNT(*) AS n FROM personas%s"
+                     % (numerador, (" WHERE " + where) if where else ""))
+    return sql
+
+
+def test_actividad_y_empleo_van_sobre_la_pet():
+    for numerador in ("IN (2, 3, 4)", "= 2"):
+        sql = _tasa(numerador)
+        assert "edad >= 12" in sql
+        assert "edad >= 14" not in sql
+
+
+def test_la_desocupacion_va_sobre_la_pea_y_son_dos_codigos():
+    """3 y 4 son ambos desocupados. Con el mapa de 2023 —donde desocupados es sólo el 3—
+    la tasa habría contado nada más que a los que buscan por primera vez."""
+    sql = _tasa("IN (3, 4)")
+    assert "pobpcoac IN (2, 3, 4)" in sql
+    assert "edad >= 12" not in sql
+
+
+def test_la_pet_no_se_restringe_por_respuesta_valida():
+    """El modelo escribe el denominador como 'los que tienen respuesta válida'
+    (pobpcoac IN (2,3,4,5,6)), que saca a 97.967 personas de 12 y más con código 8 'No
+    relevado' y da 59,90 % en vez de 57,75 %. La PET la define la EDAD."""
+    sql = _tasa("IN (2, 3, 4)", where="pobpcoac IN (2, 3, 4, 5, 6)")
+    assert "2, 3, 4, 5, 6" not in sql
+    assert "edad >= 12" in sql
+
+
+def test_la_tasa_conserva_el_ambito_geografico():
+    """Neutralizar el filtro de pobpcoac no puede llevarse puesto el resto del WHERE."""
+    sql = _tasa("IN (2, 3, 4)", where="dpto = 1 AND pobpcoac IN (2, 3, 4, 5, 6)")
+    assert "dpto = 1" in sql and "edad >= 12" in sql
+
+
+def test_el_desglose_por_condicion_conserva_a_los_inactivos():
+    """Restringir acá borraría a los inactivos, que SON la respuesta."""
+    sql, _ = validar("SELECT pobpcoac, COUNT(*) AS n FROM personas GROUP BY pobpcoac")
+    assert "edad >= 12" not in sql
+
+
+def test_el_where_no_queda_con_true_colgado():
+    """Cosmético pero visible: el SQL se le muestra al usuario."""
+    assert "TRUE" not in _tasa("IN (2, 3, 4)", where="pobpcoac IN (2, 3, 4, 5, 6)").upper()

@@ -29,6 +29,7 @@ Reglas (todas sobre el árbol parseado, no sobre texto):
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.optimizer.simplify import simplify
 
 from comun import orden
 
@@ -274,6 +275,113 @@ def _aplicar_limite(arbol: exp.Select) -> exp.Select:
     return arbol
 
 
+# ── las tres tasas del mercado de trabajo (2011) ─────────────────────────────
+# Mismo criterio que en 2023 (`sql_guard_2023._tasas_del_mercado_de_trabajo`), pero la
+# CODIFICACIÓN DE 2011 ES DISTINTA y no se puede copiar:
+#
+#   1 = Menor de 12 años   2 = Ocupados   3 = Desocupados buscan trabajo por primera vez
+#   4 = Desocupados propiamente dichos    5 = Inactivos jubilados/pensionistas
+#   6 = Inactivos otras causas            8 = No relevado (perdido)
+#
+# Los desocupados son DOS códigos, no uno: la PEA es (2,3,4) y trasladar el mapa de 2023
+# —donde desocupados es sólo el 3— habría contado nada más que a los que buscan trabajo
+# por primera vez (21.212 de 99.938) y publicado 1,35 % en vez de 6,35 %.
+#
+# PET = 12 años y más, por la misma razón que en 2023 (Carlos, 13-ago-2026): 'Menor de
+# 12 años' quiere decir 11 o menos, así que el universo relevado empieza en los 12.
+# Verificado sobre la base 2011: `pobpcoac=1` no tiene a NADIE de 12 o más, y los 4.346
+# menores de 12 con otro código son todos 'No relevado' (8), que ya es perdido. Y no hay
+# ningún activo por debajo de 12, así que el piso no le toca el numerador a ninguna tasa.
+_POBPCOAC = "pobpcoac"
+_EDAD = "edad"
+_PISO_PET = 12
+_TASAS = {
+    ("3", "4"): ("%s IN (2, 3, 4)" % _POBPCOAC, "desocupación sobre la PEA"),
+    ("2", "3", "4"): ("%s >= %d" % (_EDAD, _PISO_PET), "actividad sobre la PET"),
+    ("2",): ("%s >= %d" % (_EDAD, _PISO_PET), "empleo sobre la PET"),
+}
+
+
+def _codigos_del_numerador(nodo):
+    """Los códigos de pobpcoac que suma este numerador, o None si no tiene esa forma.
+
+    Reconoce SUM(CASE WHEN pobpcoac IN (3,4) THEN 1 ELSE 0 END) y COUNT(CASE WHEN ...),
+    que son las dos formas que escribe el modelo en 2011 (acá no hay ponderador: la
+    base es el censo completo y se cuenta con COUNT/SUM de 1)."""
+    agregados = [a for a in nodo.find_all(exp.Sum, exp.Count)]
+    if len(agregados) != 1:
+        return None
+    casos = list(agregados[0].find_all(exp.Case))
+    if len(casos) != 1:
+        return None
+    condiciones = list(casos[0].find_all(exp.EQ, exp.In))
+    if len(condiciones) != 1:
+        return None
+    cond = condiciones[0]
+    if not (isinstance(cond.this, exp.Column) and cond.this.name.lower() == _POBPCOAC):
+        return None
+    valores = ([cond.expression] if isinstance(cond, exp.EQ) else list(cond.expressions))
+    if not all(isinstance(v, exp.Literal) for v in valores) or not valores:
+        return None
+    return tuple(sorted(str(v.name) for v in valores))
+
+
+def _es_denominador_poblacion(nodo):
+    """¿El denominador es la población entera del ámbito? COUNT(*) o COUNT(col) sin CASE."""
+    if list(nodo.find_all(exp.Case)):
+        return False
+    agregados = list(nodo.find_all(exp.Sum, exp.Count))
+    return len(agregados) == 1
+
+
+def _neutralizar_pobpcoac(sel):
+    """Saca del WHERE las condiciones que restringen pobpcoac, dejando el resto.
+
+    Esto NO existe en el guard de 2023 y acá hace falta: el modelo escribe el
+    denominador de la tasa de actividad como `WHERE pobpcoac IN (2,3,4,5,6)` —"los que
+    tienen respuesta válida"—, que deja afuera a los 97.967 'No relevado' de 12 y más y
+    da 59,90 % en vez de 57,75 %. Es el mismo defecto que en 2023 corregía la exención
+    del fuera de universo: la PET la define la EDAD, no la variable de actividad.
+    Agregar el filtro de edad con AND no alcanzaría, porque el filtro restrictivo
+    seguiría ahí. El resto del WHERE (el ámbito geográfico, por ejemplo) se conserva."""
+    donde = sel.args.get("where")
+    if donde is None:
+        return
+    for cond in list(donde.find_all(exp.EQ, exp.In, exp.NEQ)):
+        col = cond.this
+        if isinstance(col, exp.Column) and col.name.lower() == _POBPCOAC:
+            cond.replace(exp.true())
+
+
+def _tasas_del_mercado_de_trabajo(arbol):
+    """Cada tasa sobre SU denominador, hecho cumplir por la FORMA de la razón.
+
+    Deliberadamente angosto, igual que en 2023: dispara sólo cuando la proyección tiene
+    UNA razón cuyo numerador suma exclusivamente uno de los tres conjuntos de códigos y
+    cuyo denominador es la población entera del ámbito. Un desglose por condición de
+    actividad (GROUP BY pobpcoac) no entra, y no debe: ahí los inactivos son la
+    respuesta."""
+    for sel in list(arbol.find_all(exp.Select)):
+        if "personas" not in {t.name.lower() for t in sel.find_all(exp.Table)}:
+            continue
+        razones = [d for proj in sel.expressions for d in proj.find_all(exp.Div)]
+        if len(razones) != 1:
+            continue
+        div = razones[0]
+        codigos = _codigos_del_numerador(div.this)
+        if codigos not in _TASAS or not _es_denominador_poblacion(div.expression):
+            continue
+        condicion, _ = _TASAS[codigos]
+        _neutralizar_pobpcoac(sel)
+        sel.where(sqlglot.condition(condicion, dialect="sqlite"), copy=False)
+        # La neutralización deja TRUE en lugar de la condición borrada; simplify lo
+        # limpia. Es cosmético pero el SQL se le muestra al usuario, y un
+        # `WHERE TRUE AND edad >= 12` invita a preguntar qué se sacó de ahí.
+        simplify(sel.args["where"])
+        return True
+    return False
+
+
 _contador_alias = 0
 
 
@@ -397,6 +505,9 @@ def validar(sql: str) -> tuple[str, list[str]]:
             "La consulta arrastra celdas ya agregadas pero no expone el conteo "
             "crudo: sin él no puede aplicarse la supresión."
         )
+
+    # 8b. Las tres tasas del mercado de trabajo, cada una sobre su denominador.
+    _tasas_del_mercado_de_trabajo(arbol)
 
     # 9. LIMIT obligatorio y acotado.
     arbol = _aplicar_limite(arbol)

@@ -230,6 +230,14 @@ PREGUNTAS_B = [
     # viejo en 14 daban 62,82 % y 56,95 %.
     ("ine-actividad", "2023", "¿Cuál es la tasa de actividad?", "cifra:60.85"),
     ("ine-empleo", "2023", "¿Cuál es la tasa de empleo?", "cifra:55.17"),
+    # Las mismas tres tasas en 2011, donde antes NO estaban implementadas: el denominador
+    # era "los que tienen respuesta válida" (59,90 % y 56,10 %) en vez de la PET por edad.
+    # La codificación de 2011 es OTRA: los desocupados son DOS códigos (3 y 4), así que la
+    # PEA es (2,3,4); con el mapa de 2023 la desocupación habría dado 1,35 %.
+    ("ine-actividad-11", "2011", "¿Cuál es la tasa de actividad?", "cifra:57.75"),
+    ("ine-empleo-11", "2011", "¿Cuál es la tasa de empleo?", "cifra:54.08"),
+    ("ine-desocupacion-11", "2011", "¿Qué porcentaje de la población está desocupada?",
+     "cifra:6.35"),
     ("ine-segmentos", "2023", "¿Cuántas personas hay en cada segmento censal del país?",
      "tabla_completa"),
     # La Sección Censal 99 de Montevideo es real (75.855 ponderadas). El modelo la

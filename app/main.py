@@ -237,6 +237,25 @@ CONSULTAS JERÁRQUICAS (condición sobre OTROS miembros del hogar):
     SELECT COUNT(DISTINCT hogar_key) AS hogares FROM personas WHERE hogar_key IN (
       SELECT hogar_key FROM personas WHERE X GROUP BY hogar_key HAVING COUNT(*) >= N)
 
+- LAS TRES TASAS DEL MERCADO DE TRABAJO. Tienen DOS denominadores distintos y no se
+  mezclan. En 2011 los DESOCUPADOS son DOS códigos: 3 (buscan trabajo por primera vez) y
+  4 (propiamente dichos). PEA = ocupados + desocupados = pobpcoac IN (2,3,4).
+  PET (población en edad de trabajar) = los de 12 años y más = edad >= 12. El piso es 12
+  porque el INE no le preguntó nada del módulo laboral a los "Menor de 12 años" (código
+  1), y esa etiqueta quiere decir 11 o menos.
+    · desocupación = desocupados / PEA  -> 6,35 %   (numerador pobpcoac IN (3,4))
+    · actividad    = PEA / PET          -> 57,75 %
+    · empleo       = ocupados / PET     -> 54,08 %  (numerador pobpcoac = 2)
+  "Porcentaje de desocupados" es IDÉNTICO a "tasa de desocupación": siempre sobre la PEA,
+  sin importar cómo esté redactada la pregunta.
+  En las tasas sobre la PET el denominador son TODOS los de 12 y más, incluidos los que
+  NO tienen respuesta válida en pobpcoac: la PET la define la edad, no la variable. NO
+  restrinjas el denominador con pobpcoac IN (2,3,4,5,6) ni excluyas el código 8 ("No
+  relevado"); eso saca a 97.967 personas de 12 y más y da 59,90 % en vez de 57,75 %.
+  Declará el denominador en la respuesta ("sobre la población económicamente activa",
+  "sobre la población de 12 y más"), igual que se declara el criterio de edad.
+  Esto NO aplica al desglose por condición de actividad: ahí los inactivos van todos.
+
 Otras aclaraciones:
 - nbi está topeada en 3 ("3 o más"); "más de 3 NBI" NO es respondible.
 - afrodescendiente = asc_afro='Si'.
