@@ -81,8 +81,11 @@ header{
 }
 .hd{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 0;}
 .brand{display:flex; align-items:center; gap:14px; min-width:0;}
-/* Logotipo del INE, arriba a la izquierda. En modo oscuro va sobre una placa
-   blanca: el logo es un activo institucional y no se recolorea. */
+/* Logotipo del INE, arriba a la izquierda. OCULTO desde el 13-ago-2026 (decisión de
+   Carlos): el <img> está comentado en index.html, así que estas reglas no se aplican
+   hoy. Se conservan para que volver a mostrarlo sea descomentar el HTML y nada más.
+   En modo oscuro va sobre una placa blanca: el logo es un activo institucional y no
+   se recolorea. */
 .logo-ine{height:42px; width:auto; display:block; flex-shrink:0;}
 .brand .sep{width:1px; height:32px; background:var(--line-strong); flex-shrink:0;}
 /* Logotipo del producto: reemplaza al nombre en texto, así que es el que lleva
