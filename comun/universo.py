@@ -119,9 +119,11 @@ def frase_universo(variables, fuera):
     hubo ninguno. Va en la respuesta porque un denominador que cambia sin avisar es
     justamente lo que hace que una cifra no se pueda auditar.
 
-    Se nombra la CATEGORÍA excluida y no la descripción de la variable: las del
-    diccionario del INE vienen en mayúsculas y sin tildes ('MAXIMO NIVEL ALCANZADO'),
-    y metidas en una oración se leen como un error de ortografía nuestro."""
+    Se nombra la CATEGORÍA excluida y no la descripción de la variable: lo que se
+    dejó afuera es «Menor de 25 años», no «Máximo nivel alcanzado». (El motivo
+    original era otro: las descripciones venían EN MAYÚSCULAS y sin tildes. Eso se
+    corrigió el 14-ago-2026 con las etiquetas oficiales del INE, pero la decisión
+    se mantiene porque nombrar la categoría es lo correcto.)"""
     etiquetas = []
     for v in variables:
         for e in (fuera.get(v) or {}).get("etiquetas", []):

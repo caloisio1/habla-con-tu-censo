@@ -48,6 +48,38 @@ def _codigos(texto):
     return out
 
 
+# El desplegable es un diccionario para LEER, no un esquema para programar: ahí la
+# tabla se llama «Personas», no `personas_2023`. El nombre técnico se conserva en el
+# campo `tabla` (el frontend lo pone como tooltip) porque es el que aparece en el SQL
+# de las respuestas. El sufijo del año además sobra: cada censo vive en su propia base.
+TITULOS_TABLA = {
+    "censo2004": "Personas, hogares y viviendas",   # una sola tabla, con banderas per/hog/viv
+    "columnas derivadas": "Columnas derivadas",
+    "nomenclátor": "Nomenclátor",
+}
+
+
+# Advertencias que el esquema del modelo lleva pegadas a la etiqueta —'(atención:
+# …)'—. El modelo las necesita ahí, en la misma línea; la página no: en el título
+# tapan el nombre de la variable. Se separan y se muestran al abrir la variable.
+RE_AVISO = re.compile(r"\s*\((atención|ojo)\s*:\s*(.+)\)\s*$", re.I)
+
+
+def _separar_aviso(etiqueta):
+    m = RE_AVISO.search(etiqueta or "")
+    if not m:
+        return etiqueta, ""
+    aviso = m.group(2).strip()
+    return etiqueta[:m.start()].strip(), "Atención: " + aviso[:1].upper() + aviso[1:]
+
+
+def titulo_tabla(nombre):
+    if nombre in TITULOS_TABLA:
+        return TITULOS_TABLA[nombre]
+    base = re.sub(r"_(19|20)\d{2}$", "", nombre)   # personas_2023 -> personas
+    return base[:1].upper() + base[1:]
+
+
 def desde_esquema(censo):
     """Lee esquema_llm_<censo>.txt y devuelve (notas, tablas)."""
     ruta = os.path.join(RAIZ, "esquema_llm_%s.txt" % censo)
@@ -60,7 +92,8 @@ def desde_esquema(censo):
         m = re.match(r"^(TABLA|NOMENCL[ÁA]TOR)\s*:?\s*(.*)$", s)
         if m:
             nombre = (m.group(2) or "nomenclátor").split("(")[0].strip().rstrip(":") or "nomenclátor"
-            actual = {"tabla": nombre, "descripcion": s, "variables": []}
+            actual = {"tabla": nombre, "titulo": titulo_tabla(nombre),
+                      "descripcion": s, "variables": []}
             tablas.append(actual)
             continue
         if s.startswith("- ") and actual is not None:
@@ -75,7 +108,13 @@ def desde_esquema(censo):
                 continue
             etiqueta = partes[1] if len(partes) > 1 else ""
             codigos = _codigos(partes[2] if len(partes) > 2 else "")
-            actual["variables"].append({"nombre": nombre, "etiqueta": etiqueta, "codigos": codigos})
+            # Una advertencia sobre la variable NO es parte de su nombre: en el
+            # título queda un cartel ilegible. Va adentro, al desplegar.
+            etiqueta, aviso = _separar_aviso(etiqueta)
+            var = {"nombre": nombre, "etiqueta": etiqueta, "codigos": codigos}
+            if aviso:
+                var["descripcion"] = aviso
+            actual["variables"].append(var)
         elif actual is None:
             notas.append(s)
     return notas, tablas
@@ -135,12 +174,12 @@ def desde_diccionario_2011():
          "departamento*1000 + LOC. Es la clave del JOIN con la tabla localidades."),
     ]
     tablas = [
-        {"tabla": "personas",
+        {"tabla": "personas", "titulo": titulo_tabla("personas"),
          "descripcion": "Una fila por persona: %s registros cargados." % POB_2011_BASE,
          "variables": variables},
         # sin_normalizar: estas etiquetas ya están escritas con el criterio final y
         # traen nombres de columna del INE, que no hay que pasar por sentencia().
-        {"tabla": "columnas derivadas",
+        {"tabla": "columnas derivadas", "titulo": titulo_tabla("columnas derivadas"),
          "descripcion": "Agregadas por el proyecto sobre las variables crudas del INE.",
          "sin_normalizar": True,
          "variables": [{"nombre": n, "etiqueta": e, "descripcion": desc, "codigos": []}
@@ -326,6 +365,12 @@ def sentencia(txt):
     palabras = []
     for w in txt.split(" "):
         limpio = w.strip("()¿?¡!,.;:").upper()
+        # Lo que trae dígitos o un '=' no es una palabra sino un CÓDIGO: el nombre
+        # de una variable o una condición ('PERMI01=3', 'PERAL09'). Pasarlo a
+        # minúscula lo vuelve incitable: nadie encuentra 'permi01' en la base.
+        if any(c.isdigit() for c in w) or "=" in w:
+            palabras.append(w)
+            continue
         # Solo se respeta lo que está en la lista de siglas. La regla de "3
         # letras o menos es sigla" dejaba EN, EL, DE, USO, VER en mayúscula.
         if not w.isupper() or limpio in SIGLAS:

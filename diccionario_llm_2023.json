@@ -19,7 +19,7 @@
    "variables": [
     {
      "nombre": "ID_CENSO",
-     "descripcion": "IDENTIFICACIÓN DE LA PERSONA",
+     "descripcion": "Identificación de la persona",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -31,7 +31,7 @@
     },
     {
      "nombre": "DIRECCION_ID",
-     "descripcion": "IDENTIFICACIÓN DE LA DIRECCIÓN",
+     "descripcion": "Identificación de la dirección",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -43,7 +43,7 @@
     },
     {
      "nombre": "DEPARTAMENTO",
-     "descripcion": "DEPARTAMENTO",
+     "descripcion": "Departamento",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -55,7 +55,7 @@
     },
     {
      "nombre": "LOCALIDAD",
-     "descripcion": "LOCALIDAD",
+     "descripcion": "Localidad",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -67,7 +67,7 @@
     },
     {
      "nombre": "LOCALIDAD_AGRUP",
-     "descripcion": "LOCALIDAD AGRUPADA",
+     "descripcion": "Localidad agrupada",
      "tipo": "TEXT",
      "value_labels": {
       "0": "No",
@@ -82,7 +82,7 @@
     },
     {
      "nombre": "SECCION",
-     "descripcion": "SECCION",
+     "descripcion": "Sección censal",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -94,7 +94,7 @@
     },
     {
      "nombre": "SECCION_AGRUP",
-     "descripcion": "SECCION AGRUPADA",
+     "descripcion": "Sección censal agrupada",
      "tipo": "TEXT",
      "value_labels": {
       "0": "No",
@@ -109,7 +109,7 @@
     },
     {
      "nombre": "SEGMENTO",
-     "descripcion": "SEGMENTO",
+     "descripcion": "Segmento censal",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -121,7 +121,7 @@
     },
     {
      "nombre": "SEGMENTO_AGRUP",
-     "descripcion": "SEGMENTO AGRUPADO",
+     "descripcion": "Segmento censal agrupado",
      "tipo": "TEXT",
      "value_labels": {
       "0": "No",
@@ -136,7 +136,7 @@
     },
     {
      "nombre": "VIVID",
-     "descripcion": "NÚMERO DE VIVIENDA",
+     "descripcion": "Número de vivienda",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -148,7 +148,7 @@
     },
     {
      "nombre": "HOGID",
-     "descripcion": "NÚMERO DE HOGAR",
+     "descripcion": "Número de hogar",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -160,7 +160,7 @@
     },
     {
      "nombre": "PERID",
-     "descripcion": "NÚMERO DE PERSONA",
+     "descripcion": "Número de persona",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -172,7 +172,7 @@
     },
     {
      "nombre": "REGION_4",
-     "descripcion": "REGIÓN",
+     "descripcion": "Región de 4 categorías",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Montevideo",
@@ -189,7 +189,7 @@
     },
     {
      "nombre": "AREA",
-     "descripcion": "AREA",
+     "descripcion": "Área",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Urbano",
@@ -204,7 +204,7 @@
     },
     {
      "nombre": "BARRIO85",
-     "descripcion": "ÁREA APROXIMADA A BARRIO (DEF. 1985) MONTEVIDEO",
+     "descripcion": "Área aproximada a barrio (def. 1985) Montevideo",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -216,7 +216,7 @@
     },
     {
      "nombre": "CCZ",
-     "descripcion": "CENTRO COMUNAL ZONAL (MONTEVIDEO)",
+     "descripcion": "Centro comunal zonal (Montevideo)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -228,7 +228,7 @@
     },
     {
      "nombre": "MUNICIPIO_136",
-     "descripcion": "MUNICIPIO",
+     "descripcion": "Municipio",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -240,7 +240,7 @@
     },
     {
      "nombre": "FUENTE_EXT",
-     "descripcion": "MODALIDAD DE RELEVAMIENTO",
+     "descripcion": "Modalidad de relevamiento",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Cuestionario Censal",
@@ -255,7 +255,7 @@
     },
     {
      "nombre": "SIT_CALLE",
-     "descripcion": "PERSONA EN SITUACIÓN DE CALLE (INTEMPERIE O REFUGIOS)",
+     "descripcion": "Persona en situación de calle (intemperie o refugios)",
      "tipo": "TEXT",
      "value_labels": {
       "0": "No",
@@ -270,7 +270,7 @@
     },
     {
      "nombre": "RELEVAMIENTO",
-     "descripcion": "MODALIDAD DE RELEVAMIENTO",
+     "descripcion": "Modalidad de relevamiento",
      "tipo": "TEXT",
      "value_labels": {
       "1": "CAPI",
@@ -289,7 +289,7 @@
     },
     {
      "nombre": "CUESTIONARIO_COMPLETO",
-     "descripcion": "PERSONAS QUE RESPONDEN EL CUESTIONARIO CENSAL COMPLETO",
+     "descripcion": "Personas que responden el cuestionario censal completo",
      "tipo": "TEXT",
      "value_labels": {
       "0": "No",
@@ -304,7 +304,7 @@
     },
     {
      "nombre": "CUESTIONARIO_BASICO",
-     "descripcion": "PERSONAS QUE RESPONDEN EL CUESTIONARIO CENSAL REDUCIDO O BÁSICO",
+     "descripcion": "Personas que responden el cuestionario censal reducido o básico",
      "tipo": "TEXT",
      "value_labels": {
       "0": "No",
@@ -319,7 +319,7 @@
     },
     {
      "nombre": "UNIVERSO",
-     "descripcion": "UNIVERSO",
+     "descripcion": "Universo",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Viviendas particulares",
@@ -336,7 +336,7 @@
     },
     {
      "nombre": "AGREGADO_A_HOGAR_CENSADO",
-     "descripcion": "",
+     "descripcion": "Agregado a hogar censado",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -348,7 +348,7 @@
     },
     {
      "nombre": "MADRE_PERID",
-     "descripcion": "",
+     "descripcion": "Número de persona de la madre",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -360,7 +360,7 @@
     },
     {
      "nombre": "VIVVO00",
-     "descripcion": "TIPO DE VIVIENDA RESUMIDO",
+     "descripcion": "Tipo de vivienda resumido",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Particular",
@@ -375,7 +375,7 @@
     },
     {
      "nombre": "VIVVO01",
-     "descripcion": "TIPO DE VIVIENDA",
+     "descripcion": "Tipo de vivienda",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Casa",
@@ -408,7 +408,7 @@
     },
     {
      "nombre": "VIVVO02",
-     "descripcion": "CONDICIÓN DE OCUPACIÓN",
+     "descripcion": "Condición de ocupación resumido",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Ocupada",
@@ -423,7 +423,7 @@
     },
     {
      "nombre": "VIVVO03",
-     "descripcion": "",
+     "descripcion": "Condición de ocupación",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Ocupada con residentes presentes",
@@ -444,7 +444,7 @@
     },
     {
      "nombre": "VIVVO04",
-     "descripcion": "RESIDENTES HABITUALES QUE NO INTEGRAN EL HOGAR COLECTIVO",
+     "descripcion": "Residentes habituales que no integran el hogar colectivo",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -459,7 +459,7 @@
     },
     {
      "nombre": "VIVDV01",
-     "descripcion": "MATERIAL PREDOMINANTE EN PAREDES EXTERIORES",
+     "descripcion": "Material predominante en paredes exteriores",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Ladrillos, ticholos, piedras o bloques CON terminación",
@@ -481,7 +481,7 @@
     },
     {
      "nombre": "VIVDV02",
-     "descripcion": "MATERIAL PREDOMINANTE DE LOS TECHOS",
+     "descripcion": "Material predominante de los techos",
      "tipo": "TEXT",
      "value_labels": {
       "7": "Planchada de hormigón  o bovedilla CON protección (tejas u otros)",
@@ -503,7 +503,7 @@
     },
     {
      "nombre": "VIVDV03",
-     "descripcion": "MATERIAL PREDOMINANTE DE LOS PISOS",
+     "descripcion": "Material predominante de los pisos",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Cerámica, baldosas, piedra laja, madera, moqueta, linóleo, vinílico",
@@ -521,7 +521,7 @@
     },
     {
      "nombre": "VIVDV11",
-     "descripcion": "EVENTOS ADVERSOS EN LOS ÚLTIMOS 5 AÑOS",
+     "descripcion": "Eventos adversos en los últimos 5 años",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí, por inundaciones",
@@ -539,7 +539,7 @@
     },
     {
      "nombre": "VIVDV05",
-     "descripcion": "ORIGEN DEL AGUA",
+     "descripcion": "Origen del agua",
      "tipo": "TEXT",
      "value_labels": {
       "1": "OSE o red general",
@@ -559,7 +559,7 @@
     },
     {
      "nombre": "I_VIVDV05",
-     "descripcion": "ORIGEN DEL AGUA IMPUTADA",
+     "descripcion": "Origen del agua imputada",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -583,7 +583,7 @@
     },
     {
      "nombre": "VIVDV06",
-     "descripcion": "LLEGADA DE AGUA",
+     "descripcion": "Llegada de agua",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Por cañería dentro de la vivienda",
@@ -600,7 +600,7 @@
     },
     {
      "nombre": "VIVDV07",
-     "descripcion": "PRINCIPAL MEDIO DE ALUMBRADO ELÉCTRICO",
+     "descripcion": "Principal medio de alumbrado eléctrico",
      "tipo": "TEXT",
      "value_labels": {
       "1": "UTE o red general",
@@ -619,7 +619,7 @@
     },
     {
      "nombre": "VIVHV01",
-     "descripcion": "CANTIDAD DE HOGARES EN LA VIVIENDA",
+     "descripcion": "Cantidad de hogares en la vivienda",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad de hogares particulares que comparten la vivienda"
@@ -633,7 +633,7 @@
     },
     {
      "nombre": "MATERIALIDAD",
-     "descripcion": "MATERIALIDAD",
+     "descripcion": "NBI materialidad",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Materiales pesados en paredes y techos y piso resistente",
@@ -656,7 +656,7 @@
     },
     {
      "nombre": "ID_HOGAR",
-     "descripcion": "IDENTIFICADOR UNICO DE HOGAR",
+     "descripcion": "Identificador unico de hogar",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -668,7 +668,7 @@
     },
     {
      "nombre": "HOGTE01",
-     "descripcion": "TENENCIA DE LA VIVIENDA",
+     "descripcion": "Tenencia de la vivienda",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Propietario",
@@ -685,7 +685,7 @@
     },
     {
      "nombre": "HOGTE02",
-     "descripcion": "CARACTERÍSTICAS PROPIETARIO",
+     "descripcion": "Características propietario",
      "tipo": "TEXT",
      "value_labels": {
       "1": "De la vivienda y el terreno y la está pagando",
@@ -702,7 +702,7 @@
     },
     {
      "nombre": "HOGTE03",
-     "descripcion": "CARACTERÍSTICAS USUFRUCTUARIO U OCUPANTE",
+     "descripcion": "Características usufructuario u ocupante",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Por relación de dependencia (trabajo)",
@@ -719,7 +719,7 @@
     },
     {
      "nombre": "I_HOGTE02",
-     "descripcion": "CARACTERÍSTICAS PROPIETARIO IMPUTADA",
+     "descripcion": "Características propietario imputada",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -731,7 +731,7 @@
     },
     {
      "nombre": "I_HOGTE02_TIPO",
-     "descripcion": "CARACTERÍSTICAS PROPIETARIO IMPUTADA TIPO",
+     "descripcion": "Características propietario imputada tipo",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -743,7 +743,7 @@
     },
     {
      "nombre": "HOGSH01",
-     "descripcion": "DISPONIBILIDAD DE BAÑO",
+     "descripcion": "Disponibilidad de baño",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí, con cisterna",
@@ -759,7 +759,7 @@
     },
     {
      "nombre": "HOGSH02",
-     "descripcion": "USO DEL BAÑO",
+     "descripcion": "Uso del baño",
      "tipo": "TEXT",
      "value_labels": {
       "1": "De uso exclusivo del hogar",
@@ -774,7 +774,7 @@
     },
     {
      "nombre": "HOGSH03",
-     "descripcion": "EVACUACIÓN DEL SERVICIO SANITARIO",
+     "descripcion": "Evacuación del servicio sanitario",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Red general o saneamiento",
@@ -791,7 +791,7 @@
     },
     {
      "nombre": "I_HOGSH03",
-     "descripcion": "EVACUACIÓN DEL SERVICIO SANITARIO IMPUTADA",
+     "descripcion": "Evacuación del servicio sanitario imputada",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -803,7 +803,7 @@
     },
     {
      "nombre": "I_HOGSH03_TIPO",
-     "descripcion": "EVACUACIÓN DEL SERVICIO SANITARIO IMPUTADA TIPO",
+     "descripcion": "Evacuación del servicio sanitario imputada tipo",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -815,7 +815,7 @@
     },
     {
      "nombre": "HOGSC01",
-     "descripcion": "LUGAR PARA COCINAR",
+     "descripcion": "Lugar para cocinar",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí, privado de este hogar",
@@ -831,7 +831,7 @@
     },
     {
      "nombre": "HOGHD00",
-     "descripcion": "HABITACIONES TOTALES",
+     "descripcion": "Habitaciones totales",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad de habitaciones que no son baños ni cocinas"
@@ -845,7 +845,7 @@
     },
     {
      "nombre": "HOGHD01",
-     "descripcion": "HABITACIONES PARA DORMIR",
+     "descripcion": "Habitaciones para dormir",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad de habitaciones para dormir"
@@ -859,7 +859,7 @@
     },
     {
      "nombre": "HOGSC02",
-     "descripcion": "FUENTE PRINCIPAL DE ENERGÍA PARA COCINAR",
+     "descripcion": "Fuente principal de energía para cocinar",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Electricidad",
@@ -879,7 +879,7 @@
     },
     {
      "nombre": "HOGCA01",
-     "descripcion": "FUENTE PRINCIPAL DE ENERGÍA PARA CALEFACCIONAR",
+     "descripcion": "Fuente principal de energía para calefaccionar",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Electricidad",
@@ -901,7 +901,7 @@
     },
     {
      "nombre": "HOGRS01",
-     "descripcion": "DISPOSICIÓN DE RESIDUOS",
+     "descripcion": "Disposición de residuos",
      "tipo": "TEXT",
      "value_labels": {
       "1": "La tiran en un contenedor o depósito",
@@ -921,7 +921,7 @@
     },
     {
      "nombre": "HOGCE27",
-     "descripcion": "CALEFÓN, TERMOFÓN, CALDERETA O CALENTADOR INSTANTÁNEO",
+     "descripcion": "Calefón, termofón, caldereta o calentador instantáneo",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -936,7 +936,7 @@
     },
     {
      "nombre": "HOGCE26",
-     "descripcion": "COLECTOR SOLAR",
+     "descripcion": "Colector solar",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -951,7 +951,7 @@
     },
     {
      "nombre": "HOGCE03",
-     "descripcion": "REFRIGERADOR O FREEZER",
+     "descripcion": "Refrigerador o freezer",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -966,7 +966,7 @@
     },
     {
      "nombre": "HOGCE04",
-     "descripcion": "SECADORA DE ROPA",
+     "descripcion": "Secadora de ropa",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -981,7 +981,7 @@
     },
     {
      "nombre": "HOGCE17",
-     "descripcion": "EQUIPO DE AIRE ACONDICIONADO",
+     "descripcion": "Equipo de aire acondicionado",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -996,7 +996,7 @@
     },
     {
      "nombre": "HOGCE17_1",
-     "descripcion": "",
+     "descripcion": "Cantidad de equipos de aire acondicionado",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad de equipos de aire acondicionado"
@@ -1010,7 +1010,7 @@
     },
     {
      "nombre": "HOGCE28",
-     "descripcion": "COMPUTADORA, LAPTOP, NOTEBOOK O TABLET",
+     "descripcion": "Computadora, laptop, notebook o tablet",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1025,7 +1025,7 @@
     },
     {
      "nombre": "HOGCE11",
-     "descripcion": "ACCESO A INTERNET",
+     "descripcion": "Acceso a internet",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1040,7 +1040,7 @@
     },
     {
      "nombre": "HOGCE22",
-     "descripcion": "SERVICIO DE STREAMING",
+     "descripcion": "Servicio de streaming",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1055,7 +1055,7 @@
     },
     {
      "nombre": "HOGCE12_1",
-     "descripcion": "CICLOMOTORES O MOTOCICLETAS",
+     "descripcion": "Ciclomotores o motocicletas",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1070,7 +1070,7 @@
     },
     {
      "nombre": "HOGCE13",
-     "descripcion": "AUTOMÓVILES O CAMIONETAS",
+     "descripcion": "Automóviles o camionetas",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad de automóviles o camionetas"
@@ -1084,7 +1084,7 @@
     },
     {
      "nombre": "HOGMA01",
-     "descripcion": "MASCOTAS EN EL HOGAR (tiene mascotas)",
+     "descripcion": "Mascotas en el hogar (tiene mascotas)",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1099,7 +1099,7 @@
     },
     {
      "nombre": "HOGMA01_1",
-     "descripcion": "PERROS",
+     "descripcion": "Perros",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1114,7 +1114,7 @@
     },
     {
      "nombre": "HOGMA01_1_1",
-     "descripcion": "",
+     "descripcion": "Cantidad de perros",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad de perros"
@@ -1128,7 +1128,7 @@
     },
     {
      "nombre": "HOGMA01_2",
-     "descripcion": "GATOS",
+     "descripcion": "Gatos",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1143,7 +1143,7 @@
     },
     {
      "nombre": "HOGMA01_2_1",
-     "descripcion": "",
+     "descripcion": "Cantidad de gatos",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad de gatos"
@@ -1157,7 +1157,7 @@
     },
     {
      "nombre": "HOGPR01",
-     "descripcion": "CANTIDAD TOTAL DE PERSONAS",
+     "descripcion": "Cantidad total de personas",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad total de personas incluyendo población enumerada por registros administrativos"
@@ -1171,7 +1171,7 @@
     },
     {
      "nombre": "HOGPR01_1",
-     "descripcion": "CANTIDAD DE PERSONAS 0-2 AÑOS",
+     "descripcion": "Cantidad de personas 0-2 años",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad de personas 0 a 2 años incluyendo población enumerada por registros administrativos"
@@ -1185,7 +1185,7 @@
     },
     {
      "nombre": "HOGPR01_2",
-     "descripcion": "CANTIDAD DE PERSONAS 3-70 AÑOS",
+     "descripcion": "Cantidad de personas 3-70 años",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad de personas 3 a 70 años incluyendo población enumerada por registros administrativos"
@@ -1199,7 +1199,7 @@
     },
     {
      "nombre": "HOGPR01_3",
-     "descripcion": "CANTIDAD DE PERSONAS 71 AÑOS O MÁS",
+     "descripcion": "Cantidad de personas 71 años o más",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad de personas 71 y más años incluyendo población enumerada por registros administrativos"
@@ -1213,7 +1213,7 @@
     },
     {
      "nombre": "PERPH02",
-     "descripcion": "SEXO AL NACER",
+     "descripcion": "Sexo al nacer",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Varón",
@@ -1228,7 +1228,7 @@
     },
     {
      "nombre": "PERNA01",
-     "descripcion": "EDAD",
+     "descripcion": "Edad",
      "tipo": "INTEGER",
      "value_labels": {
       "Años": "Edad en años cumplidos."
@@ -1242,7 +1242,7 @@
     },
     {
      "nombre": "PERNA02_ANO",
-     "descripcion": "AÑO DE NACIMIENTO",
+     "descripcion": "Año de nacimiento",
      "tipo": "INTEGER",
      "value_labels": {
       "Año": "Año de nacimiento"
@@ -1256,7 +1256,7 @@
     },
     {
      "nombre": "PERPA01",
-     "descripcion": "RELACIÓN DE PARENTESCO",
+     "descripcion": "Relación de parentesco",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Jefe/a o persona de referencia",
@@ -1285,7 +1285,7 @@
     },
     {
      "nombre": "PERPA02",
-     "descripcion": "MADRE VIVE EN EL HOGAR",
+     "descripcion": "Madre vive en el hogar",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí, vive en el hogar",
@@ -1300,7 +1300,7 @@
     },
     {
      "nombre": "PERPA02_1",
-     "descripcion": "Número de persona si PERPA02=1",
+     "descripcion": "Número de persona si madre vive en el hogar (PERPA02=1)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -1312,7 +1312,7 @@
     },
     {
      "nombre": "PERPA03",
-     "descripcion": "PADRE VIVE EN EL HOGAR",
+     "descripcion": "Padre vive en el hogar",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1327,7 +1327,7 @@
     },
     {
      "nombre": "PERPA03_1",
-     "descripcion": "Número de persona si PERPA03=1",
+     "descripcion": "Número de persona si padre vive en el hogar (PERPA03=1)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -1339,7 +1339,7 @@
     },
     {
      "nombre": "PERER01_1",
-     "descripcion": "AFRO O NEGRA",
+     "descripcion": "Afro o negra",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1354,7 +1354,7 @@
     },
     {
      "nombre": "PERER01_2",
-     "descripcion": "ASIÁTICA",
+     "descripcion": "Asiática",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1369,7 +1369,7 @@
     },
     {
      "nombre": "PERER01_3",
-     "descripcion": "BLANCA",
+     "descripcion": "Blanca",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1384,7 +1384,7 @@
     },
     {
      "nombre": "PERER01_4",
-     "descripcion": "INDÍGENA",
+     "descripcion": "Indígena",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1399,7 +1399,7 @@
     },
     {
      "nombre": "PERER01_5",
-     "descripcion": "OTRA",
+     "descripcion": "Otra",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1414,7 +1414,7 @@
     },
     {
      "nombre": "PERER02",
-     "descripcion": "ASCENDENCIA PRINCIPAL",
+     "descripcion": "Ascendencia principal",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Afro o Negra",
@@ -1433,7 +1433,7 @@
     },
     {
      "nombre": "PERDI01",
-     "descripcion": "DIFICULTAD PARA VER",
+     "descripcion": "Dificultad para ver",
      "tipo": "TEXT",
      "value_labels": {
       "1": "No tiene dificultad",
@@ -1450,7 +1450,7 @@
     },
     {
      "nombre": "PERDI02",
-     "descripcion": "DIFICULTAD PARA OÍR",
+     "descripcion": "Dificultad para oír",
      "tipo": "TEXT",
      "value_labels": {
       "1": "No tiene dificultad",
@@ -1467,7 +1467,7 @@
     },
     {
      "nombre": "PERDI04",
-     "descripcion": "DIFICULTAD PARA CAMINAR O SUBIR ESCALONES",
+     "descripcion": "Dificultad para caminar o subir escalones",
      "tipo": "TEXT",
      "value_labels": {
       "1": "No tiene dificultad",
@@ -1484,7 +1484,7 @@
     },
     {
      "nombre": "PERDI03",
-     "descripcion": "DIFICULTAD PARA COMUNICARSE",
+     "descripcion": "Dificultad para comunicarse",
      "tipo": "TEXT",
      "value_labels": {
       "1": "No tiene dificultad",
@@ -1501,7 +1501,7 @@
     },
     {
      "nombre": "PERDI07",
-     "descripcion": "DIFICULTAD PARA RECORDAR O CONCENTRARSE",
+     "descripcion": "Dificultad para recordar o concentrarse",
      "tipo": "TEXT",
      "value_labels": {
       "1": "No tiene dificultad",
@@ -1518,7 +1518,7 @@
     },
     {
      "nombre": "PERDI06",
-     "descripcion": "DIFICULTAD PARA REALIZAR TAREAS DE CUIDADO PERSONAL",
+     "descripcion": "Dificultad para realizar tareas de cuidado personal",
      "tipo": "TEXT",
      "value_labels": {
       "1": "No tiene dificultad",
@@ -1535,7 +1535,7 @@
     },
     {
      "nombre": "DISC_TIENE",
-     "descripcion": "DISCAPACIDAD TIENE",
+     "descripcion": "Tiene discapacidad",
      "tipo": "TEXT",
      "value_labels": {
       "0": "No tiene",
@@ -1551,7 +1551,7 @@
     },
     {
      "nombre": "DIFICULTAD",
-     "descripcion": "GRADO DIFICULTAD",
+     "descripcion": "Grado de dificultad",
      "tipo": "TEXT",
      "value_labels": {
       "0": "Menor de 5 años",
@@ -1571,7 +1571,7 @@
     },
     {
      "nombre": "PERTEA",
-     "descripcion": "DIAGNÓSTICO DE AUTISMO",
+     "descripcion": "Diagnóstico de autismo",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí, fue diagnosticado",
@@ -1586,7 +1586,7 @@
     },
     {
      "nombre": "PEREC01",
-     "descripcion": "CÓNYUGE O PAREJA EN EL HOGAR",
+     "descripcion": "Cónyuge o pareja en el hogar",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí, tiene cónyuge o pareja en el hogar",
@@ -1601,7 +1601,7 @@
     },
     {
      "nombre": "PEREC02",
-     "descripcion": "Número de persona si PEREC01=1",
+     "descripcion": "Número de persona si cónyuge o pareja en el hogar (PEREC01=1)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -1613,7 +1613,7 @@
     },
     {
      "nombre": "PEREC03",
-     "descripcion": "TIPO DE UNIÓN",
+     "descripcion": "Tipo de unión",
      "tipo": "TEXT",
      "value_labels": {
       "4": "Casamiento civil con pareja de otro sexo",
@@ -1630,7 +1630,7 @@
     },
     {
      "nombre": "PEREC04",
-     "descripcion": "ESTADO ACTUAL",
+     "descripcion": "Estado actual",
      "tipo": "TEXT",
      "value_labels": {
       "2": "Divorciado/a de casamiento",
@@ -1649,7 +1649,7 @@
     },
     {
      "nombre": "PERMI01",
-     "descripcion": "LUGAR DE NACIMIENTO",
+     "descripcion": "Lugar de nacimiento",
      "tipo": "TEXT",
      "value_labels": {
       "1": "En este departamento",
@@ -1665,7 +1665,7 @@
     },
     {
      "nombre": "PERMI01_2",
-     "descripcion": "Código de departamento asociado a PERMI01=3",
+     "descripcion": "Código de departamento asociado a lugar de nacimiento (PERMI01=3)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -1677,7 +1677,7 @@
     },
     {
      "nombre": "PERMI01_4",
-     "descripcion": "Código de país asociado a PERMI01=4",
+     "descripcion": "Código de país asociado a lugar de nacimiento (PERMI01=4)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -1689,7 +1689,7 @@
     },
     {
      "nombre": "PERMI02",
-     "descripcion": "AÑO DE LLEGADA A URUGUAY",
+     "descripcion": "Año de llegada a uruguay",
      "tipo": "INTEGER",
      "value_labels": {
       "Año": ""
@@ -1703,7 +1703,7 @@
     },
     {
      "nombre": "PERMI05",
-     "descripcion": "TIEMPO DE RESIDENCIA SIN INTERRUPCIONES EN ESTA LOCALIDAD",
+     "descripcion": "Tiempo de residencia sin interrupciones en esta localidad",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Siempre residió aquí",
@@ -1718,7 +1718,7 @@
     },
     {
      "nombre": "PERMI05_1",
-     "descripcion": "",
+     "descripcion": "Cantidad de años que hace que reside aquí",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Cantidad de años que hace que reside aquí"
@@ -1732,7 +1732,7 @@
     },
     {
      "nombre": "PERMI06",
-     "descripcion": "LUGAR DE RESIDENCIA ANTERIOR",
+     "descripcion": "Lugar de residencia anterior",
      "tipo": "TEXT",
      "value_labels": {
       "1": "En otra ciudad o localidad de este departamento",
@@ -1748,7 +1748,7 @@
     },
     {
      "nombre": "PERMI06_2",
-     "descripcion": "Código de departamento asociado a PERMI06=2",
+     "descripcion": "Código de departamento asociado a lugar de residencia anterior (PERMI06=2)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -1760,7 +1760,7 @@
     },
     {
      "nombre": "PERMI06_4",
-     "descripcion": "Código de país asociado a PERMI06=3",
+     "descripcion": "Código de país asociado a residencia en el extranjero al menos un año (PERMI06=3)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -1772,7 +1772,7 @@
     },
     {
      "nombre": "PERMI07",
-     "descripcion": "LUGAR DE RESIDENCIA EN 2018 (CINCO AÑOS ANTES)",
+     "descripcion": "Lugar de residencia en 2018 (cinco años antes)",
      "tipo": "TEXT",
      "value_labels": {
       "1": "En este departamento",
@@ -1788,7 +1788,7 @@
     },
     {
      "nombre": "PERMI07_2",
-     "descripcion": "Código de departamento asociado a PERMI07=3",
+     "descripcion": "Código de departamento asociado a lugar de residencia en 2018 (cinco años antes) (PERMI07=3)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -1800,7 +1800,7 @@
     },
     {
      "nombre": "PERMI07_4",
-     "descripcion": "Código de país asociado a PERMI07=4",
+     "descripcion": "Código de país asociado a lugar de residencia en 2018 (cinco años antes) (PERMI07=4)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -1812,7 +1812,7 @@
     },
     {
      "nombre": "PERMI03",
-     "descripcion": "RESIDENCIA EN EL EXTRANJERO AL MENOS UN AÑO",
+     "descripcion": "Residencia en el extranjero al menos un año",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1827,7 +1827,7 @@
     },
     {
      "nombre": "PERMI04",
-     "descripcion": "AÑO DE REGRESO A URUGUAY",
+     "descripcion": "Año de regreso a uruguay",
      "tipo": "INTEGER",
      "value_labels": {
       "Año": ""
@@ -1841,7 +1841,7 @@
     },
     {
      "nombre": "DEPTO_RES_2018",
-     "descripcion": "DEPARTAMENTO DE RESIDENCIA 2018",
+     "descripcion": "Departamento de residencia 2018",
      "tipo": "TEXT",
      "value_labels": {
       "1 a 19": "Código del departamento de residencia en 2018"
@@ -1855,7 +1855,7 @@
     },
     {
      "nombre": "DEPTO_NACIM",
-     "descripcion": "DEPARTAMENTO DE NACIMIENTO",
+     "descripcion": "Departamento de nacimiento",
      "tipo": "TEXT",
      "value_labels": {
       "1 a 19": "Código del departamento de nacimiento"
@@ -1869,7 +1869,7 @@
     },
     {
      "nombre": "ASISTENCIA",
-     "descripcion": "ASISTENCIA A CENTRO EDUCATIVO",
+     "descripcion": "Asistencia a centro educativo",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Asiste",
@@ -1887,7 +1887,7 @@
     },
     {
      "nombre": "NIVELEDU25MAS",
-     "descripcion": "MAXIMO NIVEL ALCANZADO",
+     "descripcion": "Máximo nivel alcanzado",
      "tipo": "TEXT",
      "value_labels": {
       "0": "Menor de 25 años",
@@ -1910,7 +1910,7 @@
     },
     {
      "nombre": "PERAL01",
-     "descripcion": "TRABAJÓ ALGÚN DÍA DE LA SEMANA PASADA",
+     "descripcion": "Trabajó algún día de la semana pasada",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí, trabajó",
@@ -1925,7 +1925,7 @@
     },
     {
      "nombre": "PERAL13",
-     "descripcion": "ACTIVIDAD DURANTE LA SEMANA PASADA, AL MENOS 1 HORA",
+     "descripcion": "Actividad durante la semana pasada, al menos 1 hora",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Realizó algún trabajo puntual y concreto a cambio de remuneración en dinero o en especie",
@@ -1942,7 +1942,7 @@
     },
     {
      "nombre": "PERAL03",
-     "descripcion": "TRABAJO O NEGOCIO AL QUE SEGURO VOLVERÁ",
+     "descripcion": "Trabajo o negocio al que seguro volverá",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí, tiene un trabajo o negocio al que volverá",
@@ -1957,7 +1957,7 @@
     },
     {
      "nombre": "PERAL04",
-     "descripcion": "LAS ÚLTIMAS CUATRO SEMANAS BUSCÓ TRABAJO",
+     "descripcion": "Las últimas cuatro semanas buscó trabajo",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -1972,7 +1972,7 @@
     },
     {
      "nombre": "PERAL06",
-     "descripcion": "TIPO DE OCUPACIÓN (según CIUO-08)|",
+     "descripcion": "Tipo de ocupación (según CIUO-08)|",
      "tipo": "TEXT",
      "value_labels": {
       "0": "Ocupaciones militares",
@@ -1995,7 +1995,7 @@
     },
     {
      "nombre": "PERAL08",
-     "descripcion": "CATEGORÍA DE OCUPACIÓN",
+     "descripcion": "Categoría de ocupación",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Asalariado/a privado/a",
@@ -2015,7 +2015,7 @@
     },
     {
      "nombre": "PERAL09",
-     "descripcion": "LUGAR DÓNDE REALIZA EL TRABAJO",
+     "descripcion": "Lugar dónde realiza el trabajo",
      "tipo": "TEXT",
      "value_labels": {
       "7": "Teletrabajo (exclusivo)",
@@ -2036,7 +2036,7 @@
     },
     {
      "nombre": "PERAL09_2",
-     "descripcion": "Código de departamento asociado a PERAL09=4",
+     "descripcion": "Código de departamento asociado a lugar dónde realiza el trabajo (PERAL09=4)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2048,7 +2048,7 @@
     },
     {
      "nombre": "PERAL09_4",
-     "descripcion": "Código de país asociado a PERAL09=5",
+     "descripcion": "Código de país asociado a lugar dónde realiza el trabajo (atención: en la base esta columna repite los códigos de PERAL09 y no trae códigos de país)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2060,7 +2060,7 @@
     },
     {
      "nombre": "PERAL11",
-     "descripcion": "JUBILADO/A O PENSIONISTA",
+     "descripcion": "Jubilado/a o pensionista",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí",
@@ -2075,7 +2075,7 @@
     },
     {
      "nombre": "PERAL14_4",
-     "descripcion": "REALIZA LAS TAREAS DOMÉSTICAS",
+     "descripcion": "Realiza las tareas domésticas",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí, de forma exclusiva",
@@ -2091,7 +2091,7 @@
     },
     {
      "nombre": "PERAL14_5",
-     "descripcion": "REALIZA LAS TAREAS DE CUIDADO A ALGÚN MIEMBRO DEL HOGAR",
+     "descripcion": "Realiza las tareas de cuidado a algún miembro del hogar",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Sí, de forma exclusiva",
@@ -2108,7 +2108,7 @@
     },
     {
      "nombre": "I_PERAL06",
-     "descripcion": "TIPO DE OCUPACIÓN (según CIUO-08)|",
+     "descripcion": "Tipo de ocupación (según CIUO-08)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2120,7 +2120,7 @@
     },
     {
      "nombre": "I_PERAL06_TIPO",
-     "descripcion": "",
+     "descripcion": "Clasificación de tipo de ocupación",
      "tipo": "TEXT",
      "value_labels": {
       "svm": "Clasificación incial",
@@ -2136,7 +2136,7 @@
     },
     {
      "nombre": "POBPCOAC",
-     "descripcion": "CONDICIÓN DE ACTIVIDAD ECONÓMICA",
+     "descripcion": "Condición de actividad económica",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Menor de 12 años",
@@ -2154,7 +2154,7 @@
     },
     {
      "nombre": "PERFM01",
-     "descripcion": "CANTIDAD DE HIJAS E HIJOS NACIDOS VIVOS",
+     "descripcion": "Cantidad de hijas e hijos nacidos vivos",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Total de hijas e hijos nacidos vivos"
@@ -2168,7 +2168,7 @@
     },
     {
      "nombre": "PERFM01_2",
-     "descripcion": "",
+     "descripcion": "Cantidad de hijas nacidas vivas",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Total mujeres"
@@ -2182,7 +2182,7 @@
     },
     {
      "nombre": "PERFM01_3",
-     "descripcion": "",
+     "descripcion": "Cantidad de hijos nacidas vivos",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Total varones"
@@ -2196,7 +2196,7 @@
     },
     {
      "nombre": "PERFM02",
-     "descripcion": "CANTIDAD DE HIJAS E HIJOS VIVOS ACTUALMENTE",
+     "descripcion": "Cantidad de hijas e hijos vivos actualmente",
      "tipo": "INTEGER",
      "value_labels": {
       "Nº": "Total de hijos/as vivos actualmente"
@@ -2210,7 +2210,7 @@
     },
     {
      "nombre": "PERFM04_1",
-     "descripcion": "AÑO DE NACIMIENTO DEL ÚLTIMO HIJO/A",
+     "descripcion": "Año de nacimiento del último hijo/a",
      "tipo": "INTEGER",
      "value_labels": {
       "Año": "Año de nacimiento del último hijo/a, agrupado según tramos quinquenales."
@@ -2224,7 +2224,7 @@
     },
     {
      "nombre": "PERFM05",
-     "descripcion": "AÑO DE NACIMIENTO DEL PRIMER HIJO/A",
+     "descripcion": "Año de nacimiento del primer hijo/a",
      "tipo": "INTEGER",
      "value_labels": {
       "Año": "Año de nacimiento del primer hijo/a, agrupado según tramos quinquenales."
@@ -2238,7 +2238,7 @@
     },
     {
      "nombre": "W",
-     "descripcion": "PONDERADOR",
+     "descripcion": "Ponderador",
      "tipo": "REAL",
      "value_labels": {},
      "perdidos": {
@@ -2250,7 +2250,7 @@
     },
     {
      "nombre": "ESTRATO",
-     "descripcion": "ESTRATO",
+     "descripcion": "Estrato",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2262,7 +2262,7 @@
     },
     {
      "nombre": "TR",
-     "descripcion": "TASA DE MUESTREO",
+     "descripcion": "Tasa de muestreo",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2283,7 +2283,7 @@
    "variables": [
     {
      "nombre": "DIRECCION_ID",
-     "descripcion": "IDENTIFICACIÓN DE LA DIRECCIÓN",
+     "descripcion": "Identificación de la dirección",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2295,7 +2295,7 @@
     },
     {
      "nombre": "VIVID",
-     "descripcion": "NÚMERO DE VIVIENDA",
+     "descripcion": "Número de vivienda",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2307,7 +2307,7 @@
     },
     {
      "nombre": "DEPARTAMENTO",
-     "descripcion": "DEPARTAMENTO",
+     "descripcion": "Departamento",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2319,7 +2319,7 @@
     },
     {
      "nombre": "SECCION",
-     "descripcion": "SECCION",
+     "descripcion": "Sección censal",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2331,7 +2331,7 @@
     },
     {
      "nombre": "SEGMENTO",
-     "descripcion": "SEGMENTO",
+     "descripcion": "Segmento censal",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2343,7 +2343,7 @@
     },
     {
      "nombre": "LOCALIDAD",
-     "descripcion": "LOCALIDAD",
+     "descripcion": "Localidad",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2355,7 +2355,7 @@
     },
     {
      "nombre": "REGION_4",
-     "descripcion": "REGIÓN",
+     "descripcion": "Región en 4 categorías",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Montevideo",
@@ -2372,7 +2372,7 @@
     },
     {
      "nombre": "AREA",
-     "descripcion": "AREA",
+     "descripcion": "Área",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Urbano",
@@ -2387,7 +2387,7 @@
     },
     {
      "nombre": "BARRIO85",
-     "descripcion": "ÁREA APROXIMADA A BARRIO (DEF. 1985) MONTEVIDEO",
+     "descripcion": "Área aproximada a barrio (def. 1985) Montevideo",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2399,7 +2399,7 @@
     },
     {
      "nombre": "CCZ",
-     "descripcion": "CENTRO COMUNAL ZONAL (MONTEVIDEO)",
+     "descripcion": "Centro comunal zonal (montevideo)",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2411,7 +2411,7 @@
     },
     {
      "nombre": "MUNICIPIO_136",
-     "descripcion": "MUNICIPIO",
+     "descripcion": "Municipio",
      "tipo": "TEXT",
      "value_labels": {},
      "perdidos": {
@@ -2423,7 +2423,7 @@
     },
     {
      "nombre": "VIVVO00",
-     "descripcion": "TIPO DE VIVIENDA RESUMIDO",
+     "descripcion": "Tipo de vivienda resumido",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Particular",
@@ -2438,7 +2438,7 @@
     },
     {
      "nombre": "VIVVO01",
-     "descripcion": "TIPO DE VIVIENDA",
+     "descripcion": "Tipo de vivienda",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Casa",
@@ -2471,7 +2471,7 @@
     },
     {
      "nombre": "VIVVO02",
-     "descripcion": "CONDICIÓN DE OCUPACIÓN",
+     "descripcion": "Condición de ocupación resumida",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Ocupada",
@@ -2486,7 +2486,7 @@
     },
     {
      "nombre": "VIVVO03",
-     "descripcion": "",
+     "descripcion": "Condición de ocupación",
      "tipo": "TEXT",
      "value_labels": {
       "1": "Ocupada con residentes presentes",
