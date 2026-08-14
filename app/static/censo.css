@@ -292,6 +292,14 @@ button.ask:disabled{opacity:.6; cursor:default;}
 .legend .swatch{display:inline-block; width:12px; height:12px; border-radius:3px; background:var(--map-null); border:1px solid var(--line-strong); vertical-align:-2px;}
 .legend .supr{display:inline-flex; align-items:center; gap:6px; cursor:help; border-bottom:1px dotted var(--ink-3);}
 .legend b{font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums;}
+/* El mapa no siempre dibuja el corte que se pidió: cuando el desglose es más fino
+   que lo que se distingue a esa escala, dibuja su resumen. Se marca en la leyenda
+   —no solo en el texto— porque es donde mira quien lee el mapa. */
+.legend .resumen{
+  display:inline-flex; align-items:center; font-size:.75rem; font-weight:600;
+  color:var(--ink-2); background:var(--surface); border:1px solid var(--line);
+  border-radius:999px; padding:2px 9px; cursor:help;
+}
 
 /* metadatos + acciones */
 .meta{

@@ -310,7 +310,12 @@ async function cargarGeoJSON(cfg, m){
 async function renderMapa(el, m){
   const cfg = MAPA_CFG[m.nivel];
   if (!cfg) return;
-  const mapa = L.map(el, {scrollWheelZoom:false});
+  // Canvas en vez de SVG cuando hay muchos polígonos. Un mapa nacional por segmento
+  // censal son 4.537 formas: con el renderer SVG por defecto eso es un elemento del
+  // DOM por polígono y el navegador se arrastra al mover el mapa. En canvas es un
+  // solo elemento. Debajo de ese volumen conviene SVG, que da bordes más nítidos.
+  const denso = (m.datos || []).length > 400;
+  const mapa = L.map(el, {scrollWheelZoom:false, preferCanvas: denso});
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     { attribution: '© OpenStreetMap, © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(mapa);
 
@@ -325,7 +330,11 @@ async function renderMapa(el, m){
       const v = lookup[String(feat.properties[cfg.prop])];
       const tiene = v !== undefined;
       const t = max > min ? (v - min) / (max - min) : 0.5;
-      return { weight: 1, color: 'rgba(120,130,128,.55)', fillOpacity: 0.82,
+      // El borde se afina cuando hay muchos polígonos: a escala de país, 4.537
+      // segmentos con 1 px de contorno cada uno son más borde que relleno y el mapa
+      // se ve gris en vez de mostrar el dato. Al acercar el zoom cada segmento crece
+      // y el borde fino vuelve a leerse.
+      return { weight: denso ? 0.25 : 1, color: 'rgba(120,130,128,.55)', fillOpacity: 0.82,
                fillColor: tiene ? color(t) : getComputedStyle(document.documentElement).getPropertyValue('--map-null').trim() };
     },
     onEachFeature: (feat, lyr) => {
@@ -621,7 +630,14 @@ async function rellenarOK(card, pregunta, j, censo){
       const r = await renderMapa(card.querySelector(`#map-${id}`), j.mapa);
       const leg = card.querySelector(`#leg-${id}`);
       const rango = r ? `<b>${fmt(r.min)}</b><span class="bar"></span><b>${fmt(r.max)}</b>` : '';
-      leg.innerHTML = `<span class="scale">${rango}</span>
+      // Mapa RESUMEN: el desglose pedido es más fino que lo que se distingue a esta
+      // escala, así que el mapa muestra el nivel agregado. Decirlo en la leyenda y no
+      // solo en el texto es lo que evita que se lea como si fuera el desglose.
+      const res = j.mapa.resumen;
+      const chipRes = res
+        ? `<span class="resumen" title="El desglose por ${esc(res.de)} está completo en la tabla; el mapa lo resume por ${esc(res.a)}.">resumen por ${esc(res.a)}</span>`
+        : '';
+      leg.innerHTML = `<span class="scale">${rango}</span>${chipRes}
         <span class="supr" title="${SUPR_MSG}"><span class="swatch"></span> sin dato publicable</span>`;
     }catch(err){ console.error(err); card.querySelector(`#map-${id}`)?.remove(); card.querySelector(`#leg-${id}`)?.remove(); }
   }

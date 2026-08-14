@@ -39,7 +39,7 @@ import re
 import usage_log
 import registro
 from sql_guard_historicos import SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
-from comun import codigos, ejecutor, llm, pipeline, rechazos, sinonimos
+from comun import codigos, ejecutor, llm, mapa_resumen, pipeline, rechazos, sinonimos
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
@@ -59,11 +59,16 @@ TOPE_REDACTOR = int(os.environ.get("CENSO_TOPE_REDACTOR", "1600"))
 # ~3.960 filas de puro dato que el narrador no usa. Mismo valor que 2011 y 2023.
 FILAS_AL_REDACTOR = 60
 
-# Máximo de unidades que se dibujan en un mapa a la vez. Estaba pegado a LIMITE_MAXIMO y
-# eran dos cosas distintas: una tabla de 3.958 segmentos es útil, un mapa de 3.958
-# polígonos es una mancha. Pesa más acá que en 2011, porque 1996 y 2004 SÍ mapean
-# segmento (1.238 y 586 con geometría).
-LIMITE_MAPA = 300
+# Máximo de unidades que se dibujan en un mapa a la vez. Como en 2023 (14-ago), deja de
+# ser un criterio de diseño y pasa a ser un RESGUARDO: quien pide el detalle por segmento
+# quiere el detalle. Acá cubre de sobra los segmentos CON geometría (2.575 en 2004, 2.321
+# en 1996), que es el techo real de estos dos censos.
+#
+# Ojo con la diferencia respecto de 2023: allá la cartografía de segmentos está completa
+# y el mapa nacional por segmento sale de verdad. Acá NO —se reconstruyó desde las
+# planchas del INE y no cubre todo el país—, así que un desglose amplio sigue saliendo
+# como RESUMEN por sección censal, y por falta de cartografía, no por tamaño.
+LIMITE_MAPA = 6000
 
 # El cliente (proveedor, clave, timeout acotado y reintentos) vive en comun/llm.py,
 # compartido por los cuatro censos.
@@ -455,16 +460,58 @@ class Motor:
             except (TypeError, ValueError):
                 return None       # un código ilegible = no se sabe qué se pintaría
             if cod not in validos:
-                return None       # sin polígono para ese código: no se dibuja NADA
-                                  # (una unidad que falta en silencio es peor que
-                                  #  no tener mapa)
+                # Sin polígono para ese código no se dibuja NADA de este nivel: media
+                # localidad pintada se leería como la localidad entera.
+                #
+                # Pero en SEGMENTO eso dejaba la pregunta más común de 1996 y 2004 —el
+                # desglose por segmento de un departamento o del país— sin ningún mapa,
+                # y encima sin decirlo: la cartografía de segmentos se reconstruyó desde
+                # las planchas del INE y cubre 2.575 de 2004 y 2.321 de 1996, así que
+                # casi cualquier corte amplio toca alguno que no tiene. Se marca como
+                # RESUMIBLE y el que decide es preguntar(): la sección censal sí tiene
+                # cartografía completa y su total se recalcula sobre TODOS los
+                # segmentos, tengan polígono o no. Eso no es un mapa con agujeros: es
+                # otro nivel, entero.
+                if nivel.startswith("segmento_"):
+                    return {"nivel": nivel, "datos": [], "suprimidas": suprimidas,
+                            "_geo": geo_key, "_col": valor_key, "_sin_poligono": True,
+                            "_unidades": len(filas)}
+                return None
             clave = DEPARTAMENTOS.get(cod) if nivel == "departamento" else cod
             if clave is None:
                 return None
             datos.append({"clave": clave, "valor": f[valor_key]})
         if not datos:
             return None
-        return {"nivel": nivel, "datos": datos, "suprimidas": suprimidas}
+        # Código repetido = el desglose es un CRUCE (segmento × sexo), no un corte
+        # geográfico: cada unidad trae varias cifras y un mapa pinta una sola por
+        # polígono. Dibujarlo mostraría una de ellas con cara de ser el total.
+        if len({d["clave"] for d in datos}) != len(datos):
+            return None
+        # '_geo' y '_col' los usa el mapa RESUMEN (comun/mapa_resumen.py) para
+        # volver a agregar la consulta a un nivel dibujable. Se quitan antes de
+        # publicar: son detalle interno, no parte del contrato con el frontend.
+        return {"nivel": nivel, "datos": datos, "suprimidas": suprimidas,
+                "_geo": geo_key, "_col": valor_key}
+
+    @staticmethod
+    def _clave_resumen(cod, nivel):
+        """Código agregado -> clave del GeoJSON, o None si no hay polígono.
+
+        Misma convención que el mapa fino, que es lo que hace que el resumen se
+        pueda pintar con la misma cartografía: la sección se identifica por su
+        código (dpto*100 + secc) y el departamento por su NOMBRE en mayúsculas sin
+        tilde, que es como vienen los polígonos de departamentos.geojson.
+        """
+        try:
+            cod = int(str(cod).strip())
+        except (TypeError, ValueError):
+            return None
+        if nivel == "seccion":
+            return cod if cod in secciones_con_poligono() else None
+        if nivel == "departamento":
+            return DEPARTAMENTOS.get(cod)
+        return None
 
     # -- pipeline ---------------------------------------------------------
     def mapa_codigos(self):
@@ -603,14 +650,27 @@ class Motor:
         if mapa:
             # Un mapa recortado es peor que no dibujarlo: se ve completo y no lo está.
             # Acá pesa más que en 2011 porque los históricos SÍ dibujan segmento.
-            if len(mapa["datos"]) > LIMITE_MAPA:
-                respuesta["respuesta"] += (
-                    "\n\n_Nota: el desglose tiene %d unidades y supera el máximo de %d que "
-                    "se pueden dibujar a la vez, por lo que NO se muestra el mapa (sería un "
-                    "recorte parcial). La tabla de datos sí viene completa. Acotá la "
-                    "pregunta a un ámbito menor —un departamento o una sección— para ver "
-                    "el mapa._" % (len(mapa["datos"]), LIMITE_MAPA))
+            # Pero no dibujar NADA tampoco era la respuesta: lo que no se puede pintar
+            # es el desglose, no la geografía. Se recalcula el RESUMEN por sección (o
+            # por departamento) y se dibuja eso, diciendo que es un resumen. Dos
+            # motivos distintos llegan acá y se explican distinto: son demasiadas
+            # unidades para la escala, o la cartografía de segmentos no las cubre.
+            sin_poligono = mapa.get("_sin_poligono")
+            unidades = mapa.get("_unidades") or len(mapa["datos"])
+            if sin_poligono or len(mapa["datos"]) > LIMITE_MAPA:
+                resumen, _supr = mapa_resumen.resumir(
+                    sql_seguro, mapa["nivel"], mapa["_geo"], mapa["_col"],
+                    columnas_conteo, lambda s: ejecutor.filas(self.db, s),
+                    LIMITE_MAPA, numerico=True, clave_de=self._clave_resumen)
+                if resumen:
+                    respuesta["mapa"] = resumen
+                respuesta["respuesta"] += mapa_resumen.aviso(
+                    unidades, mapa["nivel"], resumen["nivel"] if resumen else None,
+                    motivo="cartografia" if sin_poligono else "escala")
             else:
                 respuesta["mapa"] = mapa
+        if respuesta.get("mapa"):
+            for interno in ("_geo", "_col", "_sin_poligono", "_unidades"):
+                respuesta["mapa"].pop(interno, None)
         pipeline.recordar_resultado(sql_seguro, self.censo, respuesta)
         return respuesta

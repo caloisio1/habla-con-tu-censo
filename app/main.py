@@ -33,7 +33,8 @@ import consultar_2004   # motor Censo 2004 Fase 1 (conteo, sin ponderar)
 MOTORES_HISTORICOS = {"1996": consultar_1996, "2004": consultar_2004}
 import usage_log         # registro de métricas de tokens (solo métricas, sin contenido)
 import registro          # rastro de las consultas rechazadas (pregunta + SQL + motivo)
-from comun import ejecutor, llm, perdidos, pipeline, precalentar, rechazos, sinonimos  # módulo compartido
+from comun import (ejecutor, llm, mapa_resumen, perdidos, pipeline, precalentar,
+                   rechazos, sinonimos)  # módulo compartido
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", llm.MODELO_POR_DEFECTO)
@@ -661,12 +662,13 @@ def responder_2011(texto: str, avisar=None) -> dict:
         # Un mapa recortado es peor que no dibujarlo: se ve completo y no lo está.
         # La TABLA sí viene entera, y eso se aclara.
         if len(mapa["datos"]) > LIMITE_MAPA:
-            respuesta["respuesta"] += (
-                f"\n\n_Nota: el desglose tiene {len(mapa['datos'])} unidades y supera el "
-                f"máximo de {LIMITE_MAPA} que se pueden dibujar a la vez, por lo que NO se "
-                f"muestra el mapa (sería un recorte parcial). La tabla de datos sí viene "
-                f"completa. Acotá la pregunta a un ámbito menor —un departamento o una "
-                f"sección— para ver el mapa._")
+            # 2011 no tiene mapa RESUMEN como 2023 y los históricos, y no es un
+            # olvido: acá el corte más fino que se dibuja es la sección censal
+            # (231 en todo el país), así que este aviso es casi inalcanzable y un
+            # resumen sería código muerto. Si algún día 2011 mapea segmento, el
+            # resumen se arma con comun/mapa_resumen.py igual que en los otros.
+            respuesta["respuesta"] += mapa_resumen.aviso(
+                len(mapa["datos"]), mapa["nivel"])
         else:
             mapa["suprimidas"] = suprimidas   # suprimidas ya no están en datos
             respuesta["mapa"] = mapa

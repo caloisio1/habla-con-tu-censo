@@ -292,10 +292,16 @@ def capa_b():
             elif comprobacion.startswith("cifra:"):
                 ok = bool(r.get("ok")) and _cifra_esperada(r, float(comprobacion.split(":")[1]))
             elif comprobacion == "tabla_completa":
-                # Dos cosas juntas: la tabla llega entera (4.297 segmentos, antes 300) y
-                # el redactor NO se queda mudo por el tamaño del resultado.
+                # TRES cosas juntas: la tabla llega entera (4.297 segmentos, antes 300),
+                # el redactor NO se queda mudo por el tamaño del resultado, y el mapa
+                # nacional POR SEGMENTO se dibuja, con una unidad por fila. Lo tercero
+                # es lo que se rompería en silencio: un desglose sin mapa sigue
+                # contestando bien, así que nadie lo notaría hasta mirar la pantalla.
                 filas = r.get("datos") or []
-                ok = bool(r.get("ok")) and len(filas) >= 4000 and len(texto.strip()) > 80
+                mapa = r.get("mapa") or {}
+                ok = (bool(r.get("ok")) and len(filas) >= 4000 and len(texto.strip()) > 80
+                      and mapa.get("nivel") == "segmento_2023"
+                      and len(mapa.get("datos") or []) == len(filas))
             elif comprobacion == "desocupadas_1996":
                 # Se controla la CIFRA, no el SQL: hay más de una forma correcta de
                 # escribir el filtro, y una sola respuesta correcta.

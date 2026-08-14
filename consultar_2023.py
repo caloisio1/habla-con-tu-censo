@@ -12,13 +12,27 @@ sys.path.insert(0, AQUI)
 from sql_guard_2023 import validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
 import registro
 import usage_log
-from comun import ejecutor, llm, pipeline, rechazos, sinonimos, universo
+from comun import ejecutor, llm, mapa_resumen, pipeline, rechazos, sinonimos, universo
 
 # Cuántas unidades geográficas se pueden DIBUJAR de una vez. Es otra cosa que el tope de
-# filas de la tabla (sql_guard_2023.LIMITE_MAXIMO): la tabla de los 4.297 segmentos se
-# entrega entera, pero 4.297 polígonos en un mapa de pantalla no se leen. Por encima de
-# este número se entregan los datos y se explica por qué no hay mapa.
-LIMITE_MAPA = 300
+# filas de la tabla (sql_guard_2023.LIMITE_MAXIMO).
+#
+# Estaba en 300 con el argumento de que 4.297 polígonos no se leen. Carlos, 14-ago:
+# **«si pido un mapa de Uruguay por segmentos, necesito que lo produzca»**. Tenía razón
+# y el argumento era del sistema, no del usuario: quien pide el detalle por segmento
+# quiere el detalle, y para eso está el zoom.
+#
+# Lo que sí era cierto es que el mapa nacional por segmento no se podía servir: eran
+# 41,1 MB de GeoJSON en 19 archivos. Eso se arregló donde estaba el problema —la
+# cartografía se simplificó topológicamente a 9,3 MB, 2,4 MB comprimidos, ver
+# simplificar_segmentos_2023.sh— y no recortando lo que se puede preguntar.
+#
+# Así que 6.000 no es un criterio de diseño, es un RESGUARDO, como el de filas: está por
+# encima del corte completo más fino que existe (4.537 segmentos censales) para que
+# ninguna pregunta geográfica legítima lo toque. Lo que lo supera ya no es geografía
+# sino un cruce (segmento × edad son 335.958 filas), y ahí el mapa pasa a ser el RESUMEN
+# por sección censal (comun/mapa_resumen.py).
+LIMITE_MAPA = 6000
 # Cuántas filas ve el REDACTOR. Con el desglose completo en el prompt el modelo gasta el
 # presupuesto de salida razonando y devuelve la respuesta VACÍA (medido el 12-ago con 300
 # filas: el usuario recibió sólo la tabla y ni una frase). Los totales los suma Python
@@ -420,7 +434,20 @@ def construir_mapa_2023(filas, columnas_conteo, suprimidas, sql=""):
         return None
     datos = [{"clave": str(f[geo_key]), "valor": f[valor_key]}
              for f in filas if str(f[geo_key]) not in _CONTESTADA]
-    return {"nivel": nivel, "datos": datos, "suprimidas": suprimidas}
+    # Un código repetido significa que el desglose NO es solo geográfico: es un cruce
+    # (segmento × sexo, sección × edad) y cada unidad tiene varias cifras. Un mapa
+    # pinta UN valor por polígono, así que dibujarlo se queda con una de ellas —la
+    # última— y muestra "los varones de cada segmento" con cara de "cada segmento".
+    # No se dibuja. Pesa más desde que el mapa por segmento sí se dibuja: antes estos
+    # cruces caían igual por tamaño y el error quedaba tapado.
+    if len({d["clave"] for d in datos}) != len(datos):
+        return None
+    # '_geo' y '_col' son para el mapa RESUMEN, que necesita saber qué columna se
+    # está pintando y cómo se llama la del código para volver a agregar la consulta.
+    # Empiezan con guión bajo y se quitan antes de publicar la respuesta: son
+    # detalle interno, no parte del contrato con el frontend.
+    return {"nivel": nivel, "datos": datos, "suprimidas": suprimidas,
+            "_geo": geo_key, "_col": valor_key}
 
 
 def preguntar(texto, verbose=False, avisar=None):
@@ -524,14 +551,23 @@ def preguntar(texto, verbose=False, avisar=None):
         # Anti-truncamiento: nunca mostrar un mapa nacional recortado en silencio.
         total = _contar_unidades_geo(sql_seguro) if n_geo_raw >= LIMITE_MAXIMO else len(mapa["datos"])
         if total > LIMITE_MAPA:
-            nivel_txt = _NIVEL_TXT.get(mapa["nivel"], "unidad")
-            resultado["respuesta"] += (
-                f"\n\n_Nota: el desglose por {nivel_txt} tiene {total} unidades y supera el máximo de "
-                f"{LIMITE_MAPA} que se pueden dibujar a la vez, por lo que NO se muestra el mapa (sería un "
-                f"recorte parcial). La tabla de datos sí viene completa. Acotá la pregunta a un ámbito "
-                f"menor —un departamento o una sección— para ver el mapa._")
+            # El desglose no entra en un mapa, pero su RESUMEN sí. Se recalcula por
+            # sección (o por departamento) y se dibuja eso, diciendo que es un
+            # resumen. Si la métrica no se puede sumar —un porcentaje— no hay mapa,
+            # como antes: la alternativa sería pintar un número sin significado.
+            resumen, _supr = mapa_resumen.resumir(
+                sql_seguro, mapa["nivel"], mapa["_geo"], mapa["_col"], columnas_conteo,
+                lambda s: ejecutor.filas(DB, s), LIMITE_MAPA, numerico=False,
+                excluir=_CONTESTADA)
+            if resumen:
+                resultado["mapa"] = resumen
+            resultado["respuesta"] += mapa_resumen.aviso(
+                total, mapa["nivel"], resumen["nivel"] if resumen else None)
         else:
             resultado["mapa"] = mapa
+    if resultado.get("mapa"):
+        for interno in ("_geo", "_col"):
+            resultado["mapa"].pop(interno, None)
     pipeline.recordar_resultado(sql_seguro, "2023", resultado)
     return resultado
 
