@@ -91,6 +91,16 @@ def _clasificar(candidatos, interpretacion=None):
     if len(candidatos) == 1:
         return _r(UNICO, entidad=candidatos[0], interpretacion=interpretacion)
 
+    # Nombre con una sola lectura declarada (Montevideo): se elige esa y no se
+    # pregunta. Se exige que TODOS los candidatos compartan el nombre —o sea que
+    # esto sea la colisión departamento/ciudad y no un empate de la distancia de
+    # edición entre nombres distintos, donde elegir por tabla sería adivinar.
+    if len({normalizar(e.nombre) for e in candidatos}) == 1:
+        buscado = sinonimos.lectura_unica(candidatos[0].nombre)
+        elegidos = [e for e in candidatos if e.tipo == buscado] if buscado else []
+        if len(elegidos) == 1:
+            return _r(UNICO, entidad=elegidos[0], interpretacion=interpretacion)
+
     tipos = {e.tipo for e in candidatos}
     deptos = {e.departamento for e in candidatos}
     # FRAGMENTACIÓN: mismo tipo, mismo nombre, repartido entre departamentos. No
@@ -420,6 +430,11 @@ def opciones(resultado, censo):
 def colision_entre_tipos(texto, censo):
     """Entidades de tipos DISTINTOS que comparten ese nombre. Vacío si no hay."""
     clave = normalizar(texto)
+    # Montevideo no se desambigua: la ciudad y el departamento son lo mismo para
+    # cualquiera que hable, y aclararlo es ruido. Ver comun/sinonimos.LECTURA_UNICA,
+    # donde está declarada la regla y la diferencia que se deja de mencionar.
+    if sinonimos.lectura_unica(texto):
+        return []
     coincidencias = [e for e in nom.catalogo(censo, nom.TIPOS_GEO)
                      if normalizar(e.nombre) == clave]
     if len({e.tipo for e in coincidencias}) > 1:

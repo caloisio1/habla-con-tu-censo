@@ -91,6 +91,20 @@ MUNICIPIOS_MVD = {letra: "MUNICIPIO " + letra for letra in LETRAS_MUNICIPIO_MVD}
 MUNICIPIOS_MVD.update({"MUN " + l: "MUNICIPIO " + l for l in LETRAS_MUNICIPIO_MVD})
 MUNICIPIOS_MVD.update({"MPIO " + l: "MUNICIPIO " + l for l in LETRAS_MUNICIPIO_MVD})
 
+# ── nombres que NO se desambiguan ────────────────────────────────────────
+# Casi todos los departamentos comparten el nombre con su capital, y esa colisión
+# es REAL: quien dice "Canelones" puede estar hablando del departamento (608.960
+# personas) o de la ciudad (24.159), y son cosas distintas también en el habla.
+# Montevideo no: la ciudad y el departamento son lo mismo para cualquiera que
+# hable, y preguntar cuál se quiso decir es ruido. Se lee SIEMPRE como
+# departamento, que es la cifra que el INE publica como Montevideo.
+#
+# La consecuencia, asumida (Carlos, 15-ago-2026): entre las dos lecturas hay
+# 21.398 personas de diferencia -las de Rural Montevideo, localidad 01900- y esa
+# diferencia deja de mencionarse. Es el 1,6 % del departamento. Quien la necesite
+# la puede pedir, porque preguntar por la localidad sigue funcionando.
+LECTURA_UNICA = {"MONTEVIDEO": "departamento"}
+
 # Capitales departamentales: permiten resolver "la capital de Flores" -> Trinidad,
 # que es el caso que NO es homonimia sino sinónimo (la ciudad y el departamento se
 # llaman distinto).
@@ -108,6 +122,7 @@ _CONCEPTOS_N = {normalizar(k): v for k, v in CONCEPTOS.items()}
 _GEO_N = {normalizar(k): v for k, v in GEOGRAFICOS.items()}
 _CAPITALES_N = {normalizar(k): v for k, v in CAPITALES.items()}
 _MUNICIPIOS_N = {normalizar(k): v for k, v in MUNICIPIOS_MVD.items()}
+_LECTURA_UNICA_N = {normalizar(k): v for k, v in LECTURA_UNICA.items()}
 
 
 def concepto(texto):
@@ -128,6 +143,11 @@ def capital_de(departamento):
 def municipio(texto):
     """Letra de un municipio de Montevideo -> nombre en la base, o None."""
     return _MUNICIPIOS_N.get(normalizar(texto))
+
+
+def lectura_unica(texto):
+    """Tipo con el que se lee siempre ese nombre, o None si hay que desambiguar."""
+    return _LECTURA_UNICA_N.get(normalizar(texto))
 
 
 def todos():

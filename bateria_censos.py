@@ -181,6 +181,25 @@ def capa_a():
             nom.MUNICIPIO not in nom.TIPOS_GEO
             and resolver("Piriápolis", None, "2023").estado == UNICO)
 
+    # ── Montevideo no se desambigua (Carlos, 15-ago) ──────────────────────
+    # "Montevideo" tiene una sola lectura para cualquiera que hable, así que no se
+    # declara ni se ofrece la otra. Canelones y Maldonado SÍ: ahí la ciudad y el
+    # departamento son cosas distintas (608.960 contra 24.159) y callarlo cambiaría
+    # la cifra sin avisar. El control cuida las dos mitades de la regla.
+    for censo in CENSOS:
+        r = resolver("Montevideo", None, censo)
+        control("A/entidades", "%s · 'Montevideo' no pide aclaración" % censo,
+                r.estado == UNICO and r.entidad.tipo == nom.DEPARTAMENTO,
+                r.estado, "unico/departamento")
+    sql = "SELECT ROUND(SUM(W)) FROM personas_2023 WHERE DEPARTAMENTO = '01'"
+    _s, interp, alt = resolver_en_sql(sql, "2023")
+    control("A/entidades", "2023 · Montevideo no declara lectura ni ofrece otra",
+            not interp and not alt, "%s / %s" % (interp, alt), "sin nota")
+    sql = "SELECT ROUND(SUM(W)) FROM personas_2023 WHERE DEPARTAMENTO = '03'"
+    _s, interp, alt = resolver_en_sql(sql, "2023")
+    control("A/entidades", "2023 · Canelones SÍ declara y ofrece la ciudad",
+            bool(interp) and bool(alt), "%s / %s" % (interp, alt), "con nota")
+
     print("\n=== CAPA A · desambiguación de indicadores ===")
     for censo in ("1996", "2011", "2023"):
         r = indicadores.desambiguar("¿Cuál es el departamento más educado?", censo)
