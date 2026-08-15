@@ -39,7 +39,8 @@ import re
 import usage_log
 import registro
 from sql_guard_historicos import SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
-from comun import codigos, ejecutor, llm, mapa_resumen, pipeline, rechazos, sinonimos
+from comun import (codigos, ejecutor, llm, mapa_resumen, no_respondible, pipeline,
+                   rechazos, sinonimos)
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
@@ -221,7 +222,12 @@ cuando la pregunta pide segmentos de UNA localidad o UNA sección concreta. Sin 
 una unidad dibujable no se dibuja mapa: sale solo la tabla.
 NO uses geo_codigo en ningún otro corte geográfico (zona, localidad): la aplicación no
 tiene la cartografía de esos marcos para este censo.
-- Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE"""
+- Si la pregunta no puede responderse con este esquema, devolvé
+  NO_RESPONDIBLE: <el dato que falta, en pocas palabras, ej. 'la orientación sexual'>
+  Nombrá SOLO la condición que sobra, no la pregunta entera, y NO uses una
+  variable parecida como si fuera esa.
+- Si la pregunta trae «Omitir la condición que este censo no relevó: X», generá el SQL
+  IGNORANDO esa condición y respondiendo todo lo demás con normalidad."""
 
 SYS_REDACTA_BASE = (
     "Respondé la pregunta usando EXCLUSIVAMENTE los datos provistos. Sé breve y preciso. "
@@ -566,11 +572,12 @@ class Motor:
             _av("etapa", "sql")
             sql_crudo = self.generar_sql(texto, contexto)
             pipeline.recordar_sql(texto, self.censo, contexto, sql_crudo)
-        if sql_crudo.strip() == "NO_RESPONDIBLE":
-            registro.no_respondible(self.censo, texto)
+        if no_respondible.es(sql_crudo):
+            dato = no_respondible.dato_faltante(sql_crudo)
+            registro.no_respondible(self.censo, texto, dato)
             return {"ok": False, "sql": None, "veredicto": "NO_RESPONDIBLE",
-                    "respuesta": "Esa pregunta no puede responderse con las variables "
-                                 "disponibles del Censo %s." % self.censo}
+                    "respuesta": no_respondible.mensaje(dato, self.censo),
+                    "opciones": no_respondible.opciones(texto, dato, self.censo)}
 
         # 2. Entidades nombradas y nomenclátor cruzado. Puede terminar acá si hay
         #    que preguntar, y nunca se rotula como confidencialidad.

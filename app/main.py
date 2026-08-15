@@ -33,8 +33,8 @@ import consultar_2004   # motor Censo 2004 Fase 1 (conteo, sin ponderar)
 MOTORES_HISTORICOS = {"1996": consultar_1996, "2004": consultar_2004}
 import usage_log         # registro de métricas de tokens (solo métricas, sin contenido)
 import registro          # rastro de las consultas rechazadas (pregunta + SQL + motivo)
-from comun import (ejecutor, llm, mapa_resumen, perdidos, pipeline, precalentar,
-                   rechazos, sinonimos)  # módulo compartido
+from comun import (ejecutor, llm, mapa_resumen, no_respondible, perdidos, pipeline,
+                   precalentar, rechazos, sinonimos)  # módulo compartido
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", llm.MODELO_POR_DEFECTO)
@@ -281,7 +281,12 @@ Otras aclaraciones:
   viviendas OCUPADAS (VIVVO03 = 1 o 2). Preguntas por viviendas DESOCUPADAS, vacantes,
   vacías o "para alquilar/vender" (VIVVO03 3-7) NO son respondibles con estos datos ->
   devolvé exactamente: NO_RESPONDIBLE_VIVIENDAS
-- Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE"""
+- Si la pregunta no puede responderse con este esquema, devolvé
+  NO_RESPONDIBLE: <el dato que falta, en pocas palabras, ej. 'la orientación sexual'>
+  Nombrá SOLO la condición que sobra, no la pregunta entera, y NO uses una
+  variable parecida como si fuera esa.
+- Si la pregunta trae «Omitir la condición que este censo no relevó: X», generá el SQL
+  IGNORANDO esa condición y respondiendo todo lo demás con normalidad."""
 
 PROMPT_SQL = f"""Sos un traductor de preguntas en español a SQL (dialecto SQLite) sobre \
 el Censo 2011 de Uruguay.
@@ -581,11 +586,13 @@ def responder_2011(texto: str, avisar=None) -> dict:
         registro.no_respondible("2011", texto, "viviendas desocupadas")
         return {"ok": False, "respuesta": MENSAJE_VIVIENDAS_DESOCUPADAS}
 
-    if sql_crudo == "NO_RESPONDIBLE":
-        registro.no_respondible("2011", texto)
+    if no_respondible.es(sql_crudo):
+        dato = no_respondible.dato_faltante(sql_crudo)
+        registro.no_respondible("2011", texto, dato)
         return {
             "ok": False,
-            "respuesta": "Esa pregunta no puede responderse con las variables disponibles.",
+            "respuesta": no_respondible.mensaje(dato, "2011"),
+            "opciones": no_respondible.opciones(texto, dato, "2011"),
         }
 
     sql_crudo = normalizar_departamentos(sql_crudo)

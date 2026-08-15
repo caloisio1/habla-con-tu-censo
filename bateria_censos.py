@@ -296,6 +296,40 @@ def capa_a():
     control("A/universitario", "'universitario' ya no pasa por el chip",
             indicadores.desambiguar("¿Cuántos universitarios hay en Salto?", "2023") is None)
 
+    print("\n=== CAPA A · cuando el censo no relevó lo que se pregunta ===")
+    # El mensaje era fijo: "no puede responderse con las variables disponibles".
+    # Correcto de fondo, inútil de forma: con cuatro condiciones en la pregunta nadie
+    # podía saber cuál sobraba, y tres de las cuatro sí se podían responder.
+    from comun import no_respondible as nores
+    control("A/no-relevado", "reconoce el token con motivo",
+            nores.es("NO_RESPONDIBLE: la orientación sexual"))
+    control("A/no-relevado", "y también el token pelado (modelo viejo o parco)",
+            nores.es("NO_RESPONDIBLE"))
+    # 2011 usa NO_RESPONDIBLE_VIVIENDAS para otra cosa: un startswith se lo comería y
+    # el aviso propio de viviendas desocupadas quedaría tapado.
+    control("A/no-relevado", "NO confunde NO_RESPONDIBLE_VIVIENDAS",
+            not nores.es("NO_RESPONDIBLE_VIVIENDAS"))
+    control("A/no-relevado", "no se dispara con un SELECT normal",
+            not nores.es("SELECT ROUND(SUM(W)) FROM personas_2023"))
+    control("A/no-relevado", "extrae el dato que falta",
+            nores.dato_faltante("NO_RESPONDIBLE: la orientación sexual.")
+            == "la orientación sexual",
+            nores.dato_faltante("NO_RESPONDIBLE: la orientación sexual."),
+            "la orientación sexual")
+    control("A/no-relevado", "el mensaje NOMBRA el dato",
+            "orientación sexual" in nores.mensaje("la orientación sexual", "2023"))
+    p = "¿Cuántos hombres solteros hay en Montevideo y son heterosexuales?"
+    ops = nores.opciones(p, "la orientación sexual", "2023")
+    control("A/no-relevado", "ofrece la pregunta sin esa condición",
+            bool(ops) and p.rstrip("?") in ops[0]["pregunta"])
+    control("A/no-relevado", "y la marca la vuelve respondible",
+            bool(ops) and nores.MARCA_OMITIR in ops[0]["pregunta"])
+    # Sin dato no se inventa un chip: ofrecer "la cifra sin esa condición" sin saber
+    # cuál es la condición sería peor que no ofrecer nada.
+    control("A/no-relevado", "sin dato no ofrece nada y no miente",
+            not nores.opciones(p, "", "2023")
+            and "orientación" not in nores.mensaje("", "2023"))
+
     print("\n=== CAPA A · por qué una consulta volvió vacía ===")
     # Un resultado vacío se informaba siempre igual: "sencillamente no hay
     # registros". Es una afirmación sobre el país, y era falsa cada vez que un
@@ -444,6 +478,17 @@ PREGUNTAS_B = [
     ("municipio-letra", "2023",
      "¿Qué cantidad de hombres solteros de 40 a 47 años según clasificación de actividad, "
      "en la población del municipio B?", "cifra:1409"),
+    # 15-ago-2026 · Carlos: el censo no relevó orientación sexual (verificado: el CSV
+    # fuente del INE trae 147 columnas y la única de sexo/género es PERPH02, "sexo al
+    # nacer"). Rechazar está bien; lo que faltaba era decir CUÁL de las condiciones
+    # sobra y ofrecer la cifra sin ella —había 10.963 esperando del otro lado—.
+    ("no-relevado-nombra-el-dato", "2023",
+     "¿Cuántos hombres solteros hay de entre 40 y 47 años en Montevideo y son "
+     "heterosexuales?", "no_relevado:orientación sexual"),
+    ("no-relevado-y-la-cifra-sin-eso", "2023",
+     "¿Cuántos hombres solteros hay de entre 40 y 47 años en Montevideo y son "
+     "heterosexuales? — Omitir la condición que este censo no relevó: la orientación "
+     "sexual", "cifra:10963"),
     # 15-ago-2026 · Carlos: la MISMA pregunta después de elegir el criterio en el chip.
     # Es el texto que el chip manda ahora (original + criterio), y la cifra verificada
     # contra la base es 619. Antes esta vuelta devolvía 16,48 -el porcentaje del país-
@@ -495,6 +540,14 @@ def capa_b():
                 # La colisión departamento/ciudad no bloquea: responde, declara cuál
                 # leyó y ofrece la otra lectura como chip.
                 ok = bool(r.get("ok")) and bool(r.get("opciones"))
+            elif comprobacion.startswith("no_relevado:"):
+                # No alcanza con rechazar: el rechazo tiene que NOMBRAR el dato que
+                # falta y ofrecer la pregunta sin esa condición. El mensaje fijo de
+                # antes ("no puede responderse con las variables disponibles") dejaba
+                # al usuario sin saber cuál de sus cuatro condiciones sobraba.
+                esperado = comprobacion.split(":", 1)[1].lower()
+                ok = (r.get("veredicto") == "NO_RESPONDIBLE"
+                      and esperado in texto and bool(r.get("opciones")))
             elif comprobacion == "sin_filtro_sexo":
                 ok = not any(p in sql for p in ("perph02", "sexo ="))
             elif comprobacion.startswith("cifra:"):

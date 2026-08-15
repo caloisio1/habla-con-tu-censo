@@ -12,7 +12,8 @@ sys.path.insert(0, AQUI)
 from sql_guard_2023 import validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
 import registro
 import usage_log
-from comun import ejecutor, llm, mapa_resumen, pipeline, rechazos, sinonimos, universo
+from comun import (ejecutor, llm, mapa_resumen, no_respondible, pipeline, rechazos,
+                   sinonimos, universo)
 
 # Cuántas unidades geográficas se pueden DIBUJAR de una vez. Es otra cosa que el tope de
 # filas de la tabla (sql_guard_2023.LIMITE_MAXIMO).
@@ -194,7 +195,12 @@ LUGAR DE NACIMIENTO Y MIGRACIÓN INTERNA (el censo relevó lugar de nacimiento; 
 - "nacidos en el departamento X que viven en Y": WHERE DEPARTAMENTO='<Y con cero>' AND DEPTO_NACIM='<X sin cero>'.
   Ej. Rivera->Montevideo: WHERE DEPARTAMENTO='01' AND DEPTO_NACIM='13'.
 - "viven en un departamento distinto al que nacieron" (nacional): WHERE PERMI01=3.
-- Si la pregunta no puede responderse con este esquema, devolvé exactamente: NO_RESPONDIBLE"""
+- Si la pregunta no puede responderse con este esquema, devolvé
+  NO_RESPONDIBLE: <el dato que falta, en pocas palabras, ej. 'la orientación sexual'>
+  Nombrá SOLO la condición que sobra, no la pregunta entera, y NO uses una
+  variable parecida como si fuera esa.
+- Si la pregunta trae «Omitir la condición que este censo no relevó: X», generá el SQL
+  IGNORANDO esa condición y respondiendo todo lo demás con normalidad."""
 
 # El glosario sale del módulo compartido: los cuatro censos leen la MISMA tabla de
 # sinónimos que usa el resolver, así "NBI" o "jefatura" no se interpretan distinto
@@ -471,9 +477,14 @@ def preguntar(texto, verbose=False, avisar=None):
         _av("etapa", "sql")
         sql_crudo = generar_sql(texto, contexto)
         pipeline.recordar_sql(texto, "2023", contexto, sql_crudo)
-    if sql_crudo.strip() == "NO_RESPONDIBLE":
-        registro.no_respondible("2023", texto)
-        return {"ok": False, "respuesta": "Esa pregunta no puede responderse con las variables disponibles.",
+    if no_respondible.es(sql_crudo):
+        # Se dice QUÉ falta y se ofrece la pregunta sin esa condición. El mensaje
+        # fijo de antes era correcto y casi inútil: con cuatro condiciones en la
+        # pregunta, nadie podía saber cuál sobraba.
+        dato = no_respondible.dato_faltante(sql_crudo)
+        registro.no_respondible("2023", texto, dato)
+        return {"ok": False, "respuesta": no_respondible.mensaje(dato, "2023"),
+                "opciones": no_respondible.opciones(texto, dato, "2023"),
                 "sql": None, "veredicto": "NO_RESPONDIBLE"}
 
     # Entidades nombradas: resuelve, reescribe o pregunta. Nunca rotula como
