@@ -27,7 +27,8 @@ os.chdir(AQUI)
 sys.path.insert(0, AQUI)
 
 from comun import edad, ejecutor, indicadores, nomenclator as nom, rechazos, supresion
-from comun.resolver import AMBIGUO, FRAGMENTADO, NO_ENCONTRADO, OTRO_CENSO, UNICO, resolver
+from comun.resolver import (AMBIGUO, FRAGMENTADO, NO_ENCONTRADO, OTRO_CENSO, UNICO,
+                            colision_entre_tipos, resolver, tipo_declarado)
 from comun.sql_entidades import EntidadNoResuelta, preparar_1996, resolver_en_sql
 
 MODO = (sys.argv[1] if len(sys.argv) > 1 else "A").upper()
@@ -199,6 +200,33 @@ def capa_a():
     _s, interp, alt = resolver_en_sql(sql, "2023")
     control("A/entidades", "2023 · Canelones SÍ declara y ofrece la ciudad",
             bool(interp) and bool(alt), "%s / %s" % (interp, alt), "con nota")
+
+    # ── el chip de entidad tampoco puede tirar la pregunta (Carlos, 15-ago) ──
+    # "¿Cuántos DESOCUPADOS hay en Canelones?" -> el chip mandaba "¿Cuántas
+    # PERSONAS hay en Canelones, ciudad o localidad?" y la respuesta contestaba
+    # otra pregunta. Se controla en TODOS los departamentos que tienen una
+    # localidad con su nombre, que es donde aparece el chip.
+    homonimos = [e for e in nom.catalogo("2023", nom.DEPARTAMENTO)
+                 if colision_entre_tipos(e.nombre, "2023")]
+    control("A/entidades", "2023 · hay departamentos con ciudad homónima que controlar",
+            len(homonimos) >= 10, len(homonimos), ">= 10")
+    sin_pregunta, sin_tipo = [], []
+    for e in homonimos:
+        p = "¿Cuántos desocupados hay en %s?" % e.nombre
+        s = ("SELECT ROUND(SUM(W)) FROM personas_2023 "
+             "WHERE DEPARTAMENTO = '%s' AND POBPCOAC = '3'" % e.codigo)
+        chips = resolver_en_sql(s, "2023", p)[2]
+        for ch in chips:
+            if p.rstrip("?") not in ch["pregunta"]:
+                sin_pregunta.append(e.nombre)
+            # La lectura elegida tiene que seguir siendo legible para el resolver,
+            # o al volver se le pregunta al usuario lo que acaba de contestar.
+            if tipo_declarado(ch["pregunta"]) is None:
+                sin_tipo.append(e.nombre)
+    control("A/entidades", "2023 · el chip conserva la pregunta en los %d homónimos"
+            % len(homonimos), not sin_pregunta, sin_pregunta, "ninguno")
+    control("A/entidades", "2023 · y la lectura elegida sigue siendo legible",
+            not sin_tipo, sin_tipo, "ninguno")
 
     print("\n=== CAPA A · desambiguación de indicadores ===")
     for censo in ("1996", "2011", "2023"):

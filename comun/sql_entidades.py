@@ -256,7 +256,7 @@ def resolver_en_sql(sql, censo, pregunta=None):
                     alternativas.extend(choque)
 
     salida = sql if not cambiado else " ".join(a.sql(dialect="sqlite") for a in arboles)
-    return salida, interpretaciones, _chips(alternativas, censo)
+    return salida, interpretaciones, _chips(alternativas, censo, pregunta)
 
 
 _ETIQUETA_TIPO = {nom.LOCALIDAD: "ciudad o localidad", nom.DEPARTAMENTO: "departamento",
@@ -270,24 +270,34 @@ def _frase_tipo(entidad):
     return "%s (%s)" % (_titulo(entidad.nombre), _ETIQUETA_TIPO.get(entidad.tipo, entidad.tipo))
 
 
-def _chips(alternativas, censo):
+def _chips(alternativas, censo, pregunta=None):
     """Las otras lecturas posibles, con su cifra, listas para el frontend.
 
     La cifra respeta la supresión: si la entidad tiene menos de 5 registros crudos,
     el chip va sin número (ver nomenclator.poblacion).
+
+    `pregunta` es la del usuario: el chip la CONSERVA y le agrega la lectura
+    elegida. Antes mandaba una canónica que la reemplazaba, y elegir "la ciudad de
+    Canelones" en "¿cuántos DESOCUPADOS hay en Canelones?" devolvía la población
+    total: la respuesta contestaba otra pregunta. La canónica cumplía además una
+    segunda función —nombrar el tipo para que tipo_declarado() lo detecte y el
+    resolver no vuelva a preguntar—, y eso lo sostiene ahora MARCA_LECTURA.
     """
-    from comun.resolver import _titulo
+    from comun.resolver import _titulo, MARCA_LECTURA
     salida = []
+    base = (pregunta or "").strip()
     for e in _sin_repetir(alternativas):
         etiqueta = _ETIQUETA_TIPO.get(e.tipo, e.tipo)
         personas = nom.poblacion(e)
         texto = "¿Querías %s %s?" % (rechazos.articulo(etiqueta, definido=True),
                                      "%s de %s" % (etiqueta, _titulo(e.nombre)))
+        canonica = "¿Cuántas personas hay en %s, %s?" % (_titulo(e.nombre), etiqueta)
         salida.append({"texto": texto,
                        "detalle": ("%s personas" % _miles(personas)) if personas else "",
                        "tipo": e.tipo, "codigo": e.codigo, "censo": censo,
-                       "pregunta": "¿Cuántas personas hay en %s, %s?"
-                                   % (_titulo(e.nombre), etiqueta)})
+                       "pregunta": ("%s — %s %s, %s." % (base, MARCA_LECTURA,
+                                                         _titulo(e.nombre), etiqueta)
+                                    if base else canonica)})
     return salida
 
 

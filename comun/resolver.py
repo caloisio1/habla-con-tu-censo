@@ -452,11 +452,24 @@ _PALABRAS_TIPO = {
 }
 
 
+# Marca con la que el chip de desambiguación declara la lectura que el usuario
+# eligió. Existe porque el chip ahora manda la pregunta ORIGINAL más la lectura,
+# en vez de reemplazarla por una canónica, y la original puede nombrar OTRO tipo
+# de entidad ("en el municipio B de Montevideo"): mirando la pregunta entera se
+# encontrarían dos tipos y esta función devolvería None, o sea volvería a
+# preguntar lo que el usuario acaba de contestar. Con la marca solo se mira lo que
+# viene DESPUÉS de ella, que es la elección explícita.
+MARCA_LECTURA = "Lectura elegida:"
+_MARCA_LECTURA_N = normalizar(MARCA_LECTURA)
+
+
 def tipo_declarado(pregunta):
     """Tipo de entidad que la propia pregunta menciona, o None."""
     if not pregunta:
         return None
     t = normalizar(pregunta)
+    if _MARCA_LECTURA_N in t:
+        t = t.split(_MARCA_LECTURA_N, 1)[1]
     encontrados = {tipo for tipo, palabras in _PALABRAS_TIPO.items()
                    if any(p in t.split() or p in t for p in palabras)}
     return encontrados.pop() if len(encontrados) == 1 else None
