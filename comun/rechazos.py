@@ -40,6 +40,21 @@ def supresion(celdas, unidad="personas"):
               detalle={"celdas": celdas, "umbral": UMBRAL})
 
 
+# Tipos de entidad de género masculino, por su primera palabra. La frase se
+# arma con el nombre del tipo adentro ("ninguna ciudad o localidad", "ningún
+# municipio"), así que el artículo tiene que concordar o el mensaje sale mal
+# escrito, y este mensaje lo lee el usuario final.
+_TIPOS_MASCULINOS = ("departamento", "barrio", "municipio", "centro")
+
+
+def articulo(tipo, definido=False):
+    """'el'/'la' o 'ningún'/'ninguna' según el género del tipo de entidad."""
+    masculino = str(tipo).split()[0].lower() in _TIPOS_MASCULINOS
+    if definido:
+        return "el" if masculino else "la"
+    return "ningún" if masculino else "ninguna"
+
+
 def no_encontrada(texto, sugerencias=(), tipo="localidad"):
     """No se reconoció el nombre. NUNCA se rotula como confidencialidad."""
     nombres = [s if isinstance(s, str) else s.nombre for s in sugerencias]
@@ -48,8 +63,8 @@ def no_encontrada(texto, sugerencias=(), tipo="localidad"):
     else:
         cola = " Revisá cómo se escribe o probá con otro nombre."
     return _r(NO_ENCONTRADA,
-              'No encontré ninguna %s con el nombre "%s" en este censo.%s'
-              % (tipo, texto, cola),
+              'No encontré %s %s con el nombre "%s" en este censo.%s'
+              % (articulo(tipo), tipo, texto, cola),
               sugerencias=nombres, detalle={"texto": texto, "tipo": tipo})
 
 

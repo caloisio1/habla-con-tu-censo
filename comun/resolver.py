@@ -148,6 +148,16 @@ def resolver(texto, tipo=None, censo="2023", variable=None):
         tipos = (tipos,)
 
     original = str(texto)
+
+    # Municipio de Montevideo nombrado por su letra ("B", "CH"), que es como lo
+    # nombra todo el mundo y como sale del modelo. Se traduce ANTES de buscar
+    # porque 'B' no llega a 'MUNICIPIO B' por ninguna de las vías de abajo: no es
+    # una variante ortográfica ni fonética, es otra forma de nombrar. Solo se
+    # aplica cuando el tipo ya está fijado en municipio, o sea cuando el SQL
+    # comparó contra MUNICIPIO_136.
+    if nom.MUNICIPIO in tipos:
+        original = sinonimos.municipio(original) or original
+
     entidades, por_norm, por_compat, por_fon, por_num = _indices(censo, tipos)
 
     # 1. match exacto sobre lo normalizado
@@ -354,6 +364,11 @@ def _frase(entidad):
         return "%s de Montevideo" % entidad.nombre
     if entidad.tipo == nom.DEPARTAMENTO:
         return "departamento de %s" % _titulo(entidad.nombre)
+    if entidad.tipo == nom.MUNICIPIO:
+        # Los ocho de Montevideo ya se llaman "Municipio B": anteponerle otra vez
+        # la palabra daría "municipio de Municipio B".
+        nombre = _titulo(entidad.nombre)
+        return nombre if nombre.upper().startswith("MUNICIPIO") else "municipio de %s" % nombre
     return _titulo(entidad.nombre)
 
 

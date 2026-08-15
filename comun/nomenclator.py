@@ -39,7 +39,15 @@ LOCALIDAD = "localidad"
 DEPARTAMENTO = "departamento"
 BARRIO = "barrio"
 CCZ = "ccz"
+MUNICIPIO = "municipio"
 ETIQUETA = "etiqueta"
+
+# MUNICIPIO queda FUERA de TIPOS_GEO a propósito. TIPOS_GEO es lo que se busca
+# cuando la pregunta no dice de qué tipo de entidad habla, y casi todos los 136
+# municipios se llaman igual que la localidad que los encabeza (CARMELO,
+# PIRIÁPOLIS, CHUY): incluirlos ahí convertiría en ambigua cualquier pregunta por
+# esas localidades, que hoy se responde sin preguntar. El tipo municipio lo fija
+# la columna del SQL (MUNICIPIO_136), que es inequívoca, no la búsqueda a ciegas.
 TIPOS_GEO = (LOCALIDAD, DEPARTAMENTO, BARRIO, CCZ)
 
 # codigo: el valor que va al SQL. nombre: el literal tal cual está en la base.
@@ -120,6 +128,28 @@ def _barrios(censo):
     return [Entidad(censo, BARRIO, str(c), n, "MONTEVIDEO", None) for c, n in filas]
 
 
+def _municipios(censo):
+    """Municipios del Censo 2023, leídos de la propia columna MUNICIPIO_136.
+
+    No hay tabla de nomenclátor para los municipios: la columna GUARDA EL NOMBRE
+    (texto en mayúsculas, 'MUNICIPIO B', 'PIRIÁPOLIS'), igual que BARRIO85. Por
+    eso el código de la entidad es el nombre mismo: es el literal que va al SQL.
+
+    El departamento queda en None para los municipios que cruzan más de uno
+    (CERRO CHATO reparte entre Durazno, Florida y Treinta y Tres) y para
+    'SIN MUNICIPIO', que no es un lugar sino el resto del país: decir uno solo
+    sería falso, y el resolver solo lo usa para desambiguar y rotular.
+    """
+    if censo != "2023":
+        return []
+    deptos = {c: n for c, n in _consultar(censo, "SELECT codigo, nombre FROM departamentos_2023")}
+    filas = _consultar(censo, (
+        "SELECT MUNICIPIO_136, "
+        "CASE WHEN COUNT(DISTINCT DEPARTAMENTO)=1 THEN MIN(DEPARTAMENTO) END "
+        "FROM personas_2023 WHERE MUNICIPIO_136 IS NOT NULL GROUP BY 1"))
+    return [Entidad(censo, MUNICIPIO, n, n, deptos.get(d), None) for n, d in filas]
+
+
 def _ccz(censo):
     if censo != "2011":
         return []
@@ -160,7 +190,8 @@ def catalogo(censo, tipo=None):
     with _LOCK:
         if censo not in _CACHE:
             _CACHE[censo] = (_localidades(censo) + _departamentos(censo)
-                             + _barrios(censo) + _ccz(censo) + _etiquetas(censo))
+                             + _barrios(censo) + _ccz(censo) + _municipios(censo)
+                             + _etiquetas(censo))
     if tipo is None:
         return _CACHE[censo]
     tipos = (tipo,) if isinstance(tipo, str) else tuple(tipo)
@@ -205,6 +236,8 @@ _SQL_POBLACION = {
     ("2023", BARRIO): ("SELECT ROUND(SUM(p.W)), COUNT(*) FROM personas_2023 p "
                        "JOIN barrios_mvd_2023 b ON p.BARRIO85 = b.nombre "
                        "WHERE b.codbarrio = ?"),
+    ("2023", MUNICIPIO): ("SELECT ROUND(SUM(W)), COUNT(*) FROM personas_2023 "
+                          "WHERE MUNICIPIO_136 = ?"),
     ("2011", LOCALIDAD): "SELECT COUNT(*), COUNT(*) FROM personas WHERE codloc = ?",
     ("2011", DEPARTAMENTO): "SELECT COUNT(*), COUNT(*) FROM personas WHERE departamento = ?",
     ("2011", BARRIO): "SELECT COUNT(*), COUNT(*) FROM personas WHERE BARRIO85 = ?",

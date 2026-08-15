@@ -157,6 +157,30 @@ def capa_a():
     control("A/entidades", "2023 · 'Abayuba' dice en qué censos sí está",
             r.estado == OTRO_CENSO and "1996" in r.censos_alternativos)
 
+    # ── municipios de 2023 ────────────────────────────────────────────────
+    # MUNICIPIO_136 guarda el NOMBRE, no un código, y los ocho de Montevideo se
+    # nombran por su letra: preguntar por "el municipio B" salía como
+    # MUNICIPIO_136 = 'B', no matcheaba nada y la consulta volvía vacía sin
+    # explicar por qué. El literal tiene que llegar a la base ya canonizado.
+    for escrito, esperado in (("B", "MUNICIPIO B"), ("ch", "MUNICIPIO CH"),
+                              ("MUNICIPIO B", "MUNICIPIO B"), ("Piriapolis", "PIRIÁPOLIS")):
+        r = resolver(escrito, nom.MUNICIPIO, "2023")
+        control("A/entidades", "2023 · municipio %r -> %s" % (escrito, esperado),
+                r.estado == UNICO and r.entidad.nombre == esperado,
+                r.entidad.nombre if r.entidad else r.estado, esperado)
+    sql = "SELECT COUNT(*) FROM personas_2023 WHERE MUNICIPIO_136 = 'B'"
+    corregido, _i, _a = resolver_en_sql(sql, "2023")
+    control("A/entidades", "2023 · el SQL sale con el nombre del municipio",
+            "'MUNICIPIO B'" in corregido, corregido, "'MUNICIPIO B'")
+    filas = ejecutor.tuplas(nom.BASES["2023"], corregido)
+    control("A/entidades", "2023 · y ejecutado devuelve filas, no vacío",
+            bool(filas) and filas[0][0] > 0, filas[0][0] if filas else 0, "> 0")
+    # Los municipios NO entran en la búsqueda sin tipo: casi todos se llaman como
+    # su localidad cabecera y volverían ambigua media geografía del país.
+    control("A/entidades", "2023 · el municipio no contamina la búsqueda sin tipo",
+            nom.MUNICIPIO not in nom.TIPOS_GEO
+            and resolver("Piriápolis", None, "2023").estado == UNICO)
+
     print("\n=== CAPA A · desambiguación de indicadores ===")
     for censo in ("1996", "2011", "2023"):
         r = indicadores.desambiguar("¿Cuál es el departamento más educado?", censo)
@@ -245,6 +269,14 @@ PREGUNTAS_B = [
     # de Montevideo salía con 24 secciones en vez de 25.
     ("ine-seccion-99", "2023", "¿Cuántas personas hay en cada sección censal de Montevideo?",
      "cifra:75855"),
+    # 15-ago-2026 · Carlos: los municipios de Montevideo se nombran por su letra, pero
+    # MUNICIPIO_136 guarda 'MUNICIPIO B'. El filtro salía como MUNICIPIO_136 = 'B', no
+    # matcheaba nada y la respuesta era "La consulta no devolvió resultados" —sin decir
+    # que el problema era el nombre. Se controla la cifra de los ocupados (1.409) porque
+    # es la que prueba que el filtro llegó a la base resuelto y con el desglose pedido.
+    ("municipio-letra", "2023",
+     "¿Qué cantidad de hombres solteros de 40 a 47 años según clasificación de actividad, "
+     "en la población del municipio B?", "cifra:1409"),
 ]
 
 

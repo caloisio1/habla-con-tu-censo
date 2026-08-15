@@ -39,6 +39,13 @@ COLUMNAS_NOMBRE = {
         ("localidades_2023", "nombre"): nom.LOCALIDAD,
         ("departamentos_2023", "nombre"): nom.DEPARTAMENTO,
         ("barrios_mvd_2023", "nombre"): nom.BARRIO,
+        # MUNICIPIO_136 no es un código: guarda el NOMBRE del municipio en la
+        # propia tabla de personas, igual que BARRIO85. Sin esta línea el literal
+        # no pasaba por el resolver y llegaba crudo a la base: 'B' (la letra con
+        # la que se nombra a los municipios de Montevideo) no matcheaba nada y la
+        # consulta salía vacía, que es el fallo que este post-paso existe para
+        # evitar. La traducción letra -> 'MUNICIPIO B' está en comun/sinonimos.py.
+        ("personas_2023", "municipio_136"): nom.MUNICIPIO,
     },
     "2011": {
         ("localidades", "nombre"): nom.LOCALIDAD,
@@ -253,7 +260,8 @@ def resolver_en_sql(sql, censo, pregunta=None):
 
 
 _ETIQUETA_TIPO = {nom.LOCALIDAD: "ciudad o localidad", nom.DEPARTAMENTO: "departamento",
-                  nom.BARRIO: "barrio de Montevideo", nom.CCZ: "centro comunal zonal"}
+                  nom.BARRIO: "barrio de Montevideo", nom.CCZ: "centro comunal zonal",
+                  nom.MUNICIPIO: "municipio"}
 
 
 def _frase_tipo(entidad):
@@ -273,7 +281,7 @@ def _chips(alternativas, censo):
     for e in _sin_repetir(alternativas):
         etiqueta = _ETIQUETA_TIPO.get(e.tipo, e.tipo)
         personas = nom.poblacion(e)
-        texto = "¿Querías %s %s?" % ("el" if etiqueta == "departamento" else "la",
+        texto = "¿Querías %s %s?" % (rechazos.articulo(etiqueta, definido=True),
                                      "%s de %s" % (etiqueta, _titulo(e.nombre)))
         salida.append({"texto": texto,
                        "detalle": ("%s personas" % _miles(personas)) if personas else "",

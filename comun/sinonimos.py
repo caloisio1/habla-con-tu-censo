@@ -74,6 +74,23 @@ GEOGRAFICOS = {
     "33": "TREINTA Y TRES",
 }
 
+# ── municipios de Montevideo: la letra -> el nombre que guarda la base ───
+# Los ocho municipios de Montevideo no tienen nombre propio: se llaman por una
+# letra, y así los nombra todo el mundo ("el municipio B", "vivo en el CH"). La
+# columna MUNICIPIO_136, en cambio, guarda 'MUNICIPIO B'. Sin esta traducción el
+# filtro sale como MUNICIPIO_136 = 'B', no matchea NADA y la consulta vuelve
+# vacía sin explicar por qué, que es exactamente el fallo silencioso que el
+# resolver existe para evitar.
+#
+# Solo se aplica cuando el SQL ya fijó que se está hablando de un municipio (la
+# comparación es contra MUNICIPIO_136); una letra suelta no significa nada en
+# ningún otro contexto, así que no hay riesgo de que se aplique de más.
+LETRAS_MUNICIPIO_MVD = ("A", "B", "C", "CH", "D", "E", "F", "G")
+
+MUNICIPIOS_MVD = {letra: "MUNICIPIO " + letra for letra in LETRAS_MUNICIPIO_MVD}
+MUNICIPIOS_MVD.update({"MUN " + l: "MUNICIPIO " + l for l in LETRAS_MUNICIPIO_MVD})
+MUNICIPIOS_MVD.update({"MPIO " + l: "MUNICIPIO " + l for l in LETRAS_MUNICIPIO_MVD})
+
 # Capitales departamentales: permiten resolver "la capital de Flores" -> Trinidad,
 # que es el caso que NO es homonimia sino sinónimo (la ciudad y el departamento se
 # llaman distinto).
@@ -90,6 +107,7 @@ CAPITALES = {
 _CONCEPTOS_N = {normalizar(k): v for k, v in CONCEPTOS.items()}
 _GEO_N = {normalizar(k): v for k, v in GEOGRAFICOS.items()}
 _CAPITALES_N = {normalizar(k): v for k, v in CAPITALES.items()}
+_MUNICIPIOS_N = {normalizar(k): v for k, v in MUNICIPIOS_MVD.items()}
 
 
 def concepto(texto):
@@ -107,10 +125,15 @@ def capital_de(departamento):
     return _CAPITALES_N.get(normalizar(departamento))
 
 
+def municipio(texto):
+    """Letra de un municipio de Montevideo -> nombre en la base, o None."""
+    return _MUNICIPIOS_N.get(normalizar(texto))
+
+
 def todos():
     """Vista completa de la tabla, para auditarla o mostrarla en un informe."""
     return {"conceptos": dict(CONCEPTOS), "geograficos": dict(GEOGRAFICOS),
-            "capitales": dict(CAPITALES)}
+            "capitales": dict(CAPITALES), "municipios": dict(MUNICIPIOS_MVD)}
 
 
 def glosario_para_prompt():

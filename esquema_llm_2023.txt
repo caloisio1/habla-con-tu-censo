@@ -27,7 +27,7 @@ TABLA personas_2023 (SUM(W)):
 - AREA | Área | 1=Urbano; 2=Rural; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - BARRIO85 | Área aproximada a barrio (def. 1985) Montevideo | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - CCZ | Centro comunal zonal (Montevideo) | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
-- MUNICIPIO_136 | Municipio | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- MUNICIPIO_136 | Municipio | TEXTO con el NOMBRE del municipio en mayusculas (136 valores), NO un codigo. Los 8 de Montevideo se llaman por letra y en la base figuran como 'MUNICIPIO A'..'MUNICIPIO G' y 'MUNICIPIO CH' (ej: MUNICIPIO_136 = 'MUNICIPIO B'); el resto lleva el nombre de su localidad cabecera ('PIRIAPOLIS', 'CIUDAD DE LA COSTA'). 'SIN MUNICIPIO' = territorio no municipalizado. | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - FUENTE_EXT | Modalidad de relevamiento | 1=Cuestionario Censal; 2=Registros administrativos; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - SIT_CALLE | Persona en situación de calle (intemperie o refugios) | 0=No; 1=Si; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - RELEVAMIENTO | Modalidad de relevamiento | 1=CAPI; 2=CAWI; 3=CATI; 4=Registros de viviendas colectivas; 5=Registros administrativos; 6=Situación de calle; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
@@ -171,7 +171,7 @@ TABLA viviendas_2023 (COUNT(*)):
 - AREA | Área | 1=Urbano; 2=Rural; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - BARRIO85 | Área aproximada a barrio (def. 1985) Montevideo | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - CCZ | Centro comunal zonal (montevideo) | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
-- MUNICIPIO_136 | Municipio | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
+- MUNICIPIO_136 | Municipio | TEXTO con el NOMBRE del municipio en mayusculas (136 valores), NO un codigo. Los 8 de Montevideo se llaman por letra y en la base figuran como 'MUNICIPIO A'..'MUNICIPIO G' y 'MUNICIPIO CH' (ej: MUNICIPIO_136 = 'MUNICIPIO B'); el resto lleva el nombre de su localidad cabecera ('PIRIAPOLIS', 'CIUDAD DE LA COSTA'). 'SIN MUNICIPIO' = territorio no municipalizado. | 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - VIVVO00 | Tipo de vivienda resumido | 1=Particular; 2=Colectiva; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - VIVVO01 | Tipo de vivienda | 1=Casa; 2=Apartamento en edificio en altura con ascensor; 3=Apartamento en edificio en altura sin ascensor; 4=Apartamento en edificio de una planta; 5=Apartamento o cuarto en local o vivienda colectiva; 6=Local no construido para vivienda; 7=Vivienda móvil (carpa, casa rodante, etc.); 8=Otro tipo de vivienda particular; 9=Hotel, pensión u otra casa de hospedaje; 10=Hospital, sanatorio (con internación permanente); 11=Residencial de ancianos; 12=Residencial de estudiantes; 13=Casa de peones; 14=Internado religioso; 15=Establecimiento de reclusión, penitenciarios; 16=Hogares y/o Centros de atención / protección; 17=Cuartel militar o policial; 22=Refugios; 21=Centro de rehabilitación no carcelaria con internación permanente; 18=Otra colectiva; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
 - VIVVO02 | Condición de ocupación resumida | 1=Ocupada; 2=Desocupada; 7777:NC; 8888:NR; 9898:IG; 9999:NRec
