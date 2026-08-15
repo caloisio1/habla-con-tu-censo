@@ -610,7 +610,8 @@ class Motor:
         # 3. Supresión con la regla corregida: el cero NO es confidencialidad.
         unidad = self.unidad_conteo(columnas_conteo, sql_seguro)
         filas, suprimidas, vacias, rechazo = pipeline.sobre_filas(
-            filas, columnas_conteo, unidad)
+            filas, columnas_conteo, unidad,
+            sql=sql_seguro, base=self.db, censo=self.censo)
         if rechazo is not None:
             return dict(rechazos.a_respuesta(rechazo, sql=sql_seguro),
                         veredicto="OK", celdas_suprimidas=suprimidas)

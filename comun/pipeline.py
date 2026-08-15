@@ -17,7 +17,7 @@ Orden de una consulta, con el paso compartido entre paréntesis:
 """
 import re
 
-from comun import cache, edad, indicadores, rechazos, supresion
+from comun import cache, diagnostico, edad, indicadores, rechazos, supresion
 from comun.sql_entidades import (EntidadNoResuelta, canonizar, preparar_1996,
                                  resolver_en_sql)
 
@@ -156,26 +156,51 @@ def sobre_sql(sql, censo, pregunta=None):
     return corregido, interpretaciones, alternativas
 
 
-def sobre_filas(filas, columnas_conteo, unidad="personas"):
+SIN_CASOS = ("La consulta se ejecutó correctamente pero no encontró ningún caso que "
+             "cumpla esas condiciones en este censo. No es un problema de "
+             "confidencialidad: sencillamente no hay registros.")
+
+
+def _por_que_vacio(mensaje, sql, base, censo):
+    """Cambia el mensaje de vacío cuando la culpa es de un filtro, no del censo.
+
+    "Sencillamente no hay registros" es una afirmación sobre el país, y era falsa
+    cada vez que un filtro no coincidía con ningún valor de su variable: la
+    consulta del municipio 'B' contestaba que no hay solteros universitarios de 40
+    a 47 en el Municipio B, y había 628. Cuando se puede señalar el filtro, se
+    señala; cuando no, el mensaje de siempre, que ahí sí es cierto.
+    """
+    if not (sql and base):
+        return mensaje
+    try:
+        diag = diagnostico.filtro_sin_coincidencias(base, sql, censo)
+        explicacion = diagnostico.explicar(diag)
+    except Exception:                                    # noqa: BLE001
+        return mensaje      # el diagnóstico mejora el mensaje, nunca impide responder
+    if not explicacion:
+        return mensaje
+    return ("La consulta volvió vacía, pero no porque el censo no tenga esos casos. "
+            + explicacion)
+
+
+def sobre_filas(filas, columnas_conteo, unidad="personas", sql=None, base=None, censo=None):
     """Supresión con la regla corregida.
 
     Devuelve (filas, suprimidas, vacias, rechazo). `rechazo` no es None cuando no
     queda nada publicable, y distingue los dos casos que antes se confundían:
     no hubo casos (vacío) o los hubo pero son menos de cinco (supresión).
+
+    `sql`, `base` y `censo` son opcionales y sirven solo para diagnosticar el vacío
+    (ver `_por_que_vacio`); sin ellos el comportamiento es el de antes.
     """
     filas, suprimidas, vacias = supresion.suprimir_celdas_chicas(filas, columnas_conteo)
     if filas:
         return filas, suprimidas, vacias, None
     if suprimidas:
         return filas, suprimidas, vacias, rechazos.supresion(suprimidas, unidad)
-    if vacias:
-        return filas, suprimidas, vacias, rechazos._r(
-            "sin_casos",
-            "La consulta se ejecutó correctamente pero no encontró ningún caso que "
-            "cumpla esas condiciones en este censo. No es un problema de "
-            "confidencialidad: sencillamente no hay registros.")
+    base_msg = SIN_CASOS if vacias else "La consulta no devolvió resultados."
     return filas, suprimidas, vacias, rechazos._r(
-        "sin_casos", "La consulta no devolvió resultados.")
+        "sin_casos", _por_que_vacio(base_msg, sql, base, censo))
 
 
 def nota_final(interpretaciones, contexto):

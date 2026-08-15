@@ -629,7 +629,8 @@ def responder_2011(texto: str, avisar=None) -> dict:
 
     # Supresión con la regla corregida: el conteo CERO no es confidencialidad.
     filas, suprimidas, vacias, rechazo = pipeline.sobre_filas(
-        filas, columnas_conteo, unidad_conteo(columnas_conteo))
+        filas, columnas_conteo, unidad_conteo(columnas_conteo),
+        sql=sql_seguro, base=DB_PATH, censo="2011")
     if rechazo is not None:
         return dict(rechazos.a_respuesta(rechazo, sql=sql_seguro),
                     celdas_suprimidas=suprimidas)

@@ -514,7 +514,8 @@ def preguntar(texto, verbose=False, avisar=None):
     # Supresión con la regla corregida (1 <= n < 5): un conteo CERO no es un
     # secreto estadístico, es la ausencia de casos, y se dice como tal.
     filas, suprimidas, vacias, rechazo = pipeline.sobre_filas(
-        filas, columnas_conteo, unidad_conteo(columnas_conteo))
+        filas, columnas_conteo, unidad_conteo(columnas_conteo),
+        sql=sql_seguro, base=DB, censo="2023")
     if rechazo is not None:
         return dict(rechazos.a_respuesta(rechazo, sql=sql_seguro),
                     veredicto="OK", celdas_suprimidas=suprimidas)

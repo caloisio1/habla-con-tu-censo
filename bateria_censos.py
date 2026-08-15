@@ -26,7 +26,8 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 os.chdir(AQUI)
 sys.path.insert(0, AQUI)
 
-from comun import edad, ejecutor, indicadores, nomenclator as nom, rechazos, supresion
+from comun import (edad, ejecutor, indicadores, nomenclator as nom, pipeline, rechazos,
+                   supresion)
 from comun.resolver import (AMBIGUO, FRAGMENTADO, NO_ENCONTRADO, OTRO_CENSO, UNICO,
                             colision_entre_tipos, resolver, tipo_declarado)
 from comun.sql_entidades import EntidadNoResuelta, preparar_1996, resolver_en_sql
@@ -254,6 +255,60 @@ def capa_a():
     control("A/indicadores", "2023 · y no vuelve a disparar la desambiguación",
             all(indicadores.detectar(c) is None for c in chips),
             [indicadores.detectar(c) for c in chips], "None")
+
+    print("\n=== CAPA A · por qué una consulta volvió vacía ===")
+    # Un resultado vacío se informaba siempre igual: "sencillamente no hay
+    # registros". Es una afirmación sobre el país, y era falsa cada vez que un
+    # filtro no coincidía con ningún valor de su variable. Lo que se controla acá
+    # son las DOS mitades: que señale el filtro cuando la culpa es del filtro, y
+    # que NO invente un culpable cuando el vacío es un hecho del censo.
+    from comun import diagnostico
+    B2023 = nom.BASES["2023"]
+    culpables = [
+        ("código que la variable no tiene", "SELECT 1 FROM personas_2023 WHERE PEREC04 = 3"),
+        ("municipio nombrado por la letra",
+         "SELECT 1 FROM personas_2023 WHERE MUNICIPIO_136 = 'B'"),
+        ("lista de códigos inventados",
+         "SELECT 1 FROM personas_2023 WHERE POBPCOAC IN ('8','9')"),
+    ]
+    for que, sql in culpables:
+        d = diagnostico.filtro_sin_coincidencias(B2023, sql, "2023")
+        control("A/vacio", "2023 · señala el filtro: %s" % que, d is not None,
+                diagnostico.explicar(d)[:40], "diagnóstico")
+    # Continuas y combinaciones: acá "no hay registros" es la verdad y hay que
+    # dejarla en paz. La edad tiene 113 valores distintos: no es un dominio cerrado.
+    reales = [
+        ("edad fuera de rango (200 años)", "SELECT 1 FROM personas_2023 WHERE PERNA01 = 200"),
+        ("combinación imposible con filtros válidos",
+         "SELECT 1 FROM personas_2023 WHERE PERNA01 BETWEEN 40 AND 47 AND NIVELEDU25MAS = '0'"),
+    ]
+    for que, sql in reales:
+        d = diagnostico.filtro_sin_coincidencias(B2023, sql, "2023")
+        control("A/vacio", "2023 · NO inventa culpable: %s" % que, d is None,
+                diagnostico.explicar(d)[:60], "sin diagnóstico")
+    # El mensaje que llega al usuario cambia de afirmación, no solo de adorno.
+    _f, _s, _v, rech = pipeline.sobre_filas(
+        [], ["n_crudo"], "personas",
+        sql="SELECT COUNT(*) AS n_crudo FROM personas_2023 WHERE PEREC04 = 3",
+        base=B2023, censo="2023")
+    control("A/vacio", "2023 · el mensaje deja de decir 'no hay registros'",
+            "sencillamente no hay registros" not in rech.mensaje
+            and "PEREC04" in rech.mensaje, rech.mensaje[:60], "diagnóstico")
+    # Sin sql/base el comportamiento es el de antes: los motores que no lo pasen
+    # siguen funcionando igual.
+    _f, _s, _v, rech = pipeline.sobre_filas([], ["n_crudo"], "personas")
+    control("A/vacio", "sin SQL a mano, el mensaje de siempre",
+            "no devolvió resultados" in rech.mensaje, rech.mensaje[:40], "mensaje viejo")
+    # No puede romper en ningún censo: es una mejora del mensaje, nunca un motivo
+    # para no responder.
+    rotos = []
+    for censo in CENSOS:
+        try:
+            diagnostico.filtro_sin_coincidencias(nom.BASES[censo], "SELECT 1 FROM no_existe", censo)
+            diagnostico.filtro_sin_coincidencias(nom.BASES[censo], "esto no es SQL", censo)
+        except Exception as exc:                          # noqa: BLE001
+            rotos.append("%s: %s" % (censo, exc))
+    control("A/vacio", "nunca lanza, en ninguno de los cuatro censos", not rotos, rotos, "ninguno")
 
     print("\n=== CAPA A · etiquetas de rechazo ===")
     casos = [rechazos.supresion(1), rechazos.no_encontrada("Xyz", ["Abc"]),
