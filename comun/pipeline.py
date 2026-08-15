@@ -17,7 +17,8 @@ Orden de una consulta, con el paso compartido entre paréntesis:
 """
 import re
 
-from comun import cache, diagnostico, edad, indicadores, rechazos, supresion
+from comun import (cache, diagnostico, edad, indicadores, nivel_universitario, rechazos,
+                   supresion)
 from comun.sql_entidades import (EntidadNoResuelta, canonizar, preparar_1996,
                                  resolver_en_sql)
 
@@ -39,8 +40,17 @@ def antes(texto, censo):
     contexto = {
         "instruccion_edad": edad.instruccion(texto, COLUMNA_EDAD.get(censo, "edad"), censo),
         "declaraciones_edad": edad.declaraciones(texto),
+        "instruccion_nivel": nivel_universitario.instruccion(texto, censo),
+        "declaraciones_nivel": nivel_universitario.declaraciones(texto, censo),
     }
     return None, contexto
+
+
+# Las convenciones que se leen de la pregunta, se le imponen al modelo y se declaran
+# en la respuesta. Agregar una es agregarla acá y en `antes()`: el resto del pipeline
+# no necesita saber cuántas hay.
+INSTRUCCIONES = ("instruccion_edad", "instruccion_nivel")
+DECLARACIONES = ("declaraciones_edad", "declaraciones_nivel")
 
 
 def mensaje_usuario(texto, contexto):
@@ -49,7 +59,8 @@ def mensaje_usuario(texto, contexto):
     La pregunta va SIEMPRE al final: el prefijo del prompt tiene que quedar
     estable para que la API lo sirva desde el caché (99 % del prompt de 2023).
     """
-    instr = (contexto or {}).get("instruccion_edad") or ""
+    instrucciones = [(contexto or {}).get(k) or "" for k in INSTRUCCIONES]
+    instr = "\n\n".join(i for i in instrucciones if i)
     return (instr + "\n\n" + texto) if instr else texto
 
 
@@ -208,9 +219,17 @@ def nota_final(interpretaciones, contexto):
     partes = []
     for i in dict.fromkeys(interpretaciones or []):
         partes.append("Se interpretó como %s." % i)
-    for d in dict.fromkeys((contexto or {}).get("declaraciones_edad") or []):
+    for d in dict.fromkeys(_declaraciones(contexto)):
         partes.append("Criterio: %s." % d)
     return " ".join(partes)
+
+
+def _declaraciones(contexto):
+    """Todas las declaraciones del contexto, en orden y sin repetir."""
+    salida = []
+    for clave in DECLARACIONES:
+        salida += list((contexto or {}).get(clave) or [])
+    return list(dict.fromkeys(salida))
 
 
 def instruccion_redactor(interpretaciones, contexto):
@@ -245,7 +264,7 @@ def asegurar_declaracion(respuesta, interpretaciones, contexto):
 def _claves(interpretaciones, contexto):
     """Las frases cuya presencia se verifica en el texto de la respuesta."""
     claves = list(dict.fromkeys(interpretaciones or []))
-    claves += list(dict.fromkeys((contexto or {}).get("declaraciones_edad") or []))
+    claves += _declaraciones(contexto)
     return claves
 
 

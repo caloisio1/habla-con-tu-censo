@@ -16,7 +16,7 @@ AQUI = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, AQUI)
 
 from sql_guard_2023 import LIMITE_MAXIMO, SQLNoSeguro, validar   # noqa: E402
-from comun import indicadores, universo                          # noqa: E402
+from comun import indicadores, nivel_universitario, universo     # noqa: E402
 
 DICC = os.path.join(AQUI, "diccionario_llm_2023.json")
 
@@ -183,41 +183,65 @@ def test_la_frase_de_universo_nombra_la_categoria_excluida():
     assert "Menor de 25" in frase
 
 
-# ------------------------------- 5. "universitario": con o sin posgrado, se pregunta
+# ------------------------------- 5. "universitario": lo dice la propia pregunta
+#
+# Hasta el 15-ago-2026 acá se preguntaba con un chip ante cualquier mención de la
+# universidad. Decisión de Carlos ese día: no hace falta: "universidad" es
+# universidad, y "universidad o más" incluye el posgrado. La regla vive ahora en
+# comun/nivel_universitario.py y ya no pasa por indicadores.
 
-def test_universitario_no_se_contesta_solo():
-    """Decisión de Carlos (12-ago): con posgrado da 16,48 % y sin posgrado 13,61 %;
-    el sistema no elige por su cuenta."""
-    for pregunta in ("¿Qué porcentaje de la población tiene nivel universitario?",
-                     "¿Cuántas personas tienen educación universitaria?",
-                     "¿Cuántos universitarios hay en Salto?"):
-        r = indicadores.desambiguar(pregunta, "2023")
-        assert r is not None and r["motivo"] == "consulta_ambigua"
-        assert len(r["opciones"]) == 2
-
-
-def test_postgrado_solo_no_es_ambiguo():
-    assert indicadores.desambiguar("¿Qué porcentaje tiene nivel de postgrado?",
-                                   "2023") is None
-
-
-@pytest.mark.parametrize("censo", ["2011", "2023"])
-def test_las_opciones_no_vuelven_a_disparar(censo):
-    """Si la pregunta del chip disparara la desambiguación, el usuario quedaría en un
-    bucle: elige una opción y el sistema le vuelve a preguntar lo mismo."""
-    for o in indicadores.desambiguar("nivel universitario", censo)["opciones"]:
-        assert indicadores.detectar(o["pregunta"]) is None
+@pytest.mark.parametrize("pregunta", [
+    "¿Qué porcentaje de la población tiene nivel universitario?",
+    "¿Cuántas personas tienen educación universitaria?",
+    "¿Cuántos universitarios hay en Salto?",
+    "¿Cuántas personas terminaron la universidad?",
+])
+def test_universidad_sola_es_solo_universidad(pregunta):
+    """13,61 % en 2023. El posgrado es una categoría APARTE del máximo nivel."""
+    assert nivel_universitario.detectar(pregunta, "2023") == nivel_universitario.SOLO
+    assert "NO incluyas" in nivel_universitario.instruccion(pregunta, "2023")
 
 
-def test_en_1996_no_hay_ambiguedad_y_se_contesta():
+@pytest.mark.parametrize("pregunta", [
+    "¿Cuántas personas tienen universidad o más?",
+    "¿Qué porcentaje tiene nivel universitario o superior?",
+    "¿Cuántos tienen nivel universitario o mayor?",
+    "¿Cuántos tienen al menos nivel universitario?",
+    "¿Cuántos alcanzaron universidad o posgrado?",
+])
+def test_universidad_o_mas_incluye_posgrado(pregunta):
+    """16,48 % en 2023."""
+    assert nivel_universitario.detectar(pregunta, "2023") == nivel_universitario.CON_POSGRADO
+    assert "IN ('9','10')" in nivel_universitario.instruccion(pregunta, "2023")
+
+
+def test_lo_que_se_conto_se_declara_siempre():
+    """En los DOS casos, no solo cuando se agrega el posgrado: una cifra de
+    universitarios que excluye a los doctorados es igual de sorprendente que una que
+    los incluye, y quien la lea tiene que poder auditarla."""
+    for pregunta in ("nivel universitario", "nivel universitario o más"):
+        assert nivel_universitario.declaraciones(pregunta, "2023")
+
+
+def test_universitario_ya_no_pasa_por_el_chip():
+    """El chip interrumpía cada vez que alguien nombraba la universidad."""
+    assert indicadores.desambiguar("¿Cuántos universitarios hay en Salto?", "2023") is None
+
+
+def test_sin_universidad_no_aplica():
+    for pregunta in ("¿Cuántas personas hay en Salto?", "¿Cuántos tienen secundaria?"):
+        assert nivel_universitario.detectar(pregunta, "2023") is None
+
+
+def test_en_1996_no_hay_distincion_que_hacer():
     """`nivel` tiene UNA sola categoría universitaria (6 = Universidad): no hay nada
-    que preguntar, y decir 'no relevado' sería falso."""
+    que decidir, y decir 'no relevado' sería falso."""
+    assert nivel_universitario.detectar("¿Cuántos universitarios hay?", "1996") is None
     assert indicadores.desambiguar("¿Cuántos universitarios hay?", "1996") is None
 
 
-def test_en_2004_se_dice_que_no_se_relevo():
-    r = indicadores.desambiguar("¿Cuántos universitarios hay?", "2004")
-    assert r is not None and r["motivo"] == "variable_no_relevada"
+def test_en_2004_no_se_relevo_educacion():
+    assert nivel_universitario.detectar("¿Cuántos universitarios hay?", "2004") is None
 
 
 # ------------------------------------- 6. la geografía NO tiene códigos centinela

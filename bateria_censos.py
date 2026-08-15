@@ -242,19 +242,59 @@ def capa_a():
     # Antes cada opción mandaba una pregunta canónica que REEMPLAZABA la original:
     # al elegir el criterio se perdían todos los filtros y la respuesta era el
     # 16,48 % del país en vez de la cifra del municipio B. Ahora compone.
-    p = ("¿Cuántos hombres solteros hay de entre 40 y 47 años en el municipio B de "
-         "Montevideo y están ocupados y tienen un nivel educativo universitario?")
+    # Se controla con "más educado" y no con "universitario": el segundo dejó de
+    # desambiguarse el 15-ago (lo decide la forma de la pregunta, ver la sección de
+    # más abajo), así que ya no produce chips que controlar.
+    p = ("¿Cuál es el departamento más educado entre las mujeres de 40 a 47 años "
+         "del municipio B?")
     r = indicadores.desambiguar(p, "2023")
     chips = [o["pregunta"] for o in r["opciones"]]
     control("A/indicadores", "2023 · el chip conserva la pregunta original",
-            all(p.rstrip("?") in c for c in chips), chips[0][:60], p[:60])
+            bool(chips) and all(p.rstrip("?") in c for c in chips),
+            chips[0][:60] if chips else "sin chips", p[:60])
     control("A/indicadores", "2023 · el chip declara el criterio elegido",
-            all(indicadores.MARCA_CRITERIO in c for c in chips))
-    # La pregunta compuesta SÍ contiene "universitario", que es lo que dispara la
+            bool(chips) and all(indicadores.MARCA_CRITERIO in c for c in chips))
+    # La pregunta compuesta SÍ contiene "más educado", que es lo que dispara la
     # ambigüedad: sin la marca, el chip se preguntaría a sí mismo para siempre.
     control("A/indicadores", "2023 · y no vuelve a disparar la desambiguación",
             all(indicadores.detectar(c) is None for c in chips),
             [indicadores.detectar(c) for c in chips], "None")
+
+    print("\n=== CAPA A · qué se cuenta cuando se dice 'universidad' ===")
+    # 15-ago-2026 · Carlos: "si la gente escribe Universidad, mostrale Universidad; si
+    # dice Universidad o más, ahí mostrale Universidad + Posgrado". Antes se preguntaba
+    # con un chip cada vez. El posgrado es una categoría APARTE del máximo nivel, así
+    # que la diferencia es real: 13,61 % contra 16,48 % en 2023.
+    from comun import nivel_universitario as nivel
+    for pregunta in ("¿Qué porcentaje tiene nivel universitario?",
+                     "¿Cuántas personas terminaron la universidad?",
+                     "¿Cuántos universitarios hay en Salto?"):
+        control("A/universitario", "2023 · %r -> solo universidad" % pregunta[:34],
+                nivel.detectar(pregunta, "2023") == nivel.SOLO,
+                nivel.detectar(pregunta, "2023"), nivel.SOLO)
+    for pregunta in ("¿Qué porcentaje tiene nivel universitario o más?",
+                     "¿Cuántos tienen universidad o superior?",
+                     "¿Cuántos tienen al menos nivel universitario?",
+                     "¿Cuántos alcanzaron universidad o posgrado?"):
+        control("A/universitario", "2023 · %r -> con posgrado" % pregunta[:34],
+                nivel.detectar(pregunta, "2023") == nivel.CON_POSGRADO,
+                nivel.detectar(pregunta, "2023"), nivel.CON_POSGRADO)
+    # Lo que se contó se DECLARA en los dos casos, no solo al sumar el posgrado: una
+    # cifra de universitarios que deja afuera a los doctorados es igual de sorprendente.
+    control("A/universitario", "las dos formas declaran qué se contó",
+            all(nivel.declaraciones(p, "2023")
+                for p in ("nivel universitario", "nivel universitario o más")))
+    control("A/universitario", "y las dos declaraciones son DISTINTAS",
+            nivel.declaraciones("nivel universitario", "2023")
+            != nivel.declaraciones("nivel universitario o más", "2023"))
+    # 1996 tiene UNA sola categoría universitaria y 2004 no relevó educación: no hay
+    # nada que decidir, y aplicar la regla ahí sería inventar una distinción.
+    for censo in ("1996", "2004"):
+        control("A/universitario", "%s · no hay distinción que hacer" % censo,
+                nivel.detectar("¿Cuántos universitarios hay?", censo) is None)
+    # Y ya no se interrumpe con un chip cada vez que alguien nombra la universidad.
+    control("A/universitario", "'universitario' ya no pasa por el chip",
+            indicadores.desambiguar("¿Cuántos universitarios hay en Salto?", "2023") is None)
 
     print("\n=== CAPA A · por qué una consulta volvió vacía ===")
     # Un resultado vacío se informaba siempre igual: "sencillamente no hay
@@ -361,13 +401,20 @@ PREGUNTAS_B = [
     # antes devolvía 5,84 % o 9,35 % según la corrida.
     ("ine-desocupacion", "2023", "¿Qué porcentaje de la población está desocupada?",
      "cifra:9.35"),
-    # "Universitario" no se contesta solo: con posgrado 16,48 %, sin posgrado 13,61 %.
-    # Se controla en 2023 y 2011, que comparten la estructura del diccionario; en 1996
-    # NO debe pedir opciones porque no hay ambigüedad (una sola categoría universitaria).
+    # 15-ago-2026 · "universitario" ya NO se pregunta: la forma de la pregunta lo dice.
+    # "universidad" es 13,61 % (solo el código 9) y "universidad o más" es 16,48 % (9 y
+    # 10). Las dos cifras están verificadas por SQL directo, y el par es lo que importa:
+    # si las dos formulaciones dieran lo mismo, la regla no se estaría aplicando.
     ("ine-universitario", "2023", "¿Qué porcentaje de la población tiene nivel universitario?",
-     "pide_opciones"),
+     "cifra:13.61"),
+    ("ine-universitario-mas", "2023",
+     "¿Qué porcentaje de la población tiene nivel universitario o más?", "cifra:16.48"),
+    # 2011 comparte la estructura del diccionario (Niveledu_r, 9 y 10).
     ("ine-universitario-11", "2011", "¿Cuántas personas tienen educación universitaria?",
-     "pide_opciones"),
+     "cifra:297948"),
+    ("ine-universitario-11-mas", "2011",
+     "¿Cuántas personas tienen educación universitaria o más?", "cifra:316224"),
+    # En 1996 `nivel` tiene UNA sola categoría universitaria: no hay nada que decidir.
     ("ine-universitario-96", "1996", "¿Cuántas personas tienen educación universitaria?", "ok"),
     # Las dos tasas sobre la PET, con el piso en 12 (Carlos, 13-ago): 'Menor de 12 años'
     # es 11 o menos, así que el universo que relevó el INE empieza en los 12. Con el piso

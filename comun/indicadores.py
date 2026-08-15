@@ -88,38 +88,6 @@ _EDU_2023 = [
        "por departamento?"),
 ]
 
-# ── universitarios: con o sin posgrado ───────────────────────────────────
-# 12-ago-2026. "Nivel universitario" son dos cifras distintas —16,48 % contra 13,61 %
-# en 2023, casi tres puntos— según se cuente o no a quienes llegaron a posgrado, y el
-# modelo elegía una u otra según la corrida. Decisión de Carlos: no se elige, se
-# pregunta. La convención (universitarios + posgrado) va PRIMERA para que sea la
-# opción obvia, pero el usuario la confirma.
-#
-# 2023 y 2011 comparten la estructura del diccionario ('Universidad o similar' y
-# 'Posgrado' son categorías separadas), así que la ambigüedad es la misma en los dos.
-# En 1996 NO existe: la variable `nivel` tiene una sola categoría universitaria (6 =
-# Universidad), así que ahí no hay nada que preguntar y la pregunta se contesta de
-# una. En 2004 no se relevó educación.
-def _univ(universo, perdidos, sufijo):
-    return [
-        _o("con_posgrado", "Universidad o similar Y posgrado (lo habitual)",
-           universo, perdidos,
-           "¿Qué porcentaje alcanzó el máximo nivel «Universidad o similar» o "
-           "«Posgrado»%s?" % sufijo),
-        _o("sin_posgrado", "Sólo «Universidad o similar», sin contar posgrado",
-           universo, perdidos,
-           "¿Qué porcentaje alcanzó el máximo nivel «Universidad o similar», "
-           "excluyendo «Posgrado»%s?" % sufijo),
-    ]
-
-
-_UNIV_2023 = _univ("población de 25 años y más",
-                   "excluye 0 (menor de 25) y los códigos de no respuesta",
-                   ", en la población de 25 años y más")
-_UNIV_2011 = _univ("población con nivel educativo declarado",
-                   "excluye 13 (ignorado) y 88 (no relevado)",
-                   ", excluyendo los códigos 13 y 88")
-
 # ── condiciones de vivienda ──────────────────────────────────────────────
 _VIV_COMUN = [
     _o("tenencia", "Porcentaje de hogares propietarios de su vivienda",
@@ -139,17 +107,13 @@ INDICADORES = [
         "vivienda", "condiciones de la vivienda",
         "¿Con qué criterio querés medir las condiciones de vivienda?",
         {"1996": _VIV_COMUN, "2004": [], "2011": _VIV_COMUN, "2023": _VIV_COMUN}),
-    # None (no []) en 1996: ahí NO hay ambigüedad, así que la pregunta sigue de largo y
-    # se contesta. La lista vacía significa otra cosa —el censo no relevó el tema— y
-    # dispara el mensaje de "no relevada", que en 1996 sería falso.
-    Indicador(
-        "universitario", "nivel universitario",
-        "¿Incluimos a quienes tienen posgrado?",
-        {"1996": None, "2004": [], "2011": _UNIV_2011, "2023": _UNIV_2023},
-        "«Universitario» se cuenta de dos maneras y la cifra cambia según cuál se use: "
-        "el posgrado es una categoría aparte del máximo nivel alcanzado, así que quien "
-        "tiene un doctorado no figura entre los universitarios salvo que se lo incluya "
-        "a propósito."),
+    # "universitario" ESTUVO acá y se fue el 15-ago-2026. Se preguntaba "¿incluimos a
+    # quienes tienen posgrado?" ante cualquier mención de universidad. Decisión de
+    # Carlos: no hace falta preguntar, la pregunta ya lo dice —"universidad" es
+    # universidad, "universidad o más" incluye el posgrado—, y un chip que interrumpe
+    # cada vez que alguien nombra la universidad cuesta más de lo que aclara. La regla
+    # vive ahora en comun/nivel_universitario.py, que la lee de la pregunta, se la
+    # impone al modelo y la declara en la respuesta.
 ]
 
 # Frases que disparan la desambiguación. Se comparan sobre el texto normalizado.
@@ -168,11 +132,6 @@ _DISPARADORES = {
     # estos patrones, o el chip vuelve a disparar la desambiguación y se hace un
     # bucle. Por eso están redactadas con «Universidad o similar» y «Posgrado», que
     # son las etiquetas del diccionario y no contienen "UNIVERSITARI".
-    "universitario": [
-        r"UNIVERSITARI",
-        r"FUE(?:RON)? A LA UNIVERSIDAD", r"TERMIN\w* LA UNIVERSIDAD",
-        r"CURS\w* LA UNIVERSIDAD",
-    ],
 }
 _RX = {k: [re.compile(p) for p in v] for k, v in _DISPARADORES.items()}
 
