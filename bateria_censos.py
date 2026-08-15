@@ -209,6 +209,24 @@ def capa_a():
     control("A/indicadores", "2004 · dice que no se relevó y en qué censos sí",
             r["motivo"] == rechazos.NO_RELEVADA and "2023" in r["respuesta"])
 
+    # ── el chip NO puede tirar la pregunta (Carlos, 15-ago) ───────────────
+    # Antes cada opción mandaba una pregunta canónica que REEMPLAZABA la original:
+    # al elegir el criterio se perdían todos los filtros y la respuesta era el
+    # 16,48 % del país en vez de la cifra del municipio B. Ahora compone.
+    p = ("¿Cuántos hombres solteros hay de entre 40 y 47 años en el municipio B de "
+         "Montevideo y están ocupados y tienen un nivel educativo universitario?")
+    r = indicadores.desambiguar(p, "2023")
+    chips = [o["pregunta"] for o in r["opciones"]]
+    control("A/indicadores", "2023 · el chip conserva la pregunta original",
+            all(p.rstrip("?") in c for c in chips), chips[0][:60], p[:60])
+    control("A/indicadores", "2023 · el chip declara el criterio elegido",
+            all(indicadores.MARCA_CRITERIO in c for c in chips))
+    # La pregunta compuesta SÍ contiene "universitario", que es lo que dispara la
+    # ambigüedad: sin la marca, el chip se preguntaría a sí mismo para siempre.
+    control("A/indicadores", "2023 · y no vuelve a disparar la desambiguación",
+            all(indicadores.detectar(c) is None for c in chips),
+            [indicadores.detectar(c) for c in chips], "None")
+
     print("\n=== CAPA A · etiquetas de rechazo ===")
     casos = [rechazos.supresion(1), rechazos.no_encontrada("Xyz", ["Abc"]),
              rechazos.ambigua("Maldonado", []), rechazos.no_relevada("educación", "2004"),
@@ -296,6 +314,15 @@ PREGUNTAS_B = [
     ("municipio-letra", "2023",
      "¿Qué cantidad de hombres solteros de 40 a 47 años según clasificación de actividad, "
      "en la población del municipio B?", "cifra:1409"),
+    # 15-ago-2026 · Carlos: la MISMA pregunta después de elegir el criterio en el chip.
+    # Es el texto que el chip manda ahora (original + criterio), y la cifra verificada
+    # contra la base es 619. Antes esta vuelta devolvía 16,48 -el porcentaje del país-
+    # porque el chip reemplazaba la pregunta en vez de precisarla.
+    ("criterio-conserva-filtros", "2023",
+     "¿Cuántos hombres solteros hay de entre 40 y 47 años en el municipio B de Montevideo "
+     "y están ocupados y tienen un nivel educativo universitario o de postgrado? "
+     "— Criterio elegido: Universidad o similar Y posgrado (lo habitual); excluye 0 "
+     "(menor de 25) y los códigos de no respuesta.", "cifra:619"),
 ]
 
 

@@ -190,9 +190,21 @@ _SIN_TABLA = {
 _RX_SIN_TABLA = {k: [re.compile(p) for p in v[0]] for k, v in _SIN_TABLA.items()}
 
 
+# Marca que lleva la pregunta ya desambiguada. El chip compone la pregunta
+# ORIGINAL con el criterio elegido —antes la REEMPLAZABA por una canónica, y
+# "¿cuántos hombres solteros de 40 a 47 ocupados con nivel universitario hay en el
+# municipio B?" volvía como el 16,48 % del país: se perdían todos los filtros y la
+# cifra no respondía la pregunta—, así que la pregunta que vuelve SÍ contiene las
+# palabras que disparan la ambigüedad. Esta marca es lo que corta el bucle.
+MARCA_CRITERIO = "Criterio elegido:"
+_MARCA_N = normalizar(MARCA_CRITERIO)
+
+
 def detectar(pregunta):
     """Clave del indicador ambiguo de la pregunta, o None."""
     t = normalizar(pregunta)
+    if _MARCA_N in t:
+        return None            # el usuario ya eligió: preguntar de nuevo sería un bucle
     for clave, rxs in _RX.items():
         if any(rx.search(t) for rx in rxs):
             return clave
@@ -239,6 +251,22 @@ def desambiguar(pregunta, censo):
         "respuesta": '"%s" no es una sola cosa: %s %s'
                      % (ind.titulo.capitalize(), explicacion, ind.pregunta_guia),
         "opciones": [{"texto": o.titulo, "detalle": "%s; %s" % (o.universo, o.perdidos),
-                      "pregunta": o.pregunta, "clave": o.clave, "censo": censo}
+                      "pregunta": _con_criterio(pregunta, o), "clave": o.clave,
+                      "censo": censo}
                      for o in opciones],
     }
+
+
+def _con_criterio(original, opcion):
+    """La pregunta ORIGINAL más el criterio elegido, no una pregunta que la reemplaza.
+
+    El universo (`opcion.universo`) queda FUERA del texto a propósito: es una
+    propiedad de la variable —NIVELEDU25MAS solo está definida para 25 y más— y no
+    un recorte de lo que se preguntó. Escrito al lado de "de 40 a 47 años" invita a
+    confundirlos. Los perdidos sí van: dicen qué códigos excluir, que es una
+    instrucción, y el chip le muestra las dos cosas al usuario igual.
+    """
+    base = (original or "").strip()
+    if not base:
+        return opcion.pregunta          # sin pregunta original, la canónica de siempre
+    return "%s — %s %s; %s." % (base, MARCA_CRITERIO, opcion.titulo, opcion.perdidos)
