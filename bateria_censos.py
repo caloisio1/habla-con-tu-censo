@@ -22,6 +22,8 @@ import os
 import sys
 import time
 
+import usage_log   # telemetría: la batería se marca aparte
+
 AQUI = os.path.dirname(os.path.abspath(__file__))
 os.chdir(AQUI)
 sys.path.insert(0, AQUI)
@@ -524,9 +526,14 @@ def capa_b():
         for censo in ([censo_fijo] if censo_fijo else CENSOS):
             t0 = time.time()
             try:
+                # La batería tampoco es una pregunta de usuario: se marca, para que
+                # correrla no le meta llamadas sin dueño al log del piloto.
+                usage_log.iniciar(censo)
                 r = motores[censo](pregunta)
             except Exception as exc:                      # noqa: BLE001
                 r = {"ok": False, "respuesta": "EXCEPCIÓN: %s" % exc, "motivo": "excepcion"}
+            finally:
+                usage_log.cerrar("bateria")
             respuestas[(ident, censo)] = r
             texto = (r.get("respuesta") or "").lower()
             sql = (r.get("sql") or "").lower()

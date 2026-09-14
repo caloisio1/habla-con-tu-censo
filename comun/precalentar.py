@@ -25,6 +25,8 @@ funcionando exactamente igual, solo que sin la ventaja.
 import logging
 import os
 import threading
+
+import usage_log   # telemetría: el precalentado se marca, no se cuenta como pregunta
 import time
 
 log = logging.getLogger("censo")
@@ -80,6 +82,10 @@ def _correr(motores):
     listas = fallidas = 0
     for censo, pregunta in preguntas():
         try:
+            # El precalentado NO es una pregunta de usuario: se marca como tal para
+            # que no ensucie el costo por pregunta del piloto (antes sus llamadas
+            # quedaban sueltas, sin consulta_id).
+            usage_log.iniciar(censo)
             r = motores[censo](pregunta)
             if r.get("ok"):
                 listas += 1
@@ -90,6 +96,8 @@ def _correr(motores):
         except Exception as exc:                              # noqa: BLE001
             fallidas += 1
             log.warning("PRECALENTADO error censo=%s %s | %r", censo, exc, pregunta)
+        finally:
+            usage_log.cerrar("precalentado")
         time.sleep(PAUSA_ENTRE)
     log.info("PRECALENTADO listo: %d de %d preguntas en caché (%.0fs)",
              listas, listas + fallidas, time.time() - t0)

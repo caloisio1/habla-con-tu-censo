@@ -12,7 +12,7 @@ sys.path.insert(0, AQUI)
 from sql_guard_2023 import validar, suprimir_celdas_chicas, SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
 import registro
 import usage_log
-from comun import (ejecutor, llm, mapa_resumen, no_respondible, pipeline, rechazos,
+from comun import (ejecutor, formato, llm, mapa_resumen, no_respondible, pipeline, rechazos,
                    sinonimos, universo)
 
 # Cuántas unidades geográficas se pueden DIBUJAR de una vez. Es otra cosa que el tope de
@@ -228,7 +228,7 @@ _RX_SUMW = re.compile(r"\bsum\s*\(\s*[^)]*\bw\b", re.I)
 
 def generar_sql(pregunta, contexto=None):
     r = llm.completar(modelo=MODELO_SQL, esfuerzo=ESFUERZO_SQL, tope=TOPE_SQL,
-                      sistema=PROMPT_SQL,
+                      sistema=PROMPT_SQL, cache_key="censo2023-sql",
                       usuario=pipeline.mensaje_usuario(pregunta, contexto))
     usage_log.registrar("2023", "sql", r.uso, MODELO_SQL, ESFUERZO_SQL)
     return pipeline.sql_generado(r.texto)
@@ -376,12 +376,13 @@ def redactar(pregunta, sql, filas, suprimidas, columnas_conteo, truncado=False,
         muestra, aviso_muestra = filas, ""
     _usuario = (f"Pregunta: {pregunta}\nSQL: {sql}\nResultados: {muestra}"
                 + aviso_muestra + totales)
-    _comun = dict(modelo=MODELO_REDACTOR, esfuerzo=ESFUERZO_REDACTOR,
+    _comun = dict(modelo=MODELO_REDACTOR, esfuerzo=ESFUERZO_REDACTOR, cache_key="censo2023-redactor",
                   tope=TOPE_REDACTOR, sistema=sys_prompt, usuario=_usuario)
     r = (llm.completar_stream(emitir=emitir, **_comun) if emitir
          else llm.completar(**_comun))
     usage_log.registrar("2023", "redactor", r.uso, MODELO_REDACTOR, ESFUERZO_REDACTOR)
-    texto = pipeline.asegurar_declaracion(r.texto, interpretaciones, contexto)
+    narrado = formato.aplicar_formato_miles(r.texto, filas)
+    texto = pipeline.asegurar_declaracion(narrado, interpretaciones, contexto)
     return texto + nota
 
 

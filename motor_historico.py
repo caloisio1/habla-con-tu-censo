@@ -39,7 +39,7 @@ import re
 import usage_log
 import registro
 from sql_guard_historicos import SQLNoSeguro, UMBRAL_SUPRESION, LIMITE_MAXIMO
-from comun import (codigos, ejecutor, llm, mapa_resumen, no_respondible, pipeline,
+from comun import (codigos, ejecutor, formato, llm, mapa_resumen, no_respondible, pipeline,
                    rechazos, sinonimos)
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -287,6 +287,7 @@ class Motor:
     # -- etapas LLM -------------------------------------------------------
     def generar_sql(self, pregunta, contexto=None):
         r = llm.completar(modelo=MODELO_SQL, esfuerzo=ESFUERZO_SQL, tope=TOPE_SQL,
+                          cache_key="censo%s-sql" % self.censo,
                           sistema=self.prompt_sql,
                           usuario=pipeline.mensaje_usuario(pregunta, contexto))
         usage_log.registrar(self.censo, "sql", r.uso, MODELO_SQL, ESFUERZO_SQL)
@@ -360,12 +361,14 @@ class Motor:
                     % (pregunta, sql, muestra, aviso_muestra,
                        pipeline.totales_para_redactor(filas, columnas_conteo)))
         _comun = dict(modelo=MODELO_REDACTOR, esfuerzo=ESFUERZO_REDACTOR,
+                      cache_key="censo%s-redactor" % self.censo,
                       tope=TOPE_REDACTOR, sistema=sys_prompt, usuario=_usuario)
         r = (llm.completar_stream(emitir=emitir, **_comun) if emitir
              else llm.completar(**_comun))
         usage_log.registrar(self.censo, "redactor", r.uso,
                             MODELO_REDACTOR, ESFUERZO_REDACTOR)
-        texto = pipeline.asegurar_declaracion(r.texto, interpretaciones, contexto)
+        narrado = formato.aplicar_formato_miles(r.texto, filas)
+        texto = pipeline.asegurar_declaracion(narrado, interpretaciones, contexto)
         return texto + nota
 
     def _contar_filas_reales(self, sql_seguro):

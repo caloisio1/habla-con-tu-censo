@@ -34,7 +34,7 @@ MOTORES_HISTORICOS = {"1996": consultar_1996, "2004": consultar_2004}
 import usage_log         # registro de métricas de tokens (solo métricas, sin contenido)
 import registro          # rastro de las consultas rechazadas (pregunta + SQL + motivo)
 from comun import (ejecutor, llm, mapa_resumen, no_respondible, perdidos, pipeline,
-                   precalentar, rechazos, sinonimos)  # módulo compartido
+                   formato, precalentar, rechazos, sinonimos)  # módulo compartido
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", llm.MODELO_POR_DEFECTO)
@@ -338,6 +338,7 @@ def generar_sql(pregunta: str, contexto: dict | None = None) -> str:
         esfuerzo=ESFUERZO_SQL,
         tope=TOPE_SQL,
         sistema=PROMPT_SQL,
+        cache_key="censo2011-sql",
         usuario=pipeline.mensaje_usuario(pregunta, contexto),
     )
     usage_log.registrar("2011", "sql", r.uso, MODELO_SQL, ESFUERZO_SQL)
@@ -433,6 +434,7 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
     )
     _comun = dict(
         modelo=MODELO_REDACTOR,
+        cache_key="censo2011-redactor",
         # El redactor solo NARRA (no razona): con el razonamiento activado las
         # preguntas de mapa consumían todo el presupuesto y devolvían respuesta
         # VACÍA (corte por tope). Esfuerzo 'none' lo evita de raíz (y baja
@@ -492,7 +494,8 @@ def redactar_respuesta(pregunta: str, sql: str, filas: list, suprimidas: int,
     r = (llm.completar_stream(emitir=emitir, **_comun) if emitir
          else llm.completar(**_comun))
     usage_log.registrar("2011", "redactor", r.uso, MODELO_REDACTOR, ESFUERZO_REDACTOR)
-    texto = pipeline.asegurar_declaracion(r.texto, interpretaciones, contexto)
+    narrado = formato.aplicar_formato_miles(r.texto, filas)
+    texto = pipeline.asegurar_declaracion(narrado, interpretaciones, contexto)
     return texto + nota
 
 
@@ -726,7 +729,43 @@ def _error_publico(p: Pregunta, e: Exception, ruta: str) -> dict:
     return {"ok": False, "respuesta": texto, "motivo": nombre}
 
 
+def _clasificar(r):
+    """Qué le pasó a la pregunta, en una palabra, para la telemetría del piloto.
+
+    No mira el texto de la respuesta: solo `ok`, el código de control `veredicto`
+    (cuando el motor lo da) y los aciertos de caché que anotó el pipeline.
+    """
+    cache = (usage_log.cache_de_la_consulta() or "")
+    if r.get("ok"):
+        # Qué se ahorró, que no es lo mismo que qué nivel pegó: "AB" son CERO
+        # llamadas al modelo; "A" ahorró el sql pero el redactor corrió igual.
+        return {"AB": "cache_ab", "A": "cache_a", "B": "cache_b"}.get(cache, "ok")
+    v = str(r.get("veredicto") or "")
+    if v.startswith("NO_RESPONDIBLE"):
+        return "no_respondible"
+    return "rechazada"
+
+
 def _responder(p: Pregunta, avisar=None):
+    """Punto ÚNICO por donde pasan los cuatro censos.
+
+    Acá se abre y se cierra la consulta de la telemetría: es el único lugar donde
+    una pregunta de usuario es una pregunta de usuario (más adentro ya es un motor).
+    Corre en el hilo del pipeline, que es lo que necesita el contexto de usage_log.
+    """
+    usage_log.iniciar(p.censo)
+    try:
+        r = _despachar(p, avisar=avisar)
+    except Exception:
+        usage_log.cerrar("error")
+        raise
+    usage_log.cerrar(_clasificar(r), r.get("veredicto"))
+    # El veredicto es un código de control interno: se registra, no se publica.
+    r.pop("veredicto", None)
+    return r
+
+
+def _despachar(p: Pregunta, avisar=None):
     if p.censo == "2011":
         return responder_2011(p.texto, avisar=avisar)
 
@@ -735,14 +774,11 @@ def _responder(p: Pregunta, avisar=None):
     # 29-jul-2026, con cartografía propia reconstruida de las planchas del INE y
     # acotada a las localidades completas— segmento censal (ver motor_historico).
     if p.censo in MOTORES_HISTORICOS:
-        r = MOTORES_HISTORICOS[p.censo].preguntar(p.texto, avisar=avisar)
-        r.pop("veredicto", None)
-        return r
+        return MOTORES_HISTORICOS[p.censo].preguntar(p.texto, avisar=avisar)
 
     # Censo 2023 (ponderado). La línea de ponderación se agrega SOLO cuando la
     # métrica es SUM(W) (personas); viviendas y hogares son conteos exactos (regla c).
     r = consultar_2023.preguntar(p.texto, avisar=avisar)
-    r.pop("veredicto", None)
     if r.get("ok") and _RX_SUMW.search(r.get("sql") or ""):
         r["respuesta"] = r.get("respuesta", "") + "\n\n_" + PONDERACION_2023 + "_"
     return r

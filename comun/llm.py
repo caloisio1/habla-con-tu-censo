@@ -53,7 +53,8 @@ def cliente():
     return _cliente
 
 
-def completar(modelo: str, esfuerzo: str, tope: int, sistema: str, usuario: str) -> Respuesta:
+def completar(modelo: str, esfuerzo: str, tope: int, sistema: str, usuario: str,
+              cache_key: str = None) -> Respuesta:
     """Una llamada de una etapa (SQL o redactor). Devuelve texto + métricas.
 
     UN TIMEOUT NO SE REINTENTA. Si la llamada se pasó de TIMEOUT segundos es
@@ -66,6 +67,10 @@ def completar(modelo: str, esfuerzo: str, tope: int, sistema: str, usuario: str)
     la respuesta llega en ~60 s y el frontend puede mostrar qué pasó.
 
     Lo que SÍ se reintenta es el error transitorio: conexión cortada, 429, 5xx.
+
+    `cache_key` (prompt_cache_key) es un valor FIJO por etapa y censo. No cambia
+    lo que se cobra ni lo que se cachea: mejora el enrutamiento al servidor que ya
+    tiene el prefijo de esa etapa, que es de donde sale el 90 % de caché del SQL.
     """
     ultimo = None
     for intento in range(REINTENTOS + 1):
@@ -76,6 +81,7 @@ def completar(modelo: str, esfuerzo: str, tope: int, sistema: str, usuario: str)
                 max_completion_tokens=tope,
                 messages=[{"role": "system", "content": sistema},
                           {"role": "user", "content": usuario}],
+                **({"prompt_cache_key": cache_key} if cache_key else {}),
             )
             return Respuesta(
                 texto=(r.choices[0].message.content or "").strip(),
@@ -91,7 +97,7 @@ def completar(modelo: str, esfuerzo: str, tope: int, sistema: str, usuario: str)
 
 
 def completar_stream(modelo: str, esfuerzo: str, tope: int, sistema: str,
-                     usuario: str, emitir) -> Respuesta:
+                     usuario: str, emitir, cache_key: str = None) -> Respuesta:
     """Igual que completar(), pero llama a emitir(fragmento) a medida que llega.
 
     Devuelve la misma Respuesta que completar() —texto completo, uso y motivo de
@@ -117,6 +123,7 @@ def completar_stream(modelo: str, esfuerzo: str, tope: int, sistema: str,
                           {"role": "user", "content": usuario}],
                 stream=True,
                 stream_options={"include_usage": True},
+                **({"prompt_cache_key": cache_key} if cache_key else {}),
             )
             for chunk in flujo:
                 if getattr(chunk, "usage", None):

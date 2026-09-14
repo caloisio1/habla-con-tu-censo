@@ -17,6 +17,8 @@ Orden de una consulta, con el paso compartido entre paréntesis:
 """
 import re
 
+import usage_log   # telemetría: marcar los aciertos de caché (solo métricas)
+
 from comun import (cache, diagnostico, edad, indicadores, nivel_universitario, rechazos,
                    supresion)
 from comun.sql_entidades import (EntidadNoResuelta, canonizar, preparar_1996,
@@ -115,7 +117,10 @@ def sql_cacheado(pregunta, censo, contexto):
     Ahorra la llamada CARA (la que razona). Devuelve el SQL CRUDO: el post-paso de
     entidades, el guard y la supresión se siguen ejecutando igual.
     """
-    return cache.obtener(cache.SQL_DE_PREGUNTA, censo, mensaje_usuario(pregunta, contexto))
+    sql = cache.obtener(cache.SQL_DE_PREGUNTA, censo, mensaje_usuario(pregunta, contexto))
+    if sql is not None:
+        usage_log.marcar_cache("A")
+    return sql
 
 
 def recordar_sql(pregunta, censo, contexto, sql):
@@ -142,6 +147,7 @@ def resultado_cacheado(sql_seguro, censo, alternativas=()):
     guardado = cache.obtener(cache.RESULTADO_DE_SQL, censo, canonizar(sql_seguro))
     if guardado is None:
         return None
+    usage_log.marcar_cache("B")
     salida = dict(guardado)
     if alternativas:
         salida["opciones"] = list(alternativas)
