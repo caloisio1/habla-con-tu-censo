@@ -28,6 +28,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 os.chdir(AQUI)
 sys.path.insert(0, AQUI)
 
+from comun import formato
 from comun import (edad, ejecutor, indicadores, nomenclator as nom, pipeline, rechazos,
                    supresion)
 from comun.resolver import (AMBIGUO, FRAGMENTADO, NO_ENCONTRADO, OTRO_CENSO, UNICO,
@@ -76,8 +77,13 @@ SQL_1996_FANOUT = (
 resultados = []
 
 
-def control(seccion, nombre, ok, obtenido="", esperado=""):
-    resultados.append({"capa": seccion, "control": nombre, "ok": bool(ok),
+# Dos tipos de control, que fallan por motivos distintos y se informan por separado:
+#   "det"  — determinístico: SQL, filas, mapa, supresión, cifras. Mismo resultado en
+#            todas las corridas. Un fallo acá es un bug.
+#   "narr" — narración: qué DICE la respuesta. Depende del modelo, así que se mide
+#            por tasa (3 de 3) y no se promedia: 2 de 3 es una falla, no un 67 %.
+def control(seccion, nombre, ok, obtenido="", esperado="", tipo="det"):
+    resultados.append({"capa": seccion, "tipo": tipo, "control": nombre, "ok": bool(ok),
                        "obtenido": obtenido, "esperado": esperado})
     print("  %s %-58s %s" % ("✔" if ok else "✘", nombre[:58],
                              "" if ok else "obtenido=%r esperado=%r" % (obtenido, esperado)))
@@ -515,9 +521,35 @@ def _cifra_esperada(r, esperado):
     return False
 
 
+def _narracion_desglose(texto, filas):
+    """¿La narración de un desglose dice lo que tiene que decir?
+
+    Cuatro condiciones, ninguna basada en el LARGO del texto:
+      (a) no está vacía;
+      (b) trae el TOTAL de la métrica, con separador de miles como lo escribe
+          comun/formato.py. El total se calcula acá sumando el resultado: si se
+          escribiera a mano, el control dejaría de valer el día que cambie la base;
+      (c) trae CUÁNTAS unidades componen ese total;
+      (d) menciona el censo o el año, para que la cifra no quede sin fuente.
+    """
+    if not texto or len(texto.strip()) <= 20:
+        return False
+    metricas = [c for f in filas[:1] for c, v in f.items()
+                if c.lower() != "geo_codigo" and isinstance(v, (int, float))]
+    if not metricas:
+        return False
+    total = sum((f.get(metricas[0]) or 0) for f in filas)
+    if formato.fmt_miles(int(round(total))) not in texto:
+        return False
+    if formato.fmt_miles(len(filas)) not in texto:
+        return False
+    return ("censo" in texto.lower()) or ("2023" in texto)
+
+
 def capa_b():
     import consultar_1996, consultar_2004, consultar_2023
     from app import main as m2011
+    m2011_mod = m2011
     motores = {"1996": consultar_1996.preguntar, "2004": consultar_2004.preguntar,
                "2011": m2011.responder_2011, "2023": consultar_2023.preguntar}
     print("\n=== CAPA B · extremo a extremo (con modelo) ===")
@@ -535,7 +567,11 @@ def capa_b():
             finally:
                 usage_log.cerrar("bateria")
             respuestas[(ident, censo)] = r
-            texto = (r.get("respuesta") or "").lower()
+            # Lo que se controla es la respuesta TAL COMO la ve el usuario: la línea
+            # de ponderación —lo único que nombra "Censo 2023"— la agrega app/main.py,
+            # no el motor. Controlar el texto del motor era controlar algo que nadie ve.
+            publico = m2011_mod.respuesta_publica(censo, r)
+            texto = publico.lower()
             sql = (r.get("sql") or "").lower()
 
             if comprobacion == "no_confidencialidad":
@@ -560,16 +596,34 @@ def capa_b():
             elif comprobacion.startswith("cifra:"):
                 ok = bool(r.get("ok")) and _cifra_esperada(r, float(comprobacion.split(":")[1]))
             elif comprobacion == "tabla_completa":
-                # TRES cosas juntas: la tabla llega entera (4.297 segmentos, antes 300),
-                # el redactor NO se queda mudo por el tamaño del resultado, y el mapa
-                # nacional POR SEGMENTO se dibuja, con una unidad por fila. Lo tercero
+                # DOS capas separadas, porque fallan por motivos distintos.
+                #
+                # DETERMINÍSTICA: la tabla llega entera (4.355 segmentos, antes 300) y
+                # el mapa nacional POR SEGMENTO se dibuja con una unidad por fila. Esto
                 # es lo que se rompería en silencio: un desglose sin mapa sigue
                 # contestando bien, así que nadie lo notaría hasta mirar la pantalla.
+                #
+                # NARRACIÓN: hasta el 14-sep-2026 esto era `len(texto) > 80`, un
+                # sustituto de "no se quedó mudo" calibrado para gpt-5.5. Con el
+                # redactor en gpt-5.4-mini, que narra más corto, fallaba 4 de 5 veces
+                # sin que nada estuviera mal: la tabla y el mapa salían perfectos. Un
+                # umbral de largo no mide si la respuesta dice lo que tiene que decir.
+                # Ahora se controla el CONTENIDO, y las cifras salen del resultado de
+                # la consulta —no escritas a mano acá—, formateadas por comun/formato.py,
+                # que es el mismo formateo que ve el usuario.
                 filas = r.get("datos") or []
                 mapa = r.get("mapa") or {}
-                ok = (bool(r.get("ok")) and len(filas) >= 4000 and len(texto.strip()) > 80
-                      and mapa.get("nivel") == "segmento_2023"
-                      and len(mapa.get("datos") or []) == len(filas))
+                det = (bool(r.get("ok")) and len(filas) >= 4000
+                       and mapa.get("nivel") == "segmento_2023"
+                       and len(mapa.get("datos") or []) == len(filas))
+                # Se registran por separado, no como un and: si falla, hay que poder
+                # ver CUÁL de las dos capas falló sin volver a correr nada.
+                control("B/%s-det" % ident, "%s · %s [tabla+mapa]" % (censo, pregunta[:32]),
+                        det, len(filas), ">=4000 filas y mapa segmento_2023")
+                control("B/%s-narr" % ident, "%s · %s [narración]" % (censo, pregunta[:32]),
+                        _narracion_desglose(publico, filas), publico[:60],
+                        "total + nº de unidades + censo", tipo="narr")
+                continue
             elif comprobacion == "desocupadas_1996":
                 # Se controla la CIFRA, no el SQL: hay más de una forma correcta de
                 # escribir el filtro, y una sola respuesta correcta.
@@ -579,7 +633,9 @@ def capa_b():
             else:
                 ok = bool(r.get("ok"))
             control("B/%s" % ident, "%s · %s" % (censo, pregunta[:40]), ok,
-                    (r.get("motivo") or r.get("veredicto") or "")[:40], comprobacion)
+                    (r.get("motivo") or r.get("veredicto") or "")[:40], comprobacion,
+                    tipo=("narr" if comprobacion == "no_confidencialidad"
+                          or comprobacion.startswith("no_relevado:") else "det"))
             print("      (%.1fs) %s" % (time.time() - t0, (r.get("respuesta") or "")[:110]))
 
     # controles cruzados
@@ -599,6 +655,12 @@ if __name__ == "__main__":
     if "B" in MODO:
         capa_b()
     fallos = [r for r in resultados if not r["ok"]]
+    det = [r for r in resultados if r.get("tipo", "det") == "det"]
+    narr = [r for r in resultados if r.get("tipo") == "narr"]
+    print("\n  determinística: %d controles, %d fallos  (debe ser 0 SIEMPRE)"
+          % (len(det), sum(1 for r in det if not r["ok"])))
+    print("  narración:      %d controles, %d fallos  (se mide por tasa, 3 de 3)"
+          % (len(narr), sum(1 for r in narr if not r["ok"])))
     print("\n%s  %d controles, %d fallos"
           % ("VERDE" if not fallos else "ROJO", len(resultados), len(fallos)))
     for f in fallos:

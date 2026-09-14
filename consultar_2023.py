@@ -218,6 +218,7 @@ SYS_REDACTA = (
     "cuestionario. No inventes cifras.\n"
     "Formato de las cifras (español rioplatense): separador de miles con PUNTO —escribí 323.114, nunca 323114— y decimales con coma. NO le pongas separador a los años ('Censo 2023', no 'Censo 2.023') ni a los códigos de sección, localidad o barrio.\n"
     "PRESENTACIÓN: si los resultados traen MÁS DE UNA FILA, presentalos SIEMPRE en una TABLA markdown (encabezado + una fila por categoría), NUNCA como lista con viñetas ni enumerados en prosa. Con una sola fila, narrala en una oración.\n"
+    "CUÁNTAS FILAS: si el desglose tiene MÁS DE 50 filas, la tabla completa la dibuja el sistema y vos NO la repitas entera; en ese caso decí en una oración el TOTAL y CUÁNTAS unidades lo componen ('...en 4.355 segmentos censales'). Sin ese número, quien lee no sabe sobre cuántas unidades está mirando el total.\n"
     "NOMBRES PROPIOS: en la base los departamentos, localidades y barrios están en MAYÚSCULAS y sin tildes; escribilos con mayúscula inicial y acentuación correcta —Montevideo, Paysandú, Río Negro, San José, Tacuarembó, Treinta y Tres, Cerro Largo, Paso de los Toros, Bella Unión—, nunca en mayúsculas sostenidas. Las preposiciones y artículos internos van en minúscula (Paso de los Toros, Treinta y Tres)."
 )
 

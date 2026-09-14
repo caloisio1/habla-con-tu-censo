@@ -10,9 +10,21 @@ contesta igual. Es deliberado: cuando el presupuesto se agota, el sitio sigue
 respondiendo lo que ya sabe en vez de quedar mudo.
 
 DE DÓNDE SALE EL GASTO. De `logs/usage.jsonl`, que es el mismo registro con el que se
-costea el piloto: no hay una segunda fuente de verdad que pueda divergir. El archivo
-se lee UNA vez al arrancar para reconstruir los acumuladores del mes y del día en
-curso; después cada llamada suma en memoria. No se relee por pedido.
+costea el piloto: no hay una segunda fuente de verdad que pueda divergir.
+
+EL CONTADOR VIVE EN EL ARCHIVO, NO EN LA MEMORIA. Al arrancar se lee entero; después
+cada verificación lee SOLO lo que se agregó desde la última vez (se guarda el offset
+en bytes). Es tan barato como sumar en memoria y tiene dos propiedades que sumar en
+memoria no tiene:
+
+  · Si algún día el servicio arranca con más de un worker de uvicorn (hoy arranca con
+    uno solo), cada proceso sumaría por su cuenta y el tope se multiplicaría por N en
+    silencio. Leyendo del log, todos los procesos ven el MISMO gasto, porque todos
+    escriben en el mismo archivo.
+  · Si el archivo se achica —logrotate— se detecta y se reconstruye, en vez de seguir
+    contando sobre un offset que ya no existe. Hoy NINGUNA regla de logrotate toca
+    este directorio (verificado el 14-sep-2026), pero el día que alguien agregue una,
+    el tope no se vuelve permisivo en silencio.
 
 HUSO HORARIO. El día y el mes son los de Montevideo, no UTC: un tope diario que se
 renueva a las 21:00 hora local no es un tope diario para quien lo usa. El log guarda
@@ -54,7 +66,8 @@ MODELO_SI_FALTA = "gpt-5.5"
 _EN_CURSO = contextvars.ContextVar("consulta_ya_gasto", default=False)
 
 _LOCK = threading.Lock()
-_ESTADO = {"listo": False, "mes": None, "dia": None, "usd_mes": 0.0, "usd_dia": 0.0}
+_ESTADO = {"listo": False, "mes": None, "dia": None, "usd_mes": 0.0, "usd_dia": 0.0,
+           "offset": 0}
 
 
 class SinCupo(Exception):
@@ -107,42 +120,87 @@ def _claves(t):
     return t.strftime("%Y-%m"), t.strftime("%Y-%m-%d")
 
 
-def _reconstruir():
-    """Suma del log el gasto del mes y del día en curso. Se corre UNA vez."""
-    t = _ahora()
-    mes, dia = _claves(t)
-    usd_mes = usd_dia = 0.0
+def _sumar_linea(d, mes, dia):
+    """Costo de una línea del log si cae en el mes/día en curso. (usd_mes, usd_dia)."""
+    if d.get("etapa") == "fin" or not d.get("ts"):
+        return 0.0, 0.0
     try:
-        with open(RUTA_LOG, encoding="utf-8") as f:
-            for raw in f:
-                raw = raw.strip()
-                if not raw:
-                    continue
-                try:
-                    d = json.loads(raw)
-                except ValueError:
-                    continue
-                if d.get("etapa") == "fin" or not d.get("ts"):
-                    continue
-                try:
-                    local = datetime.fromisoformat(d["ts"]).astimezone(TZ)
-                except ValueError:
-                    continue
-                m2, d2 = _claves(local)
-                if m2 != mes:
-                    continue
-                c = costo(d.get("prompt_tokens"), d.get("cached_tokens"),
-                          d.get("completion_tokens"), d.get("modelo"))
-                usd_mes += c
-                if d2 == dia:
-                    usd_dia += c
+        local = datetime.fromisoformat(d["ts"]).astimezone(TZ)
+    except ValueError:
+        return 0.0, 0.0
+    m2, d2 = _claves(local)
+    if m2 != mes:
+        return 0.0, 0.0
+    c = costo(d.get("prompt_tokens"), d.get("cached_tokens"),
+              d.get("completion_tokens"), d.get("modelo"))
+    return c, (c if d2 == dia else 0.0)
+
+
+def _leer(desde):
+    """Lee el log desde `desde` bytes. Devuelve (usd_mes, usd_dia, offset_final)."""
+    mes, dia = _ESTADO["mes"], _ESTADO["dia"]
+    um = ud = 0.0
+    with open(RUTA_LOG, "rb") as f:
+        f.seek(desde)
+        crudo = f.read()
+        fin = f.tell()
+    # Si el archivo termina en una línea a medio escribir, se deja para la próxima:
+    # el offset retrocede hasta el último salto de línea completo.
+    corte = crudo.rfind(b"\n")
+    if corte == -1:
+        return 0.0, 0.0, desde
+    fin = desde + corte + 1
+    for raw in crudo[:corte].split(b"\n"):
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            d = json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            continue
+        a, b = _sumar_linea(d, mes, dia)
+        um += a
+        ud += b
+    return um, ud, fin
+
+
+def _reconstruir():
+    """Lee el log ENTERO y fija los acumuladores del mes y del día en curso."""
+    mes, dia = _claves(_ahora())
+    _ESTADO.update(mes=mes, dia=dia, usd_mes=0.0, usd_dia=0.0, offset=0)
+    try:
+        um, ud, fin = _leer(0)
+        _ESTADO.update(usd_mes=um, usd_dia=ud, offset=fin)
     except FileNotFoundError:
         pass
     except Exception as e:                                    # noqa: BLE001
         import sys
         print("presupuesto: no se pudo leer %s (%s); se arranca en cero"
               % (RUTA_LOG, e), file=sys.stderr)
-    _ESTADO.update(listo=True, mes=mes, dia=dia, usd_mes=usd_mes, usd_dia=usd_dia)
+    _ESTADO["listo"] = True
+
+
+def _sincronizar():
+    """Suma lo que se escribió en el log desde la última lectura."""
+    try:
+        tam = os.path.getsize(RUTA_LOG)
+    except OSError:
+        return
+    if tam < _ESTADO["offset"]:
+        import sys
+        print("presupuesto: %s se achicó (%d < %d): rotación. Se reconstruye."
+              % (RUTA_LOG, tam, _ESTADO["offset"]), file=sys.stderr)
+        _reconstruir()
+        return
+    if tam == _ESTADO["offset"]:
+        return
+    try:
+        um, ud, fin = _leer(_ESTADO["offset"])
+    except OSError:
+        return
+    _ESTADO["usd_mes"] += um
+    _ESTADO["usd_dia"] += ud
+    _ESTADO["offset"] = fin
 
 
 def _al_dia():
@@ -151,10 +209,11 @@ def _al_dia():
         _reconstruir()
         return
     mes, dia = _claves(_ahora())
-    if mes != _ESTADO["mes"]:
-        _ESTADO.update(mes=mes, dia=dia, usd_mes=0.0, usd_dia=0.0)
-    elif dia != _ESTADO["dia"]:
-        _ESTADO.update(dia=dia, usd_dia=0.0)
+    if mes != _ESTADO["mes"] or dia != _ESTADO["dia"]:
+        # Cambió el período: los acumuladores del anterior no sirven y el offset
+        # tampoco, porque hay que volver a decidir qué líneas caen en el período
+        # nuevo. Se reconstruye del archivo, que es la única fuente.
+        _reconstruir()
 
 
 def abrir_consulta():
@@ -168,6 +227,7 @@ def verificar():
         return
     with _LOCK:
         _al_dia()
+        _sincronizar()
         t = _ahora()
         if _ESTADO["usd_dia"] >= TOPE_DIA:
             manana = (t + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -175,30 +235,26 @@ def verificar():
         if _ESTADO["usd_mes"] >= TOPE_MES:
             prox = (t.replace(day=28) + timedelta(days=5)).replace(day=1)
             raise SinCupo("mensual", _ESTADO["usd_mes"], TOPE_MES, prox)
+    # Autorizada: el resto de las llamadas de ESTA pregunta no vuelven a consultar,
+    # para no cortarla entre el SQL y el redactor.
+    _EN_CURSO.set(True)
 
 
 def sumar(modelo, usage):
-    """Acumula lo que costó una llamada ya hecha. Nunca rompe la consulta."""
-    if not HABILITADO or usage is None:
-        return
-    try:
-        det = getattr(usage, "prompt_tokens_details", None)
-        c = costo(getattr(usage, "prompt_tokens", 0),
-                  getattr(det, "cached_tokens", 0) if det is not None else 0,
-                  getattr(usage, "completion_tokens", 0), modelo)
-        _EN_CURSO.set(True)
-        with _LOCK:
-            _al_dia()
-            _ESTADO["usd_mes"] += c
-            _ESTADO["usd_dia"] += c
-    except Exception:                                         # noqa: BLE001
-        pass
+    """Ya no acumula nada: el contador es el propio log.
+
+    Se conserva la función —y su llamada en comun/llm.py— porque el punto donde se
+    llamaba es el correcto si alguna vez hace falta un acumulador en memoria. Sumar
+    acá Y leer del archivo contaría dos veces.
+    """
+    return
 
 
 def estado():
     """Para diagnóstico: cuánto se lleva gastado y cuánto queda."""
     with _LOCK:
         _al_dia()
+        _sincronizar()
         return {"mes": _ESTADO["mes"], "usd_mes": round(_ESTADO["usd_mes"], 4),
                 "tope_mes": TOPE_MES, "dia": _ESTADO["dia"],
                 "usd_dia": round(_ESTADO["usd_dia"], 4), "tope_dia": TOPE_DIA,

@@ -729,6 +729,21 @@ def _error_publico(p: Pregunta, e: Exception, ruta: str) -> dict:
     return {"ok": False, "respuesta": texto, "motivo": nombre}
 
 
+def respuesta_publica(censo, r):
+    """La narración TAL COMO la recibe el usuario, no como la devuelve el motor.
+
+    Existe porque no son lo mismo y la diferencia importaba sin que se viera: la
+    línea de ponderación —lo único que nombra "Censo 2023" en una respuesta de
+    2023— la agrega ESTA capa, no el redactor. La batería llamaba a los motores
+    directo, así que controlaba un texto que ningún usuario ve. Con esto hay un
+    solo lugar donde se arma la respuesta pública y la batería controla eso mismo.
+    """
+    texto = r.get("respuesta", "") or ""
+    if censo == "2023" and r.get("ok") and _RX_SUMW.search(r.get("sql") or ""):
+        return texto + "\n\n_" + PONDERACION_2023 + "_"
+    return texto
+
+
 def _clasificar(r):
     """Qué le pasó a la pregunta, en una palabra, para la telemetría del piloto.
 
@@ -788,8 +803,7 @@ def _despachar(p: Pregunta, avisar=None):
     # Censo 2023 (ponderado). La línea de ponderación se agrega SOLO cuando la
     # métrica es SUM(W) (personas); viviendas y hogares son conteos exactos (regla c).
     r = consultar_2023.preguntar(p.texto, avisar=avisar)
-    if r.get("ok") and _RX_SUMW.search(r.get("sql") or ""):
-        r["respuesta"] = r.get("respuesta", "") + "\n\n_" + PONDERACION_2023 + "_"
+    r["respuesta"] = respuesta_publica("2023", r)
     return r
 
 
