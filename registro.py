@@ -43,3 +43,9 @@ def no_respondible(censo, pregunta, detalle=""):
     """El modelo declinó generar SQL para esa pregunta."""
     log.info("NO_RESPONDIBLE censo=%s%s | pregunta=%r",
              censo, (" (%s)" % detalle) if detalle else "", pregunta)
+
+
+def tope_alcanzado(censo, periodo, gastado, tope):
+    """El presupuesto del período se agotó y la consulta no llegó al modelo."""
+    log.warning("TOPE %s alcanzado censo=%s gastado=%.2f tope=%.2f USD",
+                periodo, censo, gastado, tope)

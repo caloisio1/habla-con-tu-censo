@@ -27,8 +27,19 @@ _LOCK = threading.Lock()
 
 
 def iniciar(censo):
-    """Abre una consulta de usuario y le da un id. Devuelve el id."""
+    """Abre una consulta y le da un id. Devuelve el id.
+
+    Abre TAMBIÉN la consulta del presupuesto, en vez de dejar esa llamada en cada
+    sitio: el precalentado y la batería también abren consultas, y si a alguno se le
+    olvidaba, el tope dejaba de aplicarle desde su primer gasto (la marca de "ya
+    gastó" no se reseteaba nunca en ese hilo).
+    """
     _CONSULTA.set({"id": uuid.uuid4().hex, "censo": censo, "cache": [], "t0": time.time()})
+    try:
+        from comun import presupuesto
+        presupuesto.abrir_consulta()
+    except Exception:                      # noqa: BLE001 - la telemetría nunca rompe
+        pass
     return _CONSULTA.get()["id"]
 
 

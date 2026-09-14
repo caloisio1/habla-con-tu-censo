@@ -24,6 +24,8 @@ import os
 import time
 from dataclasses import dataclass
 
+from comun import presupuesto
+
 # Timeout ACOTADO: sin él una respuesta colgada (CLOSE-WAIT) deja el hilo worker
 # clavado y wedge toda la app (incidente 2026-07-06).
 TIMEOUT = float(os.environ.get("CENSO_LLM_TIMEOUT", "60"))
@@ -72,6 +74,7 @@ def completar(modelo: str, esfuerzo: str, tope: int, sistema: str, usuario: str,
     lo que se cobra ni lo que se cachea: mejora el enrutamiento al servidor que ya
     tiene el prefijo de esa etapa, que es de donde sale el 90 % de caché del SQL.
     """
+    presupuesto.verificar()          # fail-closed: si el período se agotó, no se llama
     ultimo = None
     for intento in range(REINTENTOS + 1):
         try:
@@ -83,6 +86,7 @@ def completar(modelo: str, esfuerzo: str, tope: int, sistema: str, usuario: str,
                           {"role": "user", "content": usuario}],
                 **({"prompt_cache_key": cache_key} if cache_key else {}),
             )
+            presupuesto.sumar(modelo, getattr(r, "usage", None))
             return Respuesta(
                 texto=(r.choices[0].message.content or "").strip(),
                 uso=getattr(r, "usage", None),
@@ -111,6 +115,7 @@ def completar_stream(modelo: str, esfuerzo: str, tope: int, sistema: str,
     ve la respuesta duplicada. Por eso, una vez que salió el primer fragmento, el
     error se propaga en vez de reintentarse.
     """
+    presupuesto.verificar()          # fail-closed: si el período se agotó, no se llama
     ultimo = None
     for intento in range(REINTENTOS + 1):
         partes, uso, corte, emitido = [], None, None, False
@@ -138,6 +143,7 @@ def completar_stream(modelo: str, esfuerzo: str, tope: int, sistema: str,
                     emitir(fragmento)
                 if getattr(opcion, "finish_reason", None):
                     corte = opcion.finish_reason
+            presupuesto.sumar(modelo, uso)
             return Respuesta(texto="".join(partes).strip(), uso=uso, motivo_corte=corte)
         except Exception as e:
             if emitido or "Timeout" in type(e).__name__ or intento == REINTENTOS:

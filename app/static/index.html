@@ -723,6 +723,11 @@ async function preguntarStream(texto, censo, ui){
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({texto, censo}), signal: ctrl.signal
   });
+  if (res.status === 429){
+    // Tope de frecuencia de nginx (30/min por IP). No tiene sentido reintentar por
+    // /preguntar: el límite es de la conexión, no del camino.
+    const e = new Error('demasiadas consultas'); e.codigo = 429; throw e;
+  }
   if (!res.ok || !res.body) throw new Error('sin stream');
 
   const lector = res.body.getReader();
@@ -766,6 +771,7 @@ async function preguntar(texto){
     try{
       j = await preguntarStream(texto, censo, ui);
     }catch(errStream){
+      if (errStream.codigo === 429) throw errStream;   // el límite es por IP: no se reintenta
       // El stream no se pudo usar (proxy que bufferea, navegador sin
       // ReadableStream, corte a mitad): se rehace la pregunta por el camino de
       // siempre. Se paga de nuevo, pero el usuario obtiene su respuesta.
@@ -780,6 +786,7 @@ async function preguntar(texto){
       // genérico de conexión. La cadena tiene que ser backend < frontend < nginx:
       // el que corta debe ser este, que es el único que sabe explicar por qué.
       }, 150000);
+      if (res.status === 429){ const e = new Error('demasiadas consultas'); e.codigo = 429; throw e; }
       j = await res.json();
     }
     stop();
@@ -787,7 +794,17 @@ async function preguntar(texto){
     else await rellenarOK(card, texto, j, censo);
   }catch(err){
     stop();
-    rellenarAviso(card, texto, {respuesta:'Hubo un problema de conexión. Probá de nuevo en unos segundos.'});
+    // TRES casos distintos, y los tres se ven en la tarjeta. Antes todo caía en
+    // "problema de conexión", así que un tope de frecuencia se leía como una caída
+    // y el usuario reintentaba, que es justo lo que NO hay que hacer.
+    //  · 429            -> tope de frecuencia de nginx, por IP
+    //  · tope de gasto  -> NO llega acá: el backend contesta ok:false con su propio
+    //                      mensaje y sale por rellenarAviso de más arriba
+    //  · lo demás       -> fallo real
+    const aviso = err.codigo === 429
+      ? 'Hay demasiadas consultas desde esta conexión. Esperá un minuto y volvé a preguntar. Si estás en una red compartida (un liceo, una oficina), el límite se cuenta para toda la red.'
+      : 'Hubo un problema de conexión. Probá de nuevo en unos segundos.';
+    rellenarAviso(card, texto, {respuesta: aviso});
     console.error(err);
   }finally{ askBtn.disabled = false; }
 }

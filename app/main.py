@@ -34,7 +34,7 @@ MOTORES_HISTORICOS = {"1996": consultar_1996, "2004": consultar_2004}
 import usage_log         # registro de métricas de tokens (solo métricas, sin contenido)
 import registro          # rastro de las consultas rechazadas (pregunta + SQL + motivo)
 from comun import (ejecutor, llm, mapa_resumen, no_respondible, perdidos, pipeline,
-                   formato, precalentar, rechazos, sinonimos)  # módulo compartido
+                   formato, precalentar, presupuesto, rechazos, sinonimos)  # módulo compartido
 
 DB_PATH = os.environ.get("CENSO_DB", "datos/censo.db")
 MODELO = os.environ.get("CENSO_MODELO", llm.MODELO_POR_DEFECTO)
@@ -753,9 +753,18 @@ def _responder(p: Pregunta, avisar=None):
     una pregunta de usuario es una pregunta de usuario (más adentro ya es un motor).
     Corre en el hilo del pipeline, que es lo que necesita el contexto de usage_log.
     """
-    usage_log.iniciar(p.censo)
+    usage_log.iniciar(p.censo)          # abre también la consulta del presupuesto
     try:
         r = _despachar(p, avisar=avisar)
+    except presupuesto.SinCupo as e:
+        # El período agotó su tope de gasto. NO es un error: es una respuesta
+        # prevista, con su propio resultado en la telemetría, para poder contar
+        # cuántas preguntas se rechazaron por presupuesto y no confundirlas con
+        # fallos. La caché sigue contestando por encima del tope: si se llegó
+        # hasta acá es porque esta pregunta no estaba cacheada.
+        registro.tope_alcanzado(p.censo, e.periodo, e.gastado, e.tope)
+        usage_log.cerrar("tope", "TOPE_%s" % e.periodo.upper())
+        return {"ok": False, "respuesta": e.mensaje(), "sql": None, "tope": e.periodo}
     except Exception:
         usage_log.cerrar("error")
         raise
