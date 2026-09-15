@@ -865,6 +865,12 @@ def preguntar_stream(p: Pregunta):
 
 
 INDEX = "app/static/index.html"
+
+# Clave del mapa base de CARTO. Desde fines de ago-2026 CARTO marca con "API KEY
+# REQUIRED" las teselas pedidas sin clave. Es pública en el navegador (viaja en la
+# URL de cada tesela), pero no va al repo: vive en el .env. Vacía = se sigue
+# pidiendo sin clave, con marca de agua pero con mapa.
+CARTO_BASEMAP_KEY = os.environ.get("CARTO_BASEMAP_KEY", "").strip()
 VERSIONADOS = (
     "app/static/censo.css",
     "app/static/dicc/dicc_2023.json",   # si cambia el diccionario, cambia el ?v=
@@ -895,6 +901,10 @@ def _version_estaticos() -> str:
 def home():
     with open(INDEX, encoding="utf-8") as fh:
         html = fh.read().replace("__V__", _version_estaticos())
+    # Literal JS, no texto pegado: json.dumps escapa comillas y el \u003c impide
+    # que un valor raro cierre el <script>.
+    html = html.replace("__CARTO_KEY__",
+                        json.dumps(CARTO_BASEMAP_KEY).replace("<", "\\u003c"))
     # no-cache = el navegador puede guardarlo, pero revalida siempre (304 barato).
     # El HTML es el índice del diseño: si queda pegado, no hay ?v= que lo salve.
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})

@@ -307,6 +307,13 @@ async function cargarGeoJSON(cfg, m){
   return (await fetchT(cfg.archivo)).json();
 }
 
+// Mapa base de CARTO. La clave la inyecta el backend desde el .env (CARTO_BASEMAP_KEY);
+// si está vacía se piden las teselas sin clave: salen con marca de agua, pero el mapa
+// se ve. CARTO tampoco rompe con una clave inválida: devuelve la tesela marcada.
+const CARTO_KEY = __CARTO_KEY__;
+const URL_TESELAS = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+  + (CARTO_KEY ? '?key=' + encodeURIComponent(CARTO_KEY) : '');
+
 async function renderMapa(el, m){
   const cfg = MAPA_CFG[m.nivel];
   if (!cfg) return;
@@ -316,7 +323,7 @@ async function renderMapa(el, m){
   // solo elemento. Debajo de ese volumen conviene SVG, que da bordes más nítidos.
   const denso = (m.datos || []).length > 400;
   const mapa = L.map(el, {scrollWheelZoom:false, preferCanvas: denso});
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  L.tileLayer(URL_TESELAS,
     { attribution: '© OpenStreetMap, © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(mapa);
 
   const vals = m.datos.map(d => d.valor);
