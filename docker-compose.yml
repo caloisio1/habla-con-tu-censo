@@ -1,0 +1,69 @@
+# Habla con tu Censo — despliegue con Docker Compose. Ver DESPLIEGUE.md.
+#
+#   docker compose up -d --build
+#
+# Todo se configura en .env (copiar de .env.example). Compose lee el mismo .env para
+# las variables ${...} de este archivo y el servicio app lo recibe como entorno.
+
+services:
+  app:
+    build: .
+    image: habla-con-tu-censo:local
+    env_file: .env
+    environment:
+      # Rutas DENTRO del contenedor; pisan las del .env. La app abre el .duckdb
+      # hermano de cada nombre (datos/censo.db -> datos/censo.duckdb), así que el
+      # .db no tiene que existir.
+      CENSO_DB: /datos/censo.db
+      CENSO1996_DB: /datos/censo1996.db
+      CENSO2004_DB: /datos/censo2004.db
+      CENSO2023_DB: /datos/censo2023.db
+    volumes:
+      # Las cuatro bases DuckDB, en solo lectura. No están en el repo ni en la imagen.
+      - ${DATOS_CENSO:-./datos-censo}:/datos:ro
+      # usage.jsonl (métricas de tokens + contador del tope de gasto) y salidas de la
+      # batería. Volumen con nombre: sobrevive a recrear el contenedor.
+      - censo-logs:/app/logs
+    expose:
+      - "8010"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      # stdout/stderr llevan los RECHAZO (pregunta + SQL + motivo): se rotan.
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"
+
+  nginx:
+    build: despliegue/nginx
+    image: habla-con-tu-censo-nginx:local
+    environment:
+      DOMINIO: ${DOMINIO:?Definir DOMINIO en .env}
+      # http = solo puerto 80; https = 80 redirige a 443 (requiere certificado).
+      NGINX_ENVSUBST_TEMPLATE_DIR: /etc/nginx/plantillas/${NGINX_MODO:-http}
+      # Solo se sustituye ${DOMINIO}; las variables propias de nginx ($host...) no.
+      NGINX_ENVSUBST_FILTER: "^DOMINIO$$"
+    ports:
+      - "${PUERTO_HTTP:-80}:80"
+      - "${PUERTO_HTTPS:-443}:443"
+    volumes:
+      - ${LETSENCRYPT_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
+      - ./certbot-www:/var/www/certbot:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"
+
+volumes:
+  censo-logs:

@@ -1,0 +1,23 @@
+# Contexto de build de la imagen. Lo que NO está acá no entra a la imagen.
+# Crítico: el .env (claves) y las bases no se hornean nunca en la imagen.
+.env
+.env.*
+!.env.example
+venv/
+.git/
+datos/*.duckdb
+datos/*.db
+datos/*.db.*
+datos/*.sav
+datos/personas.csv
+datos-censo/
+logs/
+informes/
+certbot-www/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+backup_*
+*.bak*
+*.log
+*.jsonl

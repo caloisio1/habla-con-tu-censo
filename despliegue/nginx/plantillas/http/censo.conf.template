@@ -1,0 +1,7 @@
+# Modo http (NGINX_MODO=http): solo puerto 80. Para la primera puesta en marcha,
+# para pedir el certificado y para servidores detrás de otro terminador TLS.
+server {
+    listen 80;
+    server_name ${DOMINIO};
+    include snippets/censo_rutas.conf;
+}
