@@ -1,12 +1,18 @@
 # SEGURIDAD — Habla con tu Censo
 
-Documento para auditoría externa. Describe el código del tag `portable-20260915`
+Documento para auditoría externa. Describe el código del tag `endurecimiento-20260915`
 desplegado con `docker-compose.yml` (ver [DESPLIEGUE.md](DESPLIEGUE.md)).
 
-Cada afirmación indica de dónde sale: una línea de código o una prueba ejecutada. Las
-pruebas se corrieron el 15-sep-2026 sobre el stack de Docker Compose de este tag,
-publicado solo en `127.0.0.1`, con las cuatro bases reales y una clave de OpenAI
-inválida (ninguna pregunta llegó a responderse con el modelo).
+Cada afirmación indica de dónde sale: una línea de código o una prueba ejecutada. Hay
+dos grupos de pruebas:
+
+- **Superficie HTTP, cabeceras, tope de frecuencia y contenedores (§2):** se corrieron
+  el 15-sep-2026 sobre el stack de Docker Compose, publicado solo en `127.0.0.1`, con
+  las cuatro bases reales y una clave de OpenAI inválida. Fue antes del endurecimiento,
+  con el tag `portable-20260915`.
+- **Validador, ejecutor, documentación automática y censo desconocido (§2 y §3):** se
+  corrieron el 15-sep-2026 sobre el código de este tag, fuera de Docker. Son
+  `tests/test_endurecimiento.py` y la prueba adversarial de §3.
 
 ---
 
@@ -55,7 +61,7 @@ y las bases son archivos.
 | `GET /static/*` | Sirve **todo** el contenido de `app/static/`: HTML, CSS, fuentes, logos, GeoJSON y diccionarios JSON. | Cualquier archivo que se copie a ese directorio queda público. |
 | `POST /preguntar` | Pregunta. Responde JSON. | 30 pedidos/min por IP, ráfaga de 15, 8 conexiones simultáneas por IP; cuerpo ≤ 16 KB. |
 | `POST /preguntar_stream` | La misma pregunta, con respuesta `text/event-stream` (SSE). | Los mismos. |
-| `GET /docs`, `/redoc`, `/openapi.json` | Documentación que FastAPI publica por defecto. **La app los expone**; el nginx del compose responde 404. | Si la app se publica sin este nginx, quedan accesibles. |
+| `GET /docs`, `/redoc`, `/openapi.json` | No existen. La app se crea con `docs_url=None`, `redoc_url=None` y `openapi_url=None` (`app/main.py`). El nginx del compose también responde 404. | `tests/test_endurecimiento.py` |
 
 No hay autenticación, sesiones ni cookies. La app no envía `Set-Cookie`, y
 `index.html` no usa `localStorage`, `sessionStorage` ni `document.cookie`.
@@ -64,8 +70,10 @@ Entrada:
 
 - `texto`: `str`, sin largo máximo en la app. El único límite es el
   `client_max_body_size 16k` de nginx.
-- `censo`: `str`, sin lista de valores. `1996`, `2004` y `2011` van a su motor;
-  **cualquier otro valor se procesa como 2023** (`app/main.py`, `_despachar`).
+- `censo`: `1996`, `2004`, `2011` o `2023`. Cualquier otro valor responde 400 con
+  `{"ok": false, "motivo": "censo_desconocido"}`, sin llamar al modelo, y queda en
+  `usage.jsonl` como `resultado: "rechazada"`. El mensaje no repite el valor recibido
+  (`app/main.py`, `_censo_desconocido`; `tests/test_endurecimiento.py`).
 - Si falta `texto`, FastAPI responde 422 con el detalle de validación, que incluye el
   cuerpo recibido.
 
@@ -148,6 +156,21 @@ Tomadas de los docstrings y verificadas por `tests/test_sql_guard*.py`:
    5.000 en 2023.
 9. El `ORDER BY` se completa con todas las columnas de la proyección para que el corte
    del `LIMIT` sea determinista (`comun/orden.py`).
+10. Funciones prohibidas en cualquier parte del árbol (proyección, `WHERE`, CTE,
+    subconsulta), con una lista común a los cuatro validadores (`comun/funciones.py`):
+    - **Configuración, entorno y secretos:** `current_setting`, `getenv`,
+      `getvariable`, `which_secret`.
+    - **Catálogo, sesión y versión:** `current_database`, `current_catalog`,
+      `current_schema(s)`, `current_query`, `current_user`, `current_role`,
+      `session_user`, `user`, `version`, `current_version`, `in_search_path`,
+      `col_description`, `obj_description`, `shobj_description`, `format_type`,
+      `format_pg_type`.
+    - **Archivos y extensiones:** `load_extension`, `readfile`, `writefile`, `edit`,
+      `fsdir`, `zipfile`.
+    - **Prefijos:** `pg_`, `duckdb_`, `pragma_`, `has_`, `txid_`, `sqlite_`, `read_`
+      y `glob`.
+
+    Es una lista negra: el resto de las funciones escalares no se controla por nombre.
 
 ### Reglas propias de 2023
 
@@ -156,15 +179,19 @@ Tomadas de los docstrings y verificadas por `tests/test_sql_guard*.py`:
   estar el `COUNT` crudo por celda.
 - Las categorías fuera de universo las excluye el validador: no se deja en manos del
   modelo.
-- Lista de funciones prohibidas: `load_extension`, `readfile`, `writefile`, `edit`,
-  `fsdir`, `zipfile`.
 
 ### Ejecución
 
-- DuckDB abre cada base con `read_only=True` (`comun/ejecutor.py:206`).
-- Configuración aplicada: `integer_division=true` y `default_null_order`
-  (`comun/ejecutor.py:210-211`).
-- **No** se configuran `enable_external_access=false` ni `lock_configuration=true`.
+- DuckDB abre cada base nativa con `read_only=True` y
+  `config={"enable_external_access": False}` (`comun/ejecutor.py`, `_abrir`).
+- Con el acceso externo apagado, DuckDB rechaza leer o escribir archivos y URLs,
+  `COPY`, `ATTACH` e `INSTALL`. SQL no lo puede volver a encender:
+  `SET enable_external_access=true` da `Cannot enable external access while database
+  is running`.
+- El puente sqlite (solo para una base sin `.duckdb`) apaga el acceso externo después
+  del `ATTACH ... READ_ONLY` y antes de la primera consulta.
+- Configuración aplicada además: `integer_division=true` y `default_null_order`.
+- No se configura `lock_configuration=true`.
 
 ### Supresión de celdas
 
@@ -175,38 +202,49 @@ Tomadas de los docstrings y verificadas por `tests/test_sql_guard*.py`:
 - En 2023 la decisión se toma con el `COUNT` crudo aunque la cifra publicada sea
   `SUM(W)`. El conteo crudo no se publica (`_ocultar_n_crudo`).
 
-### Prueba adversarial
+### Prueba adversarial (15-sep-2026, código de este tag)
 
-Se probaron 20 sentencias contra los cuatro validadores (80 casos). El SQL que pasaba
-la validación se ejecutó en un DuckDB en memoria con configuración por defecto, sobre
-una tabla ficticia de 100 filas con el nombre de la tabla del censo. No se ejecutó
-contra las bases reales.
+**Capa 1, validador.** Se probaron 28 sentencias contra los cuatro validadores (112
+casos). En 2023 cada sentencia llevaba además `SUM(W)`, para que la rechazara la regla
+de funciones y no la de la métrica. Lo que pasaba la validación se ejecutó con el
+ejecutor de la app sobre las bases reales.
 
-Rechazadas por los **cuatro** validadores:
+Rechazadas por los cuatro:
 
-- `FROM read_csv('/etc/hostname')`
-- `FROM '/etc/hostname'`
-- `FROM read_text(...)`
-- `read_text(...)` en subconsulta, en `JOIN`, en CTE y en la proyección
-- `glob('/root/*')`
-- `...; ATTACH '/tmp/x.db'`
-- `COPY (...) TO '/tmp/fuga.csv'`
-- `INSTALL httpfs`
-- `UNION ALL` con `read_text`
-- `EXISTS (SELECT 1 FROM duckdb_settings())`
-- `information_schema.tables`
+- **Lectura de archivos:** `FROM read_csv('/etc/hostname')`, `FROM '/etc/hostname'`,
+  `read_text(...)` (en `FROM`, subconsulta, `JOIN`, CTE y proyección),
+  `glob('/root/*')`.
+- **Sentencias que no son un SELECT simple:** `...; ATTACH '/tmp/x.db'`,
+  `COPY (...) TO '/tmp/fuga.csv'`, `INSTALL httpfs`, `UNION ALL` con `read_text`.
+- **Catálogo:** `EXISTS (SELECT 1 FROM duckdb_settings())`,
+  `information_schema.tables`.
+- **Funciones escalares:** `getenv(...)` (en la proyección y en `WHERE`),
+  `current_setting('home_directory')`, `current_setting('enable_external_access')`,
+  `getvariable`, `version()`, `current_database()`, `current_query()`,
+  `which_secret`, `pg_typeof`, `txid_current()`.
 
-2023 rechazó las 20. 2011, 1996 y 2004 dejaron pasar 5 cada uno:
+La única que pasó, en los cuatro:
 
-| Sentencia | Resultado al ejecutar |
+| Sentencia | Resultado |
 |---|---|
-| `SELECT getenv('CANARIO') AS k, COUNT(*) AS n FROM <tabla> GROUP BY 1` | Error de catálogo: `getenv` no existe en DuckDB 1.5.5 para Python |
-| `SELECT COUNT(*) AS n, getenv('CANARIO') AS k FROM <tabla> GROUP BY k` | Ídem |
-| `SELECT COUNT(*) AS n FROM <tabla> WHERE getenv('CANARIO') LIKE 's%'` | Ídem |
-| `SELECT current_setting('home_directory') AS s, COUNT(*) AS n FROM <tabla> GROUP BY 1` | Se ejecuta y devuelve el valor de esa opción de DuckDB |
-| `SELECT COUNT(*) AS n FROM main.<tabla>` | Se ejecuta; es la misma tabla permitida |
+| `SELECT COUNT(*) AS n FROM main.<tabla>` | Se ejecuta. Es la tabla permitida con el esquema escrito explícitamente. |
 
-En esos tres validadores las funciones escalares no están en lista blanca.
+**Capa 2, motor sin validador.** Se enviaron 10 sentencias directo al ejecutor, sobre
+las cuatro bases reales (40 casos):
+
+| Sentencia | Resultado en las cuatro bases |
+|---|---|
+| `SELECT current_setting('enable_external_access')` | `0` (apagado) |
+| `SELECT * FROM read_text('/etc/hostname')`, `read_csv(...)` | `Permission Error: Cannot access file` |
+| `SELECT COUNT(*) FROM '/etc/hostname'` | `Catalog Error: Table ... does not exist` |
+| `COPY (SELECT 1) TO '/tmp/...'` | `Permission Error` |
+| `ATTACH '/tmp/....duckdb'` | `Permission Error` |
+| `INSTALL httpfs` | `Permission Error` |
+| `SELECT * FROM read_csv('https://example.com/x.csv')` | `Permission Error` |
+| `SET enable_external_access=true` | `Cannot enable external access while database is running` |
+| `SELECT * FROM glob('/root/*')` | Rechazada por el ejecutor antes del motor (`GLOB`/`LIKE` no se ejecutan) |
+
+No se creó ningún archivo en `/tmp`.
 
 ---
 
@@ -277,10 +315,9 @@ enlaces: el navegador no los pide hasta que el usuario hace clic.
 - Autenticación y cuota por usuario.
 - `Content-Security-Policy`.
 - SRI en los scripts de cdnjs.
-- `enable_external_access=false` y `lock_configuration=true` en DuckDB.
-- Lista blanca de funciones escalares en los validadores de 2011, 1996 y 2004.
+- `lock_configuration=true` en DuckDB.
+- Lista **blanca** de funciones escalares: hay una lista negra (§3, regla 10).
 - Límite de largo de `texto` en la app (solo el de nginx, 16 KB).
-- Lista de valores válidos para `censo`.
 - Rotación de `logs/usage.jsonl`.
 - Verificación de la IP que usa el tope de frecuencia cuando el tráfico llega desde
   internet (§2).

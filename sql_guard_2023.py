@@ -24,7 +24,7 @@ import json, os
 import sqlglot
 from sqlglot import exp
 
-from comun import orden, universo
+from comun import funciones, orden, universo
 
 UMBRAL_SUPRESION = 5
 # Tope de filas de la TABLA de resultados. Cubre el desglose completo más grande que
@@ -45,7 +45,7 @@ _COLUMNAS_VALIDAS = ({c.lower() for cols in _COLS.values() for c in cols}
 
 KEYS_RESTRINGIDAS = {"vivienda_key", "hogar_key", "direccion_id", "vivid",
                      "hogid", "perid", "id_hogar"}
-_FUNCS_PROHIBIDAS = {"load_extension", "readfile", "writefile", "edit", "fsdir", "zipfile"}
+# Funciones prohibidas: la lista es común a los cuatro censos, ver comun/funciones.py.
 
 
 class SQLNoSeguro(Exception):
@@ -627,9 +627,7 @@ def validar(sql):
         if c.name.lower() not in permitidas:
             raise SQLNoSeguro(f"Columna no permitida: {c.name}")
 
-    for f in arbol.find_all(exp.Anonymous):
-        if f.name.lower() in _FUNCS_PROHIBIDAS:
-            raise SQLNoSeguro(f"Función no permitida: {f.name}")
+    funciones.verificar(arbol, SQLNoSeguro)
 
     # (b/raw-n) debe existir al menos un COUNT (conteo crudo para supresión)
     if not list(arbol.find_all(exp.Count)):

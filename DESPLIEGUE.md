@@ -140,7 +140,7 @@ ejemplo **en cada arranque**, así que cada arranque gasta.
 
 ```sh
 # 1. Código del tag
-git clone --branch portable-20260915 https://github.com/caloisio1/habla-con-tu-censo.git
+git clone --branch endurecimiento-20260915 https://github.com/caloisio1/habla-con-tu-censo.git
 cd habla-con-tu-censo
 
 # 2. Datos (§3)
@@ -224,8 +224,12 @@ Si da ROJO, la instalación no está bien (casi siempre, una base que no corresp
 
 ```sh
 docker compose exec -T app python -m pytest -q -p no:cacheprovider tests
-# esperado:  309 passed
+# esperado:  370 passed
 ```
+
+370 es la cifra del tag, verificada en la instancia de referencia (fuera de Docker). En
+el contenedor se verificaron 309 antes de agregar `tests/test_endurecimiento.py`: la
+cifra de 370 **dentro del contenedor** queda para la prueba de §11.
 
 ### Batería completa (capas A y B)
 
@@ -363,7 +367,7 @@ Para cerrarla:
    algunos 429.
 6. Certificado real de Let's Encrypt por webroot (§6) y `certbot renew --dry-run` con
    el hook.
-7. Capa A: `VERDE 96 controles`. pytest: `309 passed`.
+7. Capa A: `VERDE 96 controles`. pytest: `370 passed`.
 8. Batería AB **tres veces** con `CENSO_CACHE=0` (§7): 3/3 por control. Cualquier 2/3
    o menos es falla. Anotar el costo de las tres corridas a partir de
    `logs/usage.jsonl`.

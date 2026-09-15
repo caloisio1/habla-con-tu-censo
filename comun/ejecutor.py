@@ -203,7 +203,12 @@ def _abrir(db):
     nativa = nativa_de(db)
     try:
         if nativa:
-            con = duckdb.connect(nativa, read_only=True)
+            # enable_external_access=false: desde SQL no se pueden leer ni escribir
+            # archivos, URLs ni extensiones, ni hacer ATTACH o COPY. Va en la
+            # configuración de apertura; una vez apagado, SQL no lo puede volver a
+            # encender ("Cannot enable external access while database is running").
+            con = duckdb.connect(nativa, read_only=True,
+                                 config={"enable_external_access": False})
         else:
             con = duckdb.connect()
             con.execute("INSTALL sqlite; LOAD sqlite;")
@@ -211,6 +216,9 @@ def _abrir(db):
         con.execute("SET GLOBAL integer_division=true;")
         if not nativa:
             con.execute("ATTACH '%s' AS s (TYPE sqlite, READ_ONLY); USE s;" % db)
+            # El puente necesita acceso externo para cargar la extensión y attachar el
+            # .db; se apaga recién acá, antes de la primera consulta.
+            con.execute("SET enable_external_access=false;")
         # Los canarios deciden: si algún invariante no da la semántica esperada,
         # la base no se abre. Ya no hay a dónde degradar, y responder con otra
         # semántica sería devolver cifras distintas sin avisar.

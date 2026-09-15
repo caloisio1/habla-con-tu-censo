@@ -26,7 +26,7 @@ import os
 import sqlglot
 from sqlglot import exp
 
-from comun import orden
+from comun import funciones, orden
 
 UMBRAL_SUPRESION = 5
 
@@ -37,7 +37,7 @@ UMBRAL_SUPRESION = 5
 # consulta legítima lo toque; si igual se alcanza, se dice cuántas filas hay en total.
 LIMITE_MAXIMO = 50000
 
-_FUNCS_PROHIBIDAS = {"load_extension", "readfile", "writefile", "edit", "fsdir", "zipfile"}
+# Funciones prohibidas: la lista es común a los cuatro censos, ver comun/funciones.py.
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -359,9 +359,7 @@ class Guard:
             if c.name.lower() not in permitidas:
                 raise SQLNoSeguro("Columna no permitida: %s" % c.name)
 
-        for f in arbol.find_all(exp.Anonymous):
-            if f.name.lower() in _FUNCS_PROHIBIDAS:
-                raise SQLNoSeguro("Función no permitida: %s" % f.name)
+        funciones.verificar(arbol, SQLNoSeguro)
 
         if not list(arbol.find_all(exp.Count)):
             raise SQLNoSeguro(

@@ -32,7 +32,7 @@ import sqlglot
 from sqlglot import exp
 from sqlglot.optimizer.simplify import simplify
 
-from comun import orden
+from comun import funciones, orden
 
 from app import dicc
 
@@ -72,10 +72,7 @@ _COLUMNAS_VALIDAS = (dicc.columnas_personas()
 # Identificadores de hogar/vivienda: reidentificantes.
 KEYS_RESTRINGIDAS = {"hogar_key", "vivienda_key"}
 
-# Funciones peligrosas de SQLite (I/O, extensiones) — defensa en profundidad.
-_FUNCS_PROHIBIDAS = {
-    "load_extension", "readfile", "writefile", "edit", "fsdir", "zipfile",
-}
+# Funciones prohibidas: la lista es común a los cuatro censos, ver comun/funciones.py.
 
 
 class SQLNoSeguro(Exception):
@@ -453,10 +450,9 @@ def validar(sql: str) -> tuple[str, list[str]]:
         if c.name.lower() not in permitidas:
             raise SQLNoSeguro(f"Columna no permitida: {c.name}")
 
-    # 4b. Funciones peligrosas (I/O, extensiones).
-    for f in arbol.find_all(exp.Anonymous):
-        if f.name.lower() in _FUNCS_PROHIBIDAS:
-            raise SQLNoSeguro(f"Función no permitida: {f.name}")
+    # 4b. Funciones que exponen el motor (configuración, entorno, catálogo) o tocan
+    #     archivos y extensiones.
+    funciones.verificar(arbol, SQLNoSeguro)
 
     # 5. Debe contar: al menos un COUNT en algún lugar del árbol.
     if not list(arbol.find_all(exp.Count)):

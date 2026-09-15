@@ -17,7 +17,7 @@ import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -85,7 +85,10 @@ async def ciclo_de_vida(_app):
     yield
 
 
-app = FastAPI(title="Habla con tu Censo", lifespan=ciclo_de_vida)
+# Sin /docs, /redoc ni /openapi.json. FastAPI los publica por defecto y en producción
+# respondían 200: le describían la API entera a cualquiera y la app no los usa.
+app = FastAPI(title="Habla con tu Censo", lifespan=ciclo_de_vida,
+              docs_url=None, redoc_url=None, openapi_url=None)
 
 # Sirve los geojson de mapas (relativo a la página, funciona tras nginx /censo/).
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -94,6 +97,29 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 class Pregunta(BaseModel):
     texto: str
     censo: str = "2023"   # censo por defecto de la interfaz pública
+
+
+CENSOS = ("1996", "2004", "2011", "2023")
+
+
+def _censo_desconocido(p: Pregunta):
+    """400 si el censo pedido no existe; None si existe.
+
+    Antes cualquier valor que no fuera 1996, 2004 o 2011 caía en el motor de 2023:
+    "censo": "1900" se respondía con cifras de 2023 sin avisar. El rechazo cierra la
+    consulta en la telemetría como "rechazada", igual que un rechazo del validador,
+    para que cuente en el denominador. El valor pedido NO se repite en el mensaje
+    (el frontend renderiza la respuesta) y en el log se trunca.
+    """
+    if p.censo in CENSOS:
+        return None
+    usage_log.iniciar(str(p.censo)[:16])
+    usage_log.cerrar("rechazada", "CENSO_DESCONOCIDO")
+    return JSONResponse(status_code=400, content={
+        "ok": False,
+        "respuesta": "Ese censo no existe. Los censos disponibles son 1996, 2004, 2011 y 2023.",
+        "motivo": "censo_desconocido",
+    })
 
 
 # Cada cuántos segundos de silencio se manda un comentario SSE. Tiene que quedar
@@ -700,6 +726,9 @@ def preguntar(p: Pregunta):
     del modelo, una consulta inválida). Perdíamos el motivo real, que además
     quedaba solo en el journal.
     """
+    rechazo = _censo_desconocido(p)
+    if rechazo is not None:
+        return rechazo
     try:
         return _responder(p)
     except Exception as e:                      # noqa: BLE001 - la frontera pública
@@ -828,6 +857,9 @@ def preguntar_stream(p: Pregunta):
     eso, nginx la acumula y el streaming no se ve, aunque el backend lo emita
     perfecto. Evita tener que tocar la configuración del sitio.
     """
+    rechazo = _censo_desconocido(p)
+    if rechazo is not None:
+        return rechazo              # 400 en JSON, sin abrir el flujo SSE
     cola: "queue.Queue" = queue.Queue()
     FIN = object()
 
